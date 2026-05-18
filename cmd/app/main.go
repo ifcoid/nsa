@@ -4,18 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
+
+	"github.com/joho/godotenv"
 
 	"nsa/internal/llm"
 	"nsa/internal/model"
 	"nsa/internal/orchestrator"
 	"nsa/internal/repository"
-)
-
-const (
-	MongoURI     = "mongodb://localhost:27017"
-	DatabaseName = "slr_agentic_db"
-	SessionID    = "bci_active_learning_2026"
 )
 
 func main() {
@@ -26,8 +23,28 @@ func main() {
 	fmt.Println("        STARTING MULTI-AGENT SLR SYSTEM             ")
 	fmt.Println("====================================================")
 
+	// Load file .env jika ada
+	if err := godotenv.Load(); err != nil {
+		log.Println("⚠️  Info: File .env tidak ditemukan, menggunakan environment OS bawaan.")
+	}
+
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		mongoURI = "mongodb://localhost:27017"
+	}
+
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "slr_agentic_db"
+	}
+
+	sessionID := os.Getenv("SESSION_ID")
+	if sessionID == "" {
+		log.Fatal("❌ ERROR: SESSION_ID tidak ditemukan di file .env. Harap tentukan sesi riset Anda.")
+	}
+
 	// 1. Inisialisasi Repositori MongoDB
-	mongoRepo, err := repository.NewMongoRepository(MongoURI, DatabaseName)
+	mongoRepo, err := repository.NewMongoRepository(mongoURI, dbName)
 	if err != nil {
 		log.Fatalf("❌ Gagal terhubung ke MongoDB: %v", err)
 	}
@@ -35,7 +52,13 @@ func main() {
 
 	// 2. Pragmatis: Seed Data Konfigurasi LLM & Sesi Awal (Jika Belum Ada)
 	// Ini memastikan aplikasi tidak error saat pertama kali dijalankan di database kosong
-	seedInitialData(ctx, mongoRepo)
+	isFirstRun := seedInitialData(ctx, mongoRepo, sessionID)
+	if isFirstRun {
+		fmt.Println("\n⚠️ [TINDAKAN DIBUTUHKAN] Sistem baru saja melakukan pengisian data (seeding) awal ke MongoDB.")
+		fmt.Println("⚠️ Silakan buka database Anda (koleksi 'llm_providers') dan ubah nilai API Key yang berawalan 'GANTI_DENGAN_...' menjadi kunci asli Anda.")
+		fmt.Println("⚠️ Program dihentikan sementara. Silakan jalankan ulang aplikasi ini setelah siap!")
+		return
+	}
 
 	// 3. Inisialisasi LLM Factory (Penyedia Otak AI Dinamis)
 	llmFactory := llm.NewLLMFactory(mongoRepo)
@@ -45,8 +68,8 @@ func main() {
 	pipeline := orchestrator.NewSLRPipeline(mongoRepo, llmFactory)
 
 	// 5. Jalankan Siklus State Machine
-	fmt.Printf("\n[Orchestrator] Mengeksekusi Pipeline untuk Sesi: %s...\n", SessionID)
-	err = pipeline.Execute(ctx, SessionID)
+	fmt.Printf("\n[Orchestrator] Mengeksekusi Pipeline untuk Sesi: %s...\n", sessionID)
+	err = pipeline.Execute(ctx, sessionID)
 	if err != nil {
 		log.Fatalf("❌ Pipeline mengalami error saat eksekusi: %v", err)
 	}
@@ -57,11 +80,15 @@ func main() {
 }
 
 // seedInitialData bertugas mengisi data default ke MongoDB agar sistem portabel langsung jalan
-func seedInitialData(ctx context.Context, repo *repository.MongoRepository) {
+// Mengembalikan nilai true jika ada data yang baru saja dimasukkan (first run)
+func seedInitialData(ctx context.Context, repo *repository.MongoRepository, sessionID string) bool {
+	isSeeded := false
+
 	// A. Seed Konfigurasi LLM (Contoh: DeepSeek & Gemini)
 	// Kita gunakan trik GetLLMConfig, jika error (artinya data belum ada), kita buat baru
 	_, err := repo.GetLLMConfig(ctx, "deepseek")
 	if err != nil {
+		isSeeded = true
 		fmt.Println("[Seeding] Menyiapkan data default provider 'deepseek' di MongoDB...")
 		deepseekConfig := &model.LLMConfig{
 			ID:           "deepseek",
@@ -212,11 +239,12 @@ func seedInitialData(ctx context.Context, repo *repository.MongoRepository) {
 	}
 
 	// B. Seed Sesi Riset SLR Baru (Status: INIT)
-	_, err = repo.GetSession(ctx, SessionID)
+	_, err = repo.GetSession(ctx, sessionID)
 	if err != nil {
-		fmt.Println("[Seeding] Membuat sesi riset baru dengan Status: 'INIT'...")
+		isSeeded = true
+		fmt.Printf("[Seeding] Membuat sesi riset baru (%s) dengan Status: 'INIT'...\n", sessionID)
 		newSession := &model.SLRSession{
-			ID:     SessionID,
+			ID:     sessionID,
 			Topic:  "Penggunaan Active Learning pada Machine Learning untuk klasifikasi data Brain-Computer Interface (BCI)",
 			Status: "INIT",
 		}
@@ -225,6 +253,8 @@ func seedInitialData(ctx context.Context, repo *repository.MongoRepository) {
 			log.Printf("Warn: Gagal seeding session awal: %v", err)
 		}
 	}
+
+	return isSeeded
 }
 
 // updateLLMConfigDirectly bertugas menjembatani seeding data dari main ke repository
