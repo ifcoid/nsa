@@ -91,6 +91,126 @@ func seedInitialData(ctx context.Context, repo *repository.MongoRepository) {
 		_ = updateLLMConfigDirectly(ctx, repo, geminiConfig)
 	}
 
+	_, err = repo.GetLLMConfig(ctx, "zhipu")
+	if err != nil {
+		fmt.Println("[Seeding] Menyiapkan data default provider 'zhipu' (GLM) di MongoDB...")
+		zhipuConfig := &model.LLMConfig{
+			ID:           "zhipu",
+			ProviderName: "openai-compatible",
+			BaseURL:      "https://open.bigmodel.cn/api/paas/v4",
+			APIKey:       "GANTI_DENGAN_API_KEY_ZHIPU_ANDA",
+			DefaultModel: "glm-4",
+			IsActive:     true,
+			UpdatedAt:    time.Now(),
+		}
+		_ = updateLLMConfigDirectly(ctx, repo, zhipuConfig)
+	}
+
+	_, err = repo.GetLLMConfig(ctx, "groq")
+	if err != nil {
+		fmt.Println("[Seeding] Menyiapkan data default provider 'groq' di MongoDB...")
+		groqConfig := &model.LLMConfig{
+			ID:           "groq",
+			ProviderName: "openai-compatible",
+			BaseURL:      "https://api.groq.com/openai/v1",
+			APIKey:       "GANTI_DENGAN_API_KEY_GROQ_ANDA",
+			DefaultModel: "llama3-70b-8192",
+			IsActive:     true,
+			UpdatedAt:    time.Now(),
+		}
+		_ = updateLLMConfigDirectly(ctx, repo, groqConfig)
+	}
+
+	_, err = repo.GetLLMConfig(ctx, "openrouter")
+	if err != nil {
+		fmt.Println("[Seeding] Menyiapkan data default provider 'openrouter' di MongoDB...")
+		openrouterConfig := &model.LLMConfig{
+			ID:           "openrouter",
+			ProviderName: "openai-compatible",
+			BaseURL:      "https://openrouter.ai/api/v1",
+			APIKey:       "GANTI_DENGAN_API_KEY_OPENROUTER_ANDA",
+			DefaultModel: "anthropic/claude-3-5-sonnet",
+			IsActive:     true,
+			UpdatedAt:    time.Now(),
+		}
+		_ = updateLLMConfigDirectly(ctx, repo, openrouterConfig)
+	}
+
+	_, err = repo.GetLLMConfig(ctx, "claude")
+	if err != nil {
+		fmt.Println("[Seeding] Menyiapkan data default provider 'claude' (Anthropic) di MongoDB...")
+		claudeConfig := &model.LLMConfig{
+			ID:           "claude",
+			ProviderName: "claude",
+			BaseURL:      "https://api.anthropic.com/v1",
+			APIKey:       "GANTI_DENGAN_API_KEY_ANTHROPIC_ANDA",
+			DefaultModel: "claude-3-5-sonnet",
+			IsActive:     true,
+			UpdatedAt:    time.Now(),
+		}
+		_ = updateLLMConfigDirectly(ctx, repo, claudeConfig)
+	}
+
+	_, err = repo.GetLLMConfig(ctx, "mistral")
+	if err != nil {
+		fmt.Println("[Seeding] Menyiapkan data default provider 'mistral' di MongoDB...")
+		mistralConfig := &model.LLMConfig{
+			ID:           "mistral",
+			ProviderName: "openai-compatible",
+			BaseURL:      "https://api.mistral.ai/v1",
+			APIKey:       "GANTI_DENGAN_API_KEY_MISTRAL_ANDA",
+			DefaultModel: "open-mistral-7b",
+			IsActive:     true,
+			UpdatedAt:    time.Now(),
+		}
+		_ = updateLLMConfigDirectly(ctx, repo, mistralConfig)
+	}
+
+	_, err = repo.GetLLMConfig(ctx, "qwen")
+	if err != nil {
+		fmt.Println("[Seeding] Menyiapkan data default provider 'qwen' (Alibaba) di MongoDB...")
+		qwenConfig := &model.LLMConfig{
+			ID:           "qwen",
+			ProviderName: "openai-compatible",
+			BaseURL:      "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+			APIKey:       "GANTI_DENGAN_API_KEY_DASHSCOPE_ANDA",
+			DefaultModel: "qwen-plus",
+			IsActive:     true,
+			UpdatedAt:    time.Now(),
+		}
+		_ = updateLLMConfigDirectly(ctx, repo, qwenConfig)
+	}
+
+	_, err = repo.GetLLMConfig(ctx, "github")
+	if err != nil {
+		fmt.Println("[Seeding] Menyiapkan data default provider 'github' (Models API) di MongoDB...")
+		githubConfig := &model.LLMConfig{
+			ID:           "github",
+			ProviderName: "openai-compatible",
+			BaseURL:      "https://models.inference.ai.azure.com",
+			APIKey:       "GANTI_DENGAN_GITHUB_TOKEN_ANDA",
+			DefaultModel: "gpt-4o-mini", // atau bisa diganti meta-llama-3-8b-instruct
+			IsActive:     true,
+			UpdatedAt:    time.Now(),
+		}
+		_ = updateLLMConfigDirectly(ctx, repo, githubConfig)
+	}
+
+	_, err = repo.GetLLMConfig(ctx, "nvidia")
+	if err != nil {
+		fmt.Println("[Seeding] Menyiapkan data default provider 'nvidia' (NIM) di MongoDB...")
+		nvidiaConfig := &model.LLMConfig{
+			ID:           "nvidia",
+			ProviderName: "openai-compatible",
+			BaseURL:      "https://integrate.api.nvidia.com/v1",
+			APIKey:       "GANTI_DENGAN_API_KEY_NVIDIA_ANDA",
+			DefaultModel: "meta/llama3-70b-instruct", // Model populer di Nvidia NIM
+			IsActive:     true,
+			UpdatedAt:    time.Now(),
+		}
+		_ = updateLLMConfigDirectly(ctx, repo, nvidiaConfig)
+	}
+
 	// B. Seed Sesi Riset SLR Baru (Status: INIT)
 	_, err = repo.GetSession(ctx, SessionID)
 	if err != nil {
