@@ -2,6 +2,30 @@
 
 Menciptakan sistem AI yang sepenuhnya dapat diaudit (auditable) dan ilmiah untuk jurnal internasional dengan Human in The Loop.
 
+```txt
+slr-agentic/
+├── cmd/
+│   └── app/
+│       └── main.go             # Entry point aplikasi
+├── internal/
+│   ├── model/
+│   │   ├── slr.go              # Struct Session, Paper, Graph (PICO/PRISMA)
+│   ├── repository/
+│   │   ├── mongo.go            # CRUD data mentah & State HitL
+│   │   └── neo4j.go            # Ingest Knowledge Graph (Symbolic AI)
+│   ├── llm/
+│   │   └── gemini.go           # Adapter untuk API LLM (Gemini/Claude)
+│   ├── agent/
+│   │   ├── agent.go            # Base struct / interface Agent
+│   │   ├── pico_agent.go       # Spesialis analisis PICO
+│   │   ├── criteria_agent.go   # Spesialis perumus Inklusi/Eksklusi
+│   │   └── screener_agent.go   # Spesialis penyaring abstrak
+│   └── orchestrator/
+│       └── pipeline.go         # Otak pengatur alur kerja & jeda HitL
+├── go.mod
+└── go.sum
+```
+
 ## Fondasi Teori SLR + Aturan Global
 
 Menggunakan rule Standar PRISMA dan Cochrane: 
