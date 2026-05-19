@@ -37,7 +37,8 @@ Modul	Topik(Langkah di dalamnya)	Output
     1. Jalankan pipeline. Tunggu hingga terminal memunculkan pesan [System] DIJEDA.
     2. Buka MongoDB Compass Anda.
     3. Buka collection slr_sessions, cari sesi Anda. Anda akan melihat kolom baru bernama suggested_topics berisi 3 pilihan topik, lengkap beserta Gap, Tipe A/B/C, Alasan, dan DOI buktinya.
-    4. Cara Konfirmasi: Salin salah satu name topik pilihan Anda dari array tersebut, lalu timpakan/ganti (replace) nilai field topic yang lama dengan judul pilihan Anda.
+    4. Cara Konfirmasi: "Copy (salin) keseluruhan object/document dari 1 topik pilihan Anda (dari dalam array suggested_topics)."
+"Buat field baru bernama selected_topic (di root document), lalu Paste isinya di sana."
     5. Terakhir, ubah field status menjadi "M2_STEP1_APPROVED". 
     6. Tekan "Update", dan jalankan ulang go run ./cmd/app/main.go! Sistem akan otomatis melaju ke Prior Reviews.
 	LANGKAH 2: REVIEW OF PRIOR REVIEWS (MATRIKS)

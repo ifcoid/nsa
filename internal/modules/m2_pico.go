@@ -41,14 +41,23 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP1_WAITING_APPROVAL":
-		fmt.Println("   [System] Sesi masih dikunci. Silakan buka MongoDB:")
-		fmt.Println("   1. Lihat array 'suggested_topics' pada collection slr_sessions.")
-		fmt.Println("   2. Salin/Pindah judul topik yang Anda suka ke field 'topic' utama.")
-		fmt.Println("   3. Ubah 'status' menjadi 'M2_STEP1_APPROVED'.")
+		fmt.Println("   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		fmt.Println("   1. Buka array 'suggested_topics' pada document sesi riset Anda.")
+		fmt.Println("   2. Copy (salin) keseluruhan object/document dari 1 topik pilihan Anda.")
+		fmt.Println("   3. Buat field baru bernama 'selected_topic' di root document, lalu Paste isinya di sana.")
+		fmt.Println("   4. Ubah 'status' menjadi 'M2_STEP1_APPROVED' lalu Update.")
 		return nil
 
 	case "M2_STEP1_APPROVED":
-		fmt.Println("   [Langkah 2.1] Topik telah dipilih. Melanjutkan ke Analisis Prior Reviews...")
+		if session.SelectedTopic == nil {
+			fmt.Println("   [System] ERROR: Field 'selected_topic' belum ditemukan di MongoDB. Silakan isi terlebih dahulu.")
+			return nil
+		}
+		
+		fmt.Printf("   [Langkah 2.1] Topik '%s' (Tipe GAP: %s) telah disetujui. Melanjutkan ke Analisis Prior Reviews...\n", session.SelectedTopic.Name, session.SelectedTopic.Type)
+		
+		// Sinkronisasi field topic lama agar rapi
+		session.Topic = session.SelectedTopic.Name
 		session.Status = "M2_STEP2_PRIOR_REVIEWS"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
@@ -66,12 +75,20 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// LANGKAH 3: PICO FRAMEWORK + OPERATIONAL DEFINITIONS + TERMINOLOGI KANONIKAL
 	// =========================================================================
 	case "M2_STEP3_PICO":
-		fmt.Println("   [Langkah 2.3] Mengekstrak PICO Framework dari Topik...")
+		fmt.Println("   [Langkah 2.3] Mengekstrak PICO Framework dari Topik yang disetujui...")
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 
 		picoAgent := agent.NewPicoAgent(llmBrain)
-		picoResult, err := picoAgent.Analyze(ctx, session.Topic)
+		
+		// Menggabungkan seluruh konteks topik agar agen PICO merumuskan hasil yang sangat akurat!
+		topicContext := session.Topic
+		if session.SelectedTopic != nil {
+			topicContext = fmt.Sprintf("Judul: %s\nKesenjangan (Gap): %s\nTipe: %s (%s)\nBukti: %s\nAlasannya Mengapa Penting: %s", 
+				session.SelectedTopic.Name, session.SelectedTopic.Gap, session.SelectedTopic.Type, session.SelectedTopic.TypeReason, session.SelectedTopic.Evidence, session.SelectedTopic.Importance)
+		}
+
+		picoResult, err := picoAgent.Analyze(ctx, topicContext)
 		if err != nil { return err }
 
 		session.PICO = picoResult

@@ -15,6 +15,7 @@ type SLRSession struct {
 	ID                string            `bson:"_id,omitempty"`
 	Topic             string            `bson:"topic"`
 	SuggestedTopics   []SuggestedTopic  `bson:"suggested_topics,omitempty"`
+	SelectedTopic     *SuggestedTopic   `bson:"selected_topic,omitempty"`
 	PICO              map[string]string `bson:"pico"`
 	InclusionCriteria []string          `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
