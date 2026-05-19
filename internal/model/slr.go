@@ -152,6 +152,19 @@ type SearchStringData struct {
 	Filters        []FilterSpec    `bson:"filters" json:"filters"`
 }
 
+type SearchLog struct {
+	SearchStringFinal string            `bson:"search_string_final" json:"search_string_final"`
+	FiltersApplied    []FilterSpec      `bson:"filters_applied" json:"filters_applied"`
+	Databases         []string          `bson:"databases" json:"databases"`
+	DateExecuted      map[string]string `bson:"date_executed" json:"date_executed"`
+	TotalHits         map[string]string `bson:"total_hits" json:"total_hits"`
+	UpdatePolicy      string            `bson:"update_policy" json:"update_policy"`
+}
+
+type Modul3Summary struct {
+	Markdown string `bson:"markdown" json:"markdown"`
+}
+
 type SLRSession struct {
 	ID                  string               `bson:"_id,omitempty"`
 	Topic               string               `bson:"topic"`
@@ -167,6 +180,8 @@ type SLRSession struct {
 	DatabaseSelection   *DatabaseSelection   `bson:"database_selection,omitempty"`
 	Keywords            *KeywordsDevelopment `bson:"keywords,omitempty"`
 	SearchString        *SearchStringData    `bson:"search_string,omitempty"`
+	SearchLog           *SearchLog           `bson:"search_log,omitempty"`
+	Modul3Summary       *Modul3Summary       `bson:"modul3_summary,omitempty"`
 	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"

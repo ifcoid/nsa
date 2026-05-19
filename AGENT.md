@@ -379,6 +379,87 @@ Modul	Topik(Langkah di dalamnya)	Output
     6. Jika BUTUH REVISI, ubah status ke "M3_STEP3_NEEDS_REVISION" dan ketikkan instruksi di feedback (misal: "Hapus filter open access karena justifikasinya lemah").
 
 	LANGKAH 4: PRE-VALIDASI + EKSEKUSI + DATE STAMP + UPDATE POLICY + HASIL AKHIR
+    output : search_log dan modul3_summary
+    ```txt
+    Gunakan RAG dari dokumen:
+    - search_string
+    - keywords
+    - database_selection
+
+    Eksekusi 3 fase + 2 dokumen output.
+
+    === FASE 1: PRE-VALIDASI SEARCH STRING ===
+
+    Sebelum user mencari di Scopus, validasi:
+    1. Syntax check: TITLE-ABS-KEY format, Boolean operators, wildcard position,
+    quotation marks
+    2. Web search verifikasi keywords benar-benar dipakai di literatur bidang
+    3. Identifikasi "trap keyword" (homonim / istilah ambigu)
+    4. Estimasi awal: terlalu banyak/sedikit/cukup hasil?
+    - Jika sempit: saran sinonim tambahan (lolos operational def)
+    - Jika luas: saran ketatkan komponen mana
+
+    Output saran revisi (jika ada).
+
+    === FASE 2: PRAKTIK EKSEKUSI DI SCOPUS ===
+
+    Instruksi untuk user jalankan manual:
+    1. Login Scopus → Advanced Search
+    2. Input search string + apply filters
+    3. Catat: total hits pre-filter, total post-filter, tanggal pencarian
+    4. (Repeat untuk multi-DB jika applicable)
+
+    Setelah user input hasil → cowork lakukan FASE 3:
+
+    === FASE 3: EVALUASI HASIL + SANITY CHECK ===
+
+    Berdasarkan hasil yang user input:
+    - Jumlah results reasonable untuk SLR? (tergantung scope)
+    - Cek sample 5-10 judul: relevan dengan PICO?
+    - Identifikasi noise dari "trap keyword"?
+    - Saran adjustment (jika perlu) dengan trade-off precision vs recall
+
+    === OUTPUT 1: dokumen search_log di database ===
+
+    Format:
+    - Search string final: [...]
+    - Filters applied: [tabel]
+    - Database(s): [list]
+    - Date executed: [YYYY-MM-DD per DB]
+    - Total hits per DB: [breakdown]
+
+    DATE STAMP & UPDATE POLICY:
+    - Tanggal pencarian = cut-off temporal. Sumber publish setelah tanggal ini
+    TIDAK BOLEH jadi studi primer (akan ditandai inkonsisten di audit Modul 9).
+    - TRIGGER WAJIB RE-RUN:
+    · Manuscript belum di-submit dalam 6 bulan sejak search date
+    · Reviewer minta update di revision round
+    · Major breakthrough publication di topik inti
+    - PROSEDUR RE-RUN: ulang search string sama dengan cut-off baru, screening
+    records baru, dokumentasi di Methods "Search updated on [date], additional
+    [N] studies identified, [X] included."
+
+    === OUTPUT 2: dokumen modul3_summary di database (HASIL AKHIR) ===
+
+    === COMPLETE SEARCH STRATEGY (SLR) ===
+
+    DATABASE: [primary + supplementary + justifikasi]
+    KEYWORDS: [main + synonyms + AVOID list per PICO]
+    SEARCH STRING: [final string per DB]
+    FILTERS: [tabel + justifikasi]
+    SEARCH EXECUTION: [date, hits per DB, sanity check verdict]
+    UPDATE POLICY: [trigger + prosedur]
+
+    Konfirmasi 2 dokumen tersimpan di database.
+    baru bisa lanjut ke NEXT: Data mining + export (Modul 4)
+    ```
+    Cara Mengujinya Nanti:
+    1. Sistem akan menampilkan Fase 1 (Pre-Validasi) di layar terminal dan meminta Anda menjalankan Fase 2.
+    2. Jalankan pencarian di Scopus, lalu buka MongoDB Compass. Isi total hits Anda di field `feedback` (misal: "Scopus 300 paper") dan ubah status ke "M3_STEP4_EVALUATION".
+    3. Sistem akan membuat `search_log` dan `modul3_summary` lalu berhenti.
+    4. Buka MongoDB Compass, periksa 2 dokumen tersebut (khususnya date stamp dan update policy).
+    5. Jika SUDAH lengkap, ubah status ke "M3_STEP4_APPROVED".
+    6. Jika BUTUH REVISI, ubah ke "M3_STEP4_NEEDS_REVISION" dan isi feedback.
 4	Data Mining dan export Scopus dan source lainnya(multi sources database)	-> screening 
     LANGKAH 1: EKSEKUSI FINAL SEARCH + SANITY CHECK
     LANGKAH 2: EXPORT + MULTI-DB DEDUP + PICO-CONSISTENCY PREVIEW

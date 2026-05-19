@@ -193,8 +193,104 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 	// LANGKAH 4: PRE-VALIDASI + EKSEKUSI
 	// =========================================================================
 	case "M3_STEP4_PRE_VALIDATION":
-		fmt.Println("   [Langkah 3.4] Pre-Validasi & Eksekusi (Belum diimplementasikan).")
+		fmt.Println("   [Langkah 3.4 Fase 1] Melakukan Pre-Validasi Search String...")
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		ssBytes, _ := json.MarshalIndent(session.SearchString, "", "  ")
+
+		execAgent := agent.NewExecutionAgent(llmBrain)
+		analysis, err := execAgent.PreValidate(ctx, string(ssBytes))
+		if err != nil { return err }
+
+		fmt.Println("\n=== HASIL PRE-VALIDASI ===")
+		fmt.Println(analysis)
+		fmt.Println("==========================\n")
+
+		session.Status = "M3_STEP4_WAITING_EXECUTION"
+		
+		fmt.Println("   [System] FASE 2: INSTRUKSI EKSEKUSI MANUAL DI SCOPUS")
+		fmt.Println("   1. Buka Scopus Advanced Search.")
+		fmt.Println("   2. Masukkan search_string final Anda dan aplikasikan filter.")
+		fmt.Println("   3. Buka MongoDB Compass, isi field 'feedback' dengan hasil pencarian Anda.")
+		fmt.Println("      (Contoh isi: 'Scopus pre-filter: 500, post-filter: 150')")
+		fmt.Println("   4. Ubah status menjadi 'M3_STEP4_EVALUATION' lalu klik Update.")
+		
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M3_STEP4_WAITING_EXECUTION":
+		fmt.Println("   [System] Menunggu Anda memasukkan hasil eksekusi Scopus di field 'feedback'.")
+		fmt.Println("   Jika sudah, ubah 'status' menjadi 'M3_STEP4_EVALUATION' dan Update.")
 		return nil
+
+	case "M3_STEP4_EVALUATION":
+		fmt.Println("   [Langkah 3.4 Fase 3] Mengevaluasi hasil dan menyusun Output Akhir Modul 3...")
+		
+		if session.Feedback == "" {
+			fmt.Println("   [ERROR] Field 'feedback' kosong! Anda harus memasukkan total hits hasil eksekusi manual.")
+			session.Status = "M3_STEP4_WAITING_EXECUTION"
+			return m.deps.MongoRepo.UpdateSession(ctx, session)
+		}
+
+		userHits := session.Feedback
+
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		ssBytes, _ := json.MarshalIndent(session.SearchString, "", "  ")
+		kwBytes, _ := json.MarshalIndent(session.Keywords, "", "  ")
+		dbBytes, _ := json.MarshalIndent(session.DatabaseSelection, "", "  ")
+
+		execAgent := agent.NewExecutionAgent(llmBrain)
+		result, err := execAgent.EvaluateAndSummarize(ctx, string(ssBytes), string(kwBytes), string(dbBytes), userHits)
+		if err != nil { return err }
+
+		session.SearchLog = &result.SearchLog
+		session.Modul3Summary = &result.Summary
+		session.Feedback = "" // bersihkan feedback
+		session.Status = "M3_STEP4_WAITING_APPROVAL"
+
+		fmt.Println("   [System] Dokumen 'search_log' dan 'modul3_summary' berhasil disusun.")
+		fmt.Println("   [System] DIJEDA menunggu persetujuan manusia.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M3_STEP4_WAITING_APPROVAL":
+		fmt.Println("   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
+		fmt.Println("   1. Cari 'search_log' dan 'modul3_summary'.")
+		fmt.Println("   2. Verifikasi update policy dan total hits di search_log.")
+		fmt.Println("   3a. Jika SUDAH tepat, ubah 'status' menjadi 'M3_STEP4_APPROVED'.")
+		fmt.Println("   3b. Jika BUTUH REVISI, ubah status ke 'M3_STEP4_NEEDS_REVISION' dan ketik feedback.")
+		return nil
+
+	case "M3_STEP4_NEEDS_REVISION":
+		fmt.Printf("   [Revisi 3.4] Memperbaiki Search Log & Summary berdasarkan feedback: '%s'\n", session.Feedback)
+		
+		userHits := fmt.Sprintf("KOREKSI DARI PENELITI: %s", session.Feedback)
+
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		ssBytes, _ := json.MarshalIndent(session.SearchString, "", "  ")
+		kwBytes, _ := json.MarshalIndent(session.Keywords, "", "  ")
+		dbBytes, _ := json.MarshalIndent(session.DatabaseSelection, "", "  ")
+
+		execAgent := agent.NewExecutionAgent(llmBrain)
+		result, err := execAgent.EvaluateAndSummarize(ctx, string(ssBytes), string(kwBytes), string(dbBytes), userHits)
+		if err != nil { return err }
+
+		session.SearchLog = &result.SearchLog
+		session.Modul3Summary = &result.Summary
+		session.Feedback = ""
+		session.Status = "M3_STEP4_WAITING_APPROVAL"
+
+		fmt.Println("   [System] Search Log & Summary direvisi. DIJEDA kembali menunggu persetujuan manusia.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M3_STEP4_APPROVED":
+		fmt.Println("   [Langkah 3.4] EKSEKUSI SELESAI! MODUL 3 RAMPUNG.")
+		fmt.Println("   [System] Mentransfer data ke Modul 4 (Data Mining).")
+		session.Status = "M4_INIT" // Transisi ke modul 4
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	default:
 		fmt.Printf("   [Modul 3] Sub-status %s tidak dikenali atau belum diimplementasikan.\n", session.Status)
