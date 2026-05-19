@@ -8,6 +8,31 @@ Modul	Topik(Langkah di dalamnya)	Output
 	1.5. ATURAN GLOBAL SLR + COWORK (BERLAKU UNTUK SEMUA MODUL 2-9)
 2	Topik Penelitian (PICO)	-> pico_definitions 
 	LANGKAH 1: TENTUKAN TOPIK + KLASIFIKASI TIPE GAP
+    ```txt
+    Topik penelitian ambil di mongo
+
+    Gunakan web search:
+    1. Cari systematic review terbaru (3 tahun terakhir) di bidang ini
+    2. Identifikasi research gap belum terjawab
+    3. Cek apakah topik saya sudah pernah di-review
+
+    Suggest 3 topik penelitian dengan kriteria:
+    - Gap jelas + terverifikasi dari literatur terbaru
+    - Cocok untuk SLR
+    - Relevan praktik saat ini
+
+    KLASIFIKASI tiap gap ke salah satu tipe (penting untuk argumentasi Intro):
+    - TIPE A — FRAGMENTASI LITERATUR: studi tersebar tanpa sintesis
+    - TIPE B — KONTRADIKSI ANTAR STUDI: temuan primer bertentangan
+    - TIPE C — KETIADAAN INTEGRATIVE FRAMEWORK: konsep belum terikat framework
+
+    Update atau insert data dalam dokumen gap_characterization di collection yang ada di mongo db(tolong beri masukan bagusnya di collection mana ya) dengan berisi informasi:
+    TOPIK 1: [nama]
+    - Gap: [...] | Tipe: A/B/C + alasan | Bukti: [DOI/URL] | Mengapa penting: [...]
+    TOPIK 2-3: format serupa
+
+    Konfirmasi + tunggu user pilih 1 topik untuk langkah selanjutnya.
+    ```
 	LANGKAH 2: REVIEW OF PRIOR REVIEWS (MATRIKS)
 	LANGKAH 3: PICO FRAMEWORK + OPERATIONAL DEFINITIONS + TERMINOLOGI KANONIKAL
 	LANGKAH 4: JUSTIFIKASI BATASAN SCOPE (3-LAPIS)

@@ -24,7 +24,7 @@ func (m *M1Foundation) Execute(ctx context.Context, session *model.SLRSession) e
 	fmt.Println("   [Langkah 1.5] Menerapkan Aturan Global SLR + CoWork...")
 
 	// Jika sukses, transisi langsung ke Modul 2
-	fmt.Println(">> [MODUL 1] Selesai. Transisi otomatis ke M2_PICO.")
-	session.Status = "M2_PICO"
+	fmt.Println(">> [MODUL 1] Selesai. Transisi otomatis ke M2_STEP1_TOPIC_GAP.")
+	session.Status = "M2_STEP1_TOPIC_GAP"
 	return m.deps.MongoRepo.UpdateSession(ctx, session)
 }
