@@ -263,6 +263,46 @@ Modul	Topik(Langkah di dalamnya)	Output
 
 3.	Search Strategy	-> search_log 
 	LANGKAH 1: DATABASE SELECTION + JUSTIFICATION
+    output : database_selection
+    ```txt
+    Sertakan RAG dari dokumen:
+    - pico_definitions
+    - scope_justifications
+    
+    Kemudian lakukan analisis lanskap database via web search.
+
+    Output ke dokumen database_selection di database yang berisi :
+
+    1. CEK COVERAGE BIDANG:
+    - Apakah Scopus mencakup mayoritas jurnal inti?
+    - Ada literatur penting (regional, non-English, niche) yang TIDAK ter-index?
+    - Bidang dominan publikasi konferensi (IEEE/ACM) atau laporan kebijakan?
+
+    2. MATRIKS DATABASE:
+    | Database | Coverage strength | Limitation | Fit dengan topik |
+    | Scopus | Global peer-reviewed | Bias Anglo-Saxon | [...] |
+    | Web of Science | Citation-rich | Lebih selektif | [...] |
+    | PubMed | Biomedical | Terbatas domain | [...] |
+    | IEEE Xplore | Engineering/CS | Terbatas | [...] |
+    | ScienceDirect | Elsevier | Terbatas | [...] |
+    | Springer | Springer | Terbatas | [...] |
+
+    3. DECISION:
+    - >80% paper kunci di Scopus → SCOPUS-ONLY (justifikasi feasibility)
+    - Ada literatur regional kritis → MULTI-DATABASE
+    - Topik baru / grey lit penting → tambah Google Scholar / repository
+
+    4. JUSTIFIKASI FINAL (200 kata, siap-Methods):
+    "We conducted primary search using [DB] because [coverage]. We acknowledge
+    [what's not covered] which may introduce [bias]. Mitigation: [snowballing,
+    citation tracking]. Date of search: [YYYY-MM-DD]."
+    ```
+    Cara Mengujinya Nanti:
+    1. Sistem akan mencetak pesan [System] DIJEDA setelah melakukan Database Selection.
+    2. Buka MongoDB Compass, cari dokumen `database_selection`.
+    3. Periksa isi `cek_coverage_bidang`, tabel `matriks_database`, `decision`, dan paragraf tulisan `justifikasi_final`.
+    4. Jika SUDAH tepat dan metodologinya kuat, ubah status menjadi "M3_STEP1_APPROVED".
+    5. Jika BUTUH REVISI, ubah status ke "M3_STEP1_NEEDS_REVISION" dan ketikkan instruksi di feedback (contoh: "Tolong jadikan multi-database dengan PubMed karena ini topik medis").
 	LANGKAH 2: KEYWORDS DEVELOPMENT (PICO + AVOID LIST)
 	LANGKAH 3: SEARCH STRING + FILTER SPECIFICATIONS
 	LANGKAH 4: PRE-VALIDASI + EKSEKUSI + DATE STAMP + UPDATE POLICY + HASIL AKHIR

@@ -105,6 +105,20 @@ type Modul2Summary struct {
 	Markdown string `bson:"markdown" json:"markdown"`
 }
 
+type DatabaseMatrixRow struct {
+	Database         string `bson:"database" json:"database"`
+	CoverageStrength string `bson:"coverage_strength" json:"coverage_strength"`
+	Limitation       string `bson:"limitation" json:"limitation"`
+	FitDenganTopik   string `bson:"fit_dengan_topik" json:"fit_dengan_topik"`
+}
+
+type DatabaseSelection struct {
+	CekCoverageBidang string              `bson:"cek_coverage_bidang" json:"cek_coverage_bidang"`
+	MatriksDatabase   []DatabaseMatrixRow `bson:"matriks_database" json:"matriks_database"`
+	Decision          string              `bson:"decision" json:"decision"`
+	JustifikasiFinal  string              `bson:"justifikasi_final" json:"justifikasi_final"`
+}
+
 type SLRSession struct {
 	ID                  string               `bson:"_id,omitempty"`
 	Topic               string               `bson:"topic"`
@@ -117,6 +131,7 @@ type SLRSession struct {
 	ResearchQuestions   []ResearchQuestion   `bson:"research_questions,omitempty"`
 	FinerNoveltyCheck   *FinerNoveltyCheck   `bson:"finer_novelty_check,omitempty"`
 	Modul2Summary       *Modul2Summary       `bson:"modul2_summary,omitempty"`
+	DatabaseSelection   *DatabaseSelection   `bson:"database_selection,omitempty"`
 	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
