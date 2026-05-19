@@ -26,13 +26,20 @@ Modul	Topik(Langkah di dalamnya)	Output
     - TIPE B — KONTRADIKSI ANTAR STUDI: temuan primer bertentangan
     - TIPE C — KETIADAAN INTEGRATIVE FRAMEWORK: konsep belum terikat framework
 
-    Update atau insert data dalam dokumen gap_characterization di collection yang ada di mongo db(tolong beri masukan bagusnya di collection mana ya) dengan berisi informasi:
+    Update atau insert array  suggested_topics di collection SLRSession yang ada di mongo db dengan berisi informasi:
     TOPIK 1: [nama]
     - Gap: [...] | Tipe: A/B/C + alasan | Bukti: [DOI/URL] | Mengapa penting: [...]
     TOPIK 2-3: format serupa
 
     Konfirmasi + tunggu user pilih 1 topik untuk langkah selanjutnya.
     ```
+    Cara Mengujinya Nanti:
+    1. Jalankan pipeline. Tunggu hingga terminal memunculkan pesan [System] DIJEDA.
+    2. Buka MongoDB Compass Anda.
+    3. Buka collection slr_sessions, cari sesi Anda. Anda akan melihat kolom baru bernama suggested_topics berisi 3 pilihan topik, lengkap beserta Gap, Tipe A/B/C, Alasan, dan DOI buktinya.
+    4. Cara Konfirmasi: Salin salah satu name topik pilihan Anda dari array tersebut, lalu timpakan/ganti (replace) nilai field topic yang lama dengan judul pilihan Anda.
+    5. Terakhir, ubah field status menjadi "M2_STEP1_APPROVED". 
+    6. Tekan "Update", dan jalankan ulang go run ./cmd/app/main.go! Sistem akan otomatis melaju ke Prior Reviews.
 	LANGKAH 2: REVIEW OF PRIOR REVIEWS (MATRIKS)
 	LANGKAH 3: PICO FRAMEWORK + OPERATIONAL DEFINITIONS + TERMINOLOGI KANONIKAL
 	LANGKAH 4: JUSTIFIKASI BATASAN SCOPE (3-LAPIS)

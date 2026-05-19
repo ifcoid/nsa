@@ -2,9 +2,19 @@ package model
 
 import "time"
 
+type SuggestedTopic struct {
+	Name       string `bson:"name" json:"name"`
+	Gap        string `bson:"gap" json:"gap"`
+	Type       string `bson:"type" json:"type"` // A, B, atau C
+	TypeReason string `bson:"type_reason" json:"type_reason"`
+	Evidence   string `bson:"evidence" json:"evidence"` // DOI / URL
+	Importance string `bson:"importance" json:"importance"`
+}
+
 type SLRSession struct {
 	ID                string            `bson:"_id,omitempty"`
 	Topic             string            `bson:"topic"`
+	SuggestedTopics   []SuggestedTopic  `bson:"suggested_topics,omitempty"`
 	PICO              map[string]string `bson:"pico"`
 	InclusionCriteria []string          `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
