@@ -4,66 +4,81 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
-
 	"nsa/internal/llm"
+	"nsa/internal/model"
 )
 
-// PicoAgent bertugas untuk menganalisis topik riset menjadi komponen PICO
 type PicoAgent struct {
 	llmProvider llm.LLMClient
 }
 
-// NewPicoAgent adalah constructor untuk menyuntikkan otak LLM ke PicoAgent
 func NewPicoAgent(provider llm.LLMClient) *PicoAgent {
 	return &PicoAgent{
 		llmProvider: provider,
 	}
 }
 
-// Analyze menerima topik mentah dan mengembalikan map berisi komponen P, I, C, O
-func (a *PicoAgent) Analyze(ctx context.Context, topic string) (map[string]string, error) {
-	// Instruksi bersih tanpa karakter backtick literal untuk menghindari error compiler Go
-	systemPrompt := `Kamu adalah agen AI akademis spesialis Systematic Literature Review (SLR).
-Tugasmu adalah membedah topik penelitian yang diberikan menjadi komponen PICO secara akademis dan tajam:
-- P (Population): Populasi, subjek, jenis sinyal, atau masalah spesifik yang diteliti.
-- I (Intervention): Metode, teknik, arsitektur, algoritma, atau perlakuan utama yang diterapkan.
-- C (Comparison): Alternatif metode, algoritma pembanding, atau kondisi kontrol standar di ranah tersebut (jika tidak ada di topik, rumuskan pembanding yang paling relevan).
-- O (Outcome): Hasil akhir, metrik keberhasilan, target akurasi, atau dampak yang ingin diukur.
+func (a *PicoAgent) Analyze(ctx context.Context, topicContext string, priorMatrixContext string) (*model.PICODefinitions, error) {
+	systemPrompt := `Anda adalah asisten peneliti akademik profesional.
+Tugas Anda adalah merumuskan PICO Framework 3-Lapis berdasarkan Konteks Topik dan Sintesis Matriks Prior Reviews yang diberikan.
 
-Format Output WAJIB berupa JSON objek murni tanpa hiasan teks pembuka/penutup dan tanpa markdown code blocks (jangan pakai bungkusan triple backticks markdown json).
-Contoh output yang benar:
-{"P": "deskripsi populasi", "I": "deskripsi intervensi", "C": "deskripsi pembanding", "O": "deskripsi hasil"}`
+=== LAPISAN 1: PICO ===
+P (Population): siapa yang diteliti?
+I (Intervention/Exposure): apa yang diteliti?
+C (Comparison): pembanding (atau "no comparison" jika SLR deskriptif)
+O (Outcome): hasil yang diukur
 
-	userPrompt := fmt.Sprintf("Analisislah topik penelitian berikut ke dalam bentuk PICO:\n\"%s\"", topic)
+=== LAPISAN 2: OPERATIONAL DEFINITIONS (per komponen P/I/C/O) ===
+- WHAT COUNTS: kriteria eksplisit yang MEMBUAT studi memenuhi syarat inklusi.
+- WHAT DOESN'T COUNT: kriteria eksplisit yang MENGGUGURKAN studi (eksklusi).
+- EDGE CASES: Kasus borderline beserta keputusan default (include/exclude + alasan).
 
-	// Panggil LLM via Interface universal
+=== LAPISAN 3: TERMINOLOGI KANONIKAL ===
+Pilih komponen yang paling kompleks (P atau I) dan tentukan Terminologi Kanonikalnya:
+- term: Terminologi baku secara internasional.
+- definition: Definisi baku dalam 1 kalimat jelas.
+- rejected_alternatives: Alternatif istilah yang umum namun DITOLAK beserta alasan penolakannya.
+
+Output HARUS dalam format JSON MURNI dengan struktur persis seperti ini:
+{
+  "p": {
+    "value": "...",
+    "operational_def": {"what_counts": "...", "what_doesnt_count": "...", "edge_cases": "..."}
+  },
+  "i": {
+    "value": "...",
+    "operational_def": {"what_counts": "...", "what_doesnt_count": "...", "edge_cases": "..."}
+  },
+  "c": {
+    "value": "...",
+    "operational_def": {"what_counts": "...", "what_doesnt_count": "...", "edge_cases": "..."}
+  },
+  "o": {
+    "value": "...",
+    "operational_def": {"what_counts": "...", "what_doesnt_count": "...", "edge_cases": "..."}
+  },
+  "canonical_term": {
+    "term": "...",
+    "definition": "...",
+    "rejected_alternatives": "..."
+  }
+}
+Keluarkan HANYA JSON tanpa blok markdown atau teks pengantar.`
+
+	userPrompt := fmt.Sprintf("Konteks Topik & Gap:\n%s\n\nPrior Reviews Matrix (Literatur Terdahulu):\n%s", topicContext, priorMatrixContext)
+
 	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("pico_agent gagal berkomunikasi dengan LLM: %w", err)
 	}
 
-	// Defense Mechanism: Bersihkan string jika LLM nakal tetap memberikan bungkusan markdown
-	cleanJSON := strings.TrimSpace(rawResponse)
-	cleanJSON = strings.TrimPrefix(cleanJSON, "```json")
-	cleanJSON = strings.TrimPrefix(cleanJSON, "```")
-	cleanJSON = strings.TrimSuffix(cleanJSON, "```")
-	cleanJSON = strings.TrimSpace(cleanJSON)
+	cleanJSON := CleanJSONResponse(rawResponse)
 
-	// Parse hasil teks JSON dari LLM ke dalam map Go
-	var picoMap map[string]string
-	err = json.Unmarshal([]byte(cleanJSON), &picoMap)
+	var definitions model.PICODefinitions
+	err = json.Unmarshal([]byte(cleanJSON), &definitions)
 	if err != nil {
-		return nil, fmt.Errorf("gagal mengonversi teks LLM ke JSON map. Raw response: %s, Error: %w", rawResponse, err)
+		return nil, fmt.Errorf("gagal parsing JSON dari LLM (%w). Raw response: %s", err, rawResponse)
 	}
 
-	// Validasi Guardrail: Pastikan seluruh kunci P, I, C, O tersedia di dalam map
-	requiredKeys := []string{"P", "I", "C", "O"}
-	for _, key := range requiredKeys {
-		if _, exists := picoMap[key]; !exists {
-			picoMap[key] = "Tidak disebutkan secara spesifik oleh LLM"
-		}
-	}
-
-	return picoMap, nil
+	return &definitions, nil
 }

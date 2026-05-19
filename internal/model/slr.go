@@ -11,13 +11,85 @@ type SuggestedTopic struct {
 	Importance string `bson:"importance" json:"importance"`
 }
 
+type PriorReview struct {
+	AuthorYear       string `bson:"author_year" json:"author_year"`
+	Scope            string `bson:"scope" json:"scope"`
+	Methodology      string `bson:"methodology" json:"methodology"`
+	KeyFindings      string `bson:"key_findings" json:"key_findings"`
+	Limitations      string `bson:"limitations" json:"limitations"`
+	Selisih          string `bson:"selisih" json:"selisih"` // BEDA POPULASI, dll
+	SynthesisNovelty string `bson:"synthesis_novelty" json:"synthesis_novelty"`
+}
+
+type PriorReviewsMatrix struct {
+	Reviews []PriorReview `bson:"reviews" json:"reviews"`
+}
+
+type OperationalDef struct {
+	WhatCounts      string `bson:"what_counts" json:"what_counts"`
+	WhatDoesntCount string `bson:"what_doesnt_count" json:"what_doesnt_count"`
+	EdgeCases       string `bson:"edge_cases" json:"edge_cases"`
+}
+
+type PICOElement struct {
+	Value          string         `bson:"value" json:"value"`
+	OperationalDef OperationalDef `bson:"operational_def" json:"operational_def"`
+}
+
+type CanonicalTerm struct {
+	Term         string `bson:"term" json:"term"`
+	Definition   string `bson:"definition" json:"definition"`
+	RejectedAlts string `bson:"rejected_alternatives" json:"rejected_alternatives"`
+}
+
+type PICODefinitions struct {
+	P             PICOElement   `bson:"p" json:"p"`
+	I             PICOElement   `bson:"i" json:"i"`
+	C             PICOElement   `bson:"c" json:"c"`
+	O             PICOElement   `bson:"o" json:"o"`
+	CanonicalTerm CanonicalTerm `bson:"canonical_term" json:"canonical_term"`
+}
+
+type ScopeFilters struct {
+	RentangTahun string `bson:"rentang_tahun" json:"rentang_tahun"`
+	Geografis    string `bson:"geografis" json:"geografis"`
+	Sektor       string `bson:"sektor" json:"sektor"`
+	Bahasa       string `bson:"bahasa" json:"bahasa"`
+	Lainnya      string `bson:"lainnya" json:"lainnya"`
+}
+
+type ScopeJustification struct {
+	Name           string `bson:"name" json:"name"`
+	Theoretical    string `bson:"theoretical" json:"theoretical"`
+	Methodological string `bson:"methodological" json:"methodological"`
+	Practical      string `bson:"practical" json:"practical"`
+	Status         string `bson:"status" json:"status"`
+}
+
+type RQTraceability struct {
+	Gap          string `bson:"gap" json:"gap"`
+	PriorReviews string `bson:"prior_reviews" json:"prior_reviews"`
+	PICO         string `bson:"pico" json:"pico"`
+}
+
+type ResearchQuestion struct {
+	Type         string         `bson:"type" json:"type"` // "PRIMARY" or "SECONDARY"
+	Question     string         `bson:"question" json:"question"`
+	Traceability RQTraceability `bson:"traceability" json:"traceability"`
+	IsOrphan     bool           `bson:"is_orphan" json:"is_orphan"`
+}
+
 type SLRSession struct {
-	ID                string            `bson:"_id,omitempty"`
-	Topic             string            `bson:"topic"`
-	SuggestedTopics   []SuggestedTopic  `bson:"suggested_topics,omitempty"`
-	SelectedTopic     *SuggestedTopic   `bson:"selected_topic,omitempty"`
-	PICO              map[string]string `bson:"pico"`
-	InclusionCriteria []string          `bson:"inclusion_criteria"`
+	ID                  string               `bson:"_id,omitempty"`
+	Topic               string               `bson:"topic"`
+	SuggestedTopics     []SuggestedTopic     `bson:"suggested_topics,omitempty"`
+	SelectedTopic       *SuggestedTopic      `bson:"selected_topic,omitempty"`
+	PriorReviewsMatrix  *PriorReviewsMatrix  `bson:"prior_reviews_matrix,omitempty"`
+	PICODefinitions     *PICODefinitions     `bson:"pico_definitions,omitempty"`
+	ScopeFilters        *ScopeFilters        `bson:"scope_filters,omitempty"`
+	ScopeJustifications []ScopeJustification `bson:"scope_justifications,omitempty"`
+	ResearchQuestions   []ResearchQuestion   `bson:"research_questions,omitempty"`
+	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
 	Feedback          string            `bson:"feedback"` // Catatan dari manusia jika butuh revisi
