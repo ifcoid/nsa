@@ -190,37 +190,78 @@ Modul	Topik(Langkah di dalamnya)	Output
     5. Jika TIDAK sesuai (ada orphan atau RQs kurang tajam), ubah status menjadi "M2_STEP5_NEEDS_REVISION", isi instruksi revisi di field feedback.
     6. Jalankan ulang aplikasi. Jika approved, sistem akan berlanjut ke Langkah 6 (Validasi FINER).
 	LANGKAH 6: CEK FINER + NOVELTY + INTERNAL COHERENCE + HASIL AKHIR
-    output: 
+    output: finer_novelty_check dan modul2_summary
     ```txt
-    Berdasarkan outputs/research_questions.md (L5) dan prior_reviews_matrix.md (L2):
+    Gunakan RAG dari :
+    - research_questions
+    - prior_reviews_matrix
+    - pico_definitions
+    - scope_justifications
 
-1. FINER + Novelty Validation:
-   Untuk setiap RQ, periksa: FINER (Feasible, Interesting, Novel, Ethical, Relevant) 
-   dan novelty claim terhadap prior reviews.
-   Tandai RQ yang lemah (weak/trivial) untuk revisi.
+    Eksekusi 2 output dokumen di database:
 
-2. Internal Coherence Check:
-   Periksa: apakah sintesis tematik (dari L2) dapat menjawab RQ-RQ tersebut?
-   Jika ada ketidakselarasan → perbaiki sintesis atau RQ.
+    === OUTPUT 1: finer_novelty_check ===
 
-3. Final Output:
-   Tulis file final outputs/research_questions_reviewed.md berisi:
-   - Final RQs (approved)
-   - Daftar RQ yang direvisi
-   - Final novelty claim (penyesuaian dari L2 jika perlu)
-   - Penjelasan singkat jika ada internal coherence adjustment
-   
-   Format:
-   FINAL PRIMARY RQ: [question]
-   SECONDARY RQs (1-3): [...]
-   REVISED RQs (if any): [...]
-   FINAL NOVELTY CLAIM: [paragraph]
-   INTERNAL COHERENCE NOTE: [explanation]
+    FINER evaluation:
+    - F (FEASIBLE): web search estimasi jumlah studi di Scopus dengan PICO+batasan
+    Benchmark: >50 ideal SLR; 20-50 viable; <20 thin evidence
+    - I (INTERESTING): audience primer (peneliti/praktisi/policymaker)?
+    - N (NOVEL): tabel "Novelty per Prior Review" — kolom: Prior Review | Overlap |
+    BARU di riset saya | Signifikansi novelty. Cross-check via web search untuk
+    SLR yang publish dalam 6 bulan terakhir.
+    - E (ETHICAL): isu hak cipta, populasi sensitif?
+    - R (RELEVANT): selaras agenda SDGs, kebijakan nasional, prioritas sektoral?
 
-   No preamble.
+    CROSS-CHECK INTERNAL COHERENCE:
+    1. PICO cukup untuk jawab primary RQ?
+    2. Scope tidak terlalu sempit untuk feasibility?
+    3. Terminologi kanonikal konsisten di RQ?
 
+    Tunjukkan PASS/FAIL per kriteria + rekomendasi revisi langkah mana
+    (L1/L2/L3/L4/L5).
+
+    === OUTPUT 2: modul2_summary (HASIL AKHIR) ===
+
+    Format:
+    === RESEARCH QUESTION PACKAGE (SLR) ===
+
+    RESEARCH AREA: [...]
+    SELECTED TOPIC: [...]
+
+    1. GAP CHARACTERIZATION (→ Modul 9 L4 Intro)
+    Tipe: A/B/C | Deskripsi: [...] | Evidence: [...]
+
+    2. PRIOR REVIEWS MATRIX (→ Modul 9 L4 "Review of Prior Reviews")
+    [tabel ringkas + novelty synthesis]
+
+    3. PICO + OPERATIONAL DEFINITIONS (→ Modul 5 inclusion criteria)
+    P/I/C/O: [ringkas WHAT COUNTS/DOESN'T per komponen]
+
+    4. CANONICAL TERMINOLOGY (→ konsisten di seluruh modul)
+    [term + definisi + alternatif ditolak]
+
+    5. SCOPE JUSTIFICATION (→ Modul 9 L4 Intro)
+    [batasan + justifikasi 3-lapis]
+
+    6. RESEARCH QUESTIONS (→ Modul 9 L4 objectives)
+    Primary + 3 Secondary dengan traceability
+
+    7. FINER + NOVELTY CHECK
+    F/I/N/E/R: PASS dengan ringkasan
+    Internal coherence: ✓
+
+    Konfirmasi 2 dokumen tersimpan di database
+    kemudian user approve atau revisi 
+    setelah itu baru NEXT: Search strategy (Modul 3)
     ```
-	Search Strategy	-> search_log 
+    Cara Mengujinya Nanti:
+    1. Sistem akan mencetak pesan [System] DIJEDA setelah evaluasi FINER.
+    2. Buka MongoDB Compass, cari 'finer_novelty_check' dan 'modul2_summary'.
+    3. Periksa evaluasi FINER, tabel novelty, internal coherence, dan ringkasan akhir.
+    4. Jika SUDAH lulus, ubah status menjadi "M2_STEP6_APPROVED". Sistem akan berpindah ke Modul 3.
+    5. Jika BUTUH REVISI, ubah status menjadi "M2_STEP6_NEEDS_REVISION" dan isi keluhan di feedback.
+
+3.	Search Strategy	-> search_log 
 	LANGKAH 1: DATABASE SELECTION + JUSTIFICATION
 	LANGKAH 2: KEYWORDS DEVELOPMENT (PICO + AVOID LIST)
 	LANGKAH 3: SEARCH STRING + FILTER SPECIFICATIONS

@@ -434,11 +434,67 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// LANGKAH 6: CEK FINER + NOVELTY + INTERNAL COHERENCE + HASIL AKHIR
 	// =========================================================================
 	case "M2_STEP6_FINER_CHECK":
-		fmt.Println("   [Langkah 2.6] Melakukan validasi akhir FINER & Novelty Check...")
-		// TODO: Agen validator
+		fmt.Println("   [Langkah 2.6] Melakukan validasi akhir FINER, Novelty & Internal Coherence...")
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		rqsBytes, _ := json.MarshalIndent(session.ResearchQuestions, "", "  ")
+		matrixBytes, _ := json.MarshalIndent(session.PriorReviewsMatrix, "", "  ")
+		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
+		scopeBytes, _ := json.MarshalIndent(session.ScopeJustifications, "", "  ")
+
+		finerAgent := agent.NewFinerAgent(llmBrain)
+		result, err := finerAgent.ValidateFiner(ctx, string(rqsBytes), string(matrixBytes), string(picoBytes), string(scopeBytes))
+		if err != nil { return err }
+
+		session.FinerNoveltyCheck = &result.Check
+		session.Modul2Summary = &result.Summary
+		session.Status = "M2_STEP6_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] MODUL 2 SELESAI. Mentransfer data ke Modul 3 (Search Strategy).")
-		session.Status = "M3_STEP1_DATABASE_SELECTION" // Transisi ke modul 3
+		fmt.Println("   [System] Dokumen 'finer_novelty_check' dan 'modul2_summary' berhasil disusun.")
+		if !result.Check.IsPass {
+			fmt.Println("   [WARNING] Evaluasi FINER mengindikasikan FAIL/TIDAK LULUS. Silakan cek rekomendasi revisi di database!")
+		}
+		fmt.Println("   [System] DIJEDA menunggu persetujuan manusia.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M2_STEP6_WAITING_APPROVAL":
+		fmt.Println("   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		fmt.Println("   1. Buka document sesi Anda, cari 'finer_novelty_check' dan 'modul2_summary'.")
+		fmt.Println("   2. Verifikasi evaluasi FINER dan ringkasan Modul 2.")
+		fmt.Println("   3a. Jika SUDAH lulus dan sempurna, ubah 'status' menjadi 'M2_STEP6_APPROVED' lalu Update.")
+		fmt.Println("   3b. Jika BUTUH REVISI, ubah 'status' menjadi 'M2_STEP6_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback'.")
+		return nil
+
+	case "M2_STEP6_NEEDS_REVISION":
+		fmt.Printf("   [Revisi 2.6] Memperbaiki FINER & Summary berdasarkan feedback: '%s'\n", session.Feedback)
+		
+		rqsBytes, _ := json.MarshalIndent(session.ResearchQuestions, "", "  ")
+		matrixBytes, _ := json.MarshalIndent(session.PriorReviewsMatrix, "", "  ")
+		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
+		scopeBytes, _ := json.MarshalIndent(session.ScopeJustifications, "", "  ")
+		
+		scopeContext := string(scopeBytes) + fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI UNTUK EVALUASI FINER]:\n%s\nPerbaiki evaluasi FINER atau ringkasan Modul 2 sesuai dengan arahan ini.", session.Feedback)
+
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		finerAgent := agent.NewFinerAgent(llmBrain)
+		result, err := finerAgent.ValidateFiner(ctx, string(rqsBytes), string(matrixBytes), string(picoBytes), scopeContext)
+		if err != nil { return err }
+
+		session.FinerNoveltyCheck = &result.Check
+		session.Modul2Summary = &result.Summary
+		session.Feedback = ""
+		session.Status = "M2_STEP6_WAITING_APPROVAL"
+		
+		fmt.Println("   [System] Evaluasi FINER direvisi. DIJEDA kembali menunggu persetujuan manusia.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M2_STEP6_APPROVED":
+		fmt.Println("   [Langkah 2.6] FINER disetujui! MODUL 2 SELESAI.")
+		fmt.Println("   [System] Mentransfer data ke Modul 3 (Search Strategy).")
+		session.Status = "M3_INIT" // Transisi ke modul 3
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	default:

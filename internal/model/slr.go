@@ -80,6 +80,31 @@ type ResearchQuestion struct {
 	IsOrphan     bool           `bson:"is_orphan" json:"is_orphan"`
 }
 
+type FINERCriteria struct {
+	Feasible    string `bson:"feasible" json:"feasible"`
+	Interesting string `bson:"interesting" json:"interesting"`
+	Novel       string `bson:"novel" json:"novel"`
+	Ethical     string `bson:"ethical" json:"ethical"`
+	Relevant    string `bson:"relevant" json:"relevant"`
+}
+
+type CoherenceCheck struct {
+	PICOAdequacy     string `bson:"pico_adequacy" json:"pico_adequacy"`
+	ScopeFeasibility string `bson:"scope_feasibility" json:"scope_feasibility"`
+	Terminology      string `bson:"terminology" json:"terminology"`
+	Recommendation   string `bson:"recommendation" json:"recommendation"`
+}
+
+type FinerNoveltyCheck struct {
+	FINER             FINERCriteria  `bson:"finer" json:"finer"`
+	InternalCoherence CoherenceCheck `bson:"internal_coherence" json:"internal_coherence"`
+	IsPass            bool           `bson:"is_pass" json:"is_pass"`
+}
+
+type Modul2Summary struct {
+	Markdown string `bson:"markdown" json:"markdown"`
+}
+
 type SLRSession struct {
 	ID                  string               `bson:"_id,omitempty"`
 	Topic               string               `bson:"topic"`
@@ -90,6 +115,8 @@ type SLRSession struct {
 	ScopeFilters        *ScopeFilters        `bson:"scope_filters,omitempty"`
 	ScopeJustifications []ScopeJustification `bson:"scope_justifications,omitempty"`
 	ResearchQuestions   []ResearchQuestion   `bson:"research_questions,omitempty"`
+	FinerNoveltyCheck   *FinerNoveltyCheck   `bson:"finer_novelty_check,omitempty"`
+	Modul2Summary       *Modul2Summary       `bson:"modul2_summary,omitempty"`
 	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
