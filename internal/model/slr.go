@@ -135,6 +135,23 @@ type KeywordsDevelopment struct {
 	Outcome      PICOKeyword `bson:"outcome" json:"outcome"`
 }
 
+type AdaptedString struct {
+	Database string `bson:"database" json:"database"`
+	Query    string `bson:"query" json:"query"`
+}
+
+type FilterSpec struct {
+	Filter        string `bson:"filter" json:"filter"`
+	Value         string `bson:"value" json:"value"`
+	Justification string `bson:"justification" json:"justification"`
+}
+
+type SearchStringData struct {
+	ScopusQuery    string          `bson:"scopus_query" json:"scopus_query"`
+	AdaptedStrings []AdaptedString `bson:"adapted_strings,omitempty" json:"adapted_strings,omitempty"`
+	Filters        []FilterSpec    `bson:"filters" json:"filters"`
+}
+
 type SLRSession struct {
 	ID                  string               `bson:"_id,omitempty"`
 	Topic               string               `bson:"topic"`
@@ -149,6 +166,7 @@ type SLRSession struct {
 	Modul2Summary       *Modul2Summary       `bson:"modul2_summary,omitempty"`
 	DatabaseSelection   *DatabaseSelection   `bson:"database_selection,omitempty"`
 	Keywords            *KeywordsDevelopment `bson:"keywords,omitempty"`
+	SearchString        *SearchStringData    `bson:"search_string,omitempty"`
 	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"

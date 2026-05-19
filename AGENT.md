@@ -336,6 +336,48 @@ Modul	Topik(Langkah di dalamnya)	Output
     4. Jika SUDAH sesuai aturan (sinonim tidak memperluas *scope*, avoid list benar), ubah status menjadi "M3_STEP2_APPROVED".
     5. Jika BUTUH REVISI, ubah status ke "M3_STEP2_NEEDS_REVISION" dan ketikkan instruksi di feedback (misal: "Hapus kata X dari P karena itu menyalahi what counts").
 	LANGKAH 3: SEARCH STRING + FILTER SPECIFICATIONS
+    output : search_string
+    ```txt
+    Gunakan RAG dari dokumen:
+    - keywords 
+    - scope_justification
+
+    Build search string + filter table. Tulis ke dokumen search_string di database. yang didalamnya terdiri dari 2 bagian yaitu:
+
+    === BAGIAN 1: SEARCH STRING ===
+
+    Format Scopus:
+    TITLE-ABS-KEY((P1 OR P2 OR P3) AND (I1 OR I2 OR I3) AND (O1 OR O2))
+
+    Aturan:
+    - OR untuk synonyms dalam komponen sama
+    - AND untuk antar komponen PICO
+    - Wildcard (*) untuk variations (educat* → education, educational, educating)
+    - Quotation marks untuk phrase ("machine learning")
+    - Hindari sinonim dari AVOID list
+    - Comprehensive tapi tidak terlalu broad
+
+    (Jika multi-DB: adapt untuk WoS, Pubmed, dll. di sub-section "Adapted Strings")
+
+    === BAGIAN 2: FILTER TABLE ===
+
+    | Filter | Nilai | Justifikasi (1-2 kalimat dari scope_justification.md) |
+    | Publication year | [periode] | [...] |
+    | Language | [bahasa] | [...] |
+    | Document type | [Article/Review/etc] | [...] |
+    | Subject area (jika dibatasi) | [area] | [...] |
+    | Open access only (jika iya) | [yes/no] | [...] |
+
+    ATURAN: filter tanpa justifikasi → HAPUS dari daftar (akan ditanya reviewer).
+    ```
+    Cara Mengujinya Nanti:
+    1. Sistem akan mencetak pesan [System] DIJEDA setelah membuat Search String.
+    2. Buka MongoDB Compass, cari dokumen `search_string`.
+    3. Periksa query Scopus di `scopus_query` (sintaks kurung, OR, AND, asterisk, kutipan).
+    4. Periksa array `filters`, pastikan semua memiliki justifikasi yang jelas.
+    5. Jika SUDAH tepat dan tidak ngawur sintaksnya, ubah status menjadi "M3_STEP3_APPROVED".
+    6. Jika BUTUH REVISI, ubah status ke "M3_STEP3_NEEDS_REVISION" dan ketikkan instruksi di feedback (misal: "Hapus filter open access karena justifikasinya lemah").
+
 	LANGKAH 4: PRE-VALIDASI + EKSEKUSI + DATE STAMP + UPDATE POLICY + HASIL AKHIR
 4	Data Mining dan export Scopus dan source lainnya(multi sources database)	-> screening 
     LANGKAH 1: EKSEKUSI FINAL SEARCH + SANITY CHECK

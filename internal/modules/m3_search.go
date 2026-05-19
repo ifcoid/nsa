@@ -136,7 +136,64 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 	// LANGKAH 3: SEARCH STRING + FILTER SPECIFICATIONS
 	// =========================================================================
 	case "M3_STEP3_SEARCH_STRING":
-		fmt.Println("   [Langkah 3.3] Search String (Belum diimplementasikan).")
+		fmt.Println("   [Langkah 3.3] Merangkai Search String & Filter Specifications...")
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		kwBytes, _ := json.MarshalIndent(session.Keywords, "", "  ")
+		scopeBytes, _ := json.MarshalIndent(session.ScopeJustifications, "", "  ")
+
+		ssAgent := agent.NewSearchStringAgent(llmBrain)
+		ssResult, err := ssAgent.BuildSearchString(ctx, string(kwBytes), string(scopeBytes))
+		if err != nil { return err }
+
+		session.SearchString = ssResult
+		session.Status = "M3_STEP3_WAITING_APPROVAL"
+		
+		fmt.Println("   [System] Search String berhasil dirangkai. DIJEDA menunggu persetujuan manusia.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M3_STEP3_WAITING_APPROVAL":
+		fmt.Println("   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
+		fmt.Println("   1. Buka document sesi Anda, cari objek 'search_string'.")
+		fmt.Println("   2. Verifikasi sintaks query Scopus (wildcard, quotation, kurung, OR/AND).")
+		fmt.Println("   3. Verifikasi array 'filters' memiliki justifikasi.")
+		fmt.Println("   4a. Jika SUDAH tepat, ubah 'status' menjadi 'M3_STEP3_APPROVED'.")
+		fmt.Println("   4b. Jika BUTUH REVISI, ubah 'status' ke 'M3_STEP3_NEEDS_REVISION' dan isi 'feedback'.")
+		return nil
+
+	case "M3_STEP3_NEEDS_REVISION":
+		fmt.Printf("   [Revisi 3.3] Memperbaiki Search String berdasarkan feedback: '%s'\n", session.Feedback)
+
+		kwBytes, _ := json.MarshalIndent(session.Keywords, "", "  ")
+		scopeBytes, _ := json.MarshalIndent(session.ScopeJustifications, "", "  ")
+		
+		scopeContext := string(scopeBytes) + fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s", session.Feedback)
+
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		ssAgent := agent.NewSearchStringAgent(llmBrain)
+		ssResult, err := ssAgent.BuildSearchString(ctx, string(kwBytes), scopeContext)
+		if err != nil { return err }
+
+		session.SearchString = ssResult
+		session.Feedback = ""
+		session.Status = "M3_STEP3_WAITING_APPROVAL"
+		
+		fmt.Println("   [System] Search String direvisi. DIJEDA kembali menunggu persetujuan manusia.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M3_STEP3_APPROVED":
+		fmt.Println("   [Langkah 3.3] Search String disetujui! Lanjut ke Pre-Validasi & Eksekusi...")
+		session.Status = "M3_STEP4_PRE_VALIDATION"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	// =========================================================================
+	// LANGKAH 4: PRE-VALIDASI + EKSEKUSI
+	// =========================================================================
+	case "M3_STEP4_PRE_VALIDATION":
+		fmt.Println("   [Langkah 3.4] Pre-Validasi & Eksekusi (Belum diimplementasikan).")
 		return nil
 
 	default:
