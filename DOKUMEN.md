@@ -12,5 +12,10 @@ Modul 3:
 1. database_selection
 2. keywords
 3. search_string
-4. search_log
-5. modul3_summary
+4. search_log dan modul3_summary
+
+Modul 4:
+1. data_mining_log
+2. data_mining_log
+3. screening
+4. modul4_summary

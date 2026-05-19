@@ -462,6 +462,40 @@ Modul	Topik(Langkah di dalamnya)	Output
     6. Jika BUTUH REVISI, ubah ke "M3_STEP4_NEEDS_REVISION" dan isi feedback.
 4	Data Mining dan export Scopus dan source lainnya(multi sources database)	-> screening 
     LANGKAH 1: EKSEKUSI FINAL SEARCH + SANITY CHECK
+    output: data_mining_log
+    ```txt
+    Minta user melakukan search dahulu di Scopus (+ DB lain jika multi-DB) sesuai
+    dengan dokumen search_string yang sudah dibuat di modul3, sistem lalu membukan kerangka dokumen untuk input dari feedback user(misal: sampling_pencarian_awal) di database berupa:
+    - Total hits pre-filter / post-filter per DB
+    - Tanggal pencarian (YYYY-MM-DD)
+    - Sample 20-50 judul pertama
+
+    LAKUKAN TAHAPAN SANITY CHECK (Human In The Loop):
+
+    1. PAPER-KUNCI CHECK:
+    user input 5-10 paper kunci (judul) ke dokumen yang sudah disiapkan sistem di database (misal: paper_kunci_cek) yang harus ada (dari supervisor /
+    prior reading). Cek apakah muncul di hasil search.
+    Jika BANYAK paper kunci absen → search string masih bermasalah,
+    balik ke Modul 3.
+
+    2. KONFIRMASI VOLUME:
+    Reasonable untuk SLR berdasar scope?
+    - >> expected: trap keyword? identifikasi
+    - << expected: filter terlalu ketat? saran longgarkan
+
+    3. GO/NO-GO DECISION:
+    - PROCEED: lanjut ke export Langkah 2
+    - REVISE: balik ke Modul 3 Langkah berapa?, alasan
+
+    Append hasil ke dokumen data_mining_log di database
+    ```
+    Cara Mengujinya Nanti:
+    1. Aplikasi akan membuat format kosong `data_mining_log.initial_sample` di MongoDB dan masuk ke `M4_STEP1_WAITING_INPUT`.
+    2. Jalankan pencarian di Scopus (atau sesuai db_selection), lalu catat hasilnya.
+    3. Buka Compass, isi field `total_hits_pre_filter`, `total_hits_post_filter`, `sample_titles`, `key_papers_found`, dan `key_papers_missing` (Timpa semua tulisan [ISI DISINI]).
+    4. Ubah status ke `M4_STEP1_EVALUATE` dan Update. Sistem akan mengeksekusi agen Sanity Check.
+    5. Periksa dokumen `data_mining_log.sanity_check`. Jika agen merekomendasikan `PROCEED` dan Anda setuju, ubah status ke `M4_STEP1_APPROVED`.
+    6. Jika keputusan `REVISE`, cukup ubah status ke `M4_STEP1_NEEDS_REVISION`. Sistem akan melempar Anda KEMBALI ke Modul 3 Langkah 3 secara otomatis dan meminta agen merumuskan ulang kueri.
     LANGKAH 2: EXPORT + MULTI-DB DEDUP + PICO-CONSISTENCY PREVIEW
     LANGKAH 3: SETUP SCREENING DATABASE + EMBEDDED CRITERIA + HASIL AKHIR
 5	Title & Abstract Screening	-> screening ( filled)

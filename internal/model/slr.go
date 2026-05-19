@@ -165,6 +165,28 @@ type Modul3Summary struct {
 	Markdown string `bson:"markdown" json:"markdown"`
 }
 
+type InitialSearchSample struct {
+	Database            string   `bson:"database" json:"database"`
+	TotalHitsPreFilter  string   `bson:"total_hits_pre_filter" json:"total_hits_pre_filter"`
+	TotalHitsPostFilter string   `bson:"total_hits_post_filter" json:"total_hits_post_filter"`
+	DateExecuted        string   `bson:"date_executed" json:"date_executed"`
+	SampleTitles        []string `bson:"sample_titles" json:"sample_titles"`
+	KeyPapersFound      []string `bson:"key_papers_found" json:"key_papers_found"`
+	KeyPapersMissing    []string `bson:"key_papers_missing" json:"key_papers_missing"`
+}
+
+type SanityCheckVerdict struct {
+	KeyPapersMissing []string `bson:"key_papers_missing" json:"key_papers_missing"`
+	VolumeAnalysis   string   `bson:"volume_analysis" json:"volume_analysis"`
+	Decision         string   `bson:"decision" json:"decision"` // PROCEED or REVISE_M3_STEP3
+	Recommendation   string   `bson:"recommendation" json:"recommendation"`
+}
+
+type DataMiningLog struct {
+	InitialSample InitialSearchSample `bson:"initial_sample" json:"initial_sample"`
+	SanityCheck   *SanityCheckVerdict `bson:"sanity_check,omitempty" json:"sanity_check,omitempty"`
+}
+
 type SLRSession struct {
 	ID                  string               `bson:"_id,omitempty"`
 	Topic               string               `bson:"topic"`
@@ -182,6 +204,7 @@ type SLRSession struct {
 	SearchString        *SearchStringData    `bson:"search_string,omitempty"`
 	SearchLog           *SearchLog           `bson:"search_log,omitempty"`
 	Modul3Summary       *Modul3Summary       `bson:"modul3_summary,omitempty"`
+	DataMiningLog       *DataMiningLog       `bson:"data_mining_log,omitempty"`
 	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
