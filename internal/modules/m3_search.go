@@ -82,7 +82,61 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 	// LANGKAH 2: KEYWORDS DEVELOPMENT
 	// =========================================================================
 	case "M3_STEP2_KEYWORDS":
-		fmt.Println("   [Langkah 3.2] Keywords Development (Belum diimplementasikan).")
+		fmt.Println("   [Langkah 3.2] Mengembangkan Keywords (PICO + Avoid List)...")
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
+
+		kwAgent := agent.NewKeywordsAgent(llmBrain)
+		kwResult, err := kwAgent.DevelopKeywords(ctx, string(picoBytes))
+		if err != nil { return err }
+
+		session.Keywords = kwResult
+		session.Status = "M3_STEP2_WAITING_APPROVAL"
+		
+		fmt.Println("   [System] Dokumen Keywords berhasil dibuat. DIJEDA menunggu persetujuan manusia.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M3_STEP2_WAITING_APPROVAL":
+		fmt.Println("   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
+		fmt.Println("   1. Buka document sesi Anda, cari array 'keywords'.")
+		fmt.Println("   2. Verifikasi kesesuaian main_synonyms dan AVOID list untuk setiap P, I, C, dan O.")
+		fmt.Println("   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M3_STEP2_APPROVED'.")
+		fmt.Println("   3b. Jika BUTUH REVISI, ubah 'status' ke 'M3_STEP2_NEEDS_REVISION' dan isi 'feedback'.")
+		return nil
+
+	case "M3_STEP2_NEEDS_REVISION":
+		fmt.Printf("   [Revisi 3.2] Memperbaiki Keywords berdasarkan feedback: '%s'\n", session.Feedback)
+
+		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
+		
+		picoContext := string(picoBytes) + fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s", session.Feedback)
+
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		kwAgent := agent.NewKeywordsAgent(llmBrain)
+		kwResult, err := kwAgent.DevelopKeywords(ctx, picoContext)
+		if err != nil { return err }
+
+		session.Keywords = kwResult
+		session.Feedback = ""
+		session.Status = "M3_STEP2_WAITING_APPROVAL"
+		
+		fmt.Println("   [System] Keywords direvisi. DIJEDA kembali menunggu persetujuan manusia.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M3_STEP2_APPROVED":
+		fmt.Println("   [Langkah 3.2] Keywords disetujui! Lanjut ke Search String + Filter Specifications...")
+		session.Status = "M3_STEP3_SEARCH_STRING"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	// =========================================================================
+	// LANGKAH 3: SEARCH STRING + FILTER SPECIFICATIONS
+	// =========================================================================
+	case "M3_STEP3_SEARCH_STRING":
+		fmt.Println("   [Langkah 3.3] Search String (Belum diimplementasikan).")
 		return nil
 
 	default:

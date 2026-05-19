@@ -304,6 +304,37 @@ Modul	Topik(Langkah di dalamnya)	Output
     4. Jika SUDAH tepat dan metodologinya kuat, ubah status menjadi "M3_STEP1_APPROVED".
     5. Jika BUTUH REVISI, ubah status ke "M3_STEP1_NEEDS_REVISION" dan ketikkan instruksi di feedback (contoh: "Tolong jadikan multi-database dengan PubMed karena ini topik medis").
 	LANGKAH 2: KEYWORDS DEVELOPMENT (PICO + AVOID LIST)
+    output : keywords
+    ```txt
+    Gunakan RAG dari dokumen:
+    - picopico_definitions (canonical term + WHAT COUNTS/DOESN'T):
+
+    Develop keywords PER komponen PICO. Tulis ke dokumen keywords di database. dengan ketentuan:
+
+    PRINSIP KUNCI:
+    - Sinonim WAJIB konsisten dengan WHAT COUNTS — tidak memperluas scope diam-diam
+    - JANGAN masukkan sinonim yang menangkap WHAT DOESN'T COUNT
+    - Istilah kanonikal WAJIB di daftar utama
+    - Alternatif yang DITOLAK di Modul 2 L3 → masuk AVOID LIST (trip wire)
+
+    Format per komponen P/I/C/O:
+    === P / I / C / O — POPULATION/INTERVENTION/COMPARISON/OUTCOME ===
+    - Canonical term: [...]
+    - Main synonyms (lolos "what counts" test): [3-5 terms]
+    - Alternative terms (kadang dipakai peneliti lain, lolos test): [2-4 terms]
+    - AVOID list (trip wire vs "what doesn't count"): [eksplisit catat]
+
+    (Jika C = N/A: tulis "N/A" + alasan singkat)
+
+    Verifikasi via web search untuk istilah ambigu — apakah perlu sinonim
+    internasional setara? (lolos operational def "what counts" tetap)
+    ```
+    Cara Mengujinya Nanti:
+    1. Sistem akan mencetak pesan [System] DIJEDA setelah mengembangkan Keywords.
+    2. Buka MongoDB Compass, cari dokumen `keywords`.
+    3. Periksa isi `canonical_term`, `main_synonyms`, `alternative_terms`, dan `avoid_list` untuk setiap P, I, C, dan O.
+    4. Jika SUDAH sesuai aturan (sinonim tidak memperluas *scope*, avoid list benar), ubah status menjadi "M3_STEP2_APPROVED".
+    5. Jika BUTUH REVISI, ubah status ke "M3_STEP2_NEEDS_REVISION" dan ketikkan instruksi di feedback (misal: "Hapus kata X dari P karena itu menyalahi what counts").
 	LANGKAH 3: SEARCH STRING + FILTER SPECIFICATIONS
 	LANGKAH 4: PRE-VALIDASI + EKSEKUSI + DATE STAMP + UPDATE POLICY + HASIL AKHIR
 4	Data Mining dan export Scopus dan source lainnya(multi sources database)	-> screening 

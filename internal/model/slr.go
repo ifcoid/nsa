@@ -119,6 +119,22 @@ type DatabaseSelection struct {
 	JustifikasiFinal  string              `bson:"justifikasi_final" json:"justifikasi_final"`
 }
 
+type PICOKeyword struct {
+	Component        string   `bson:"component" json:"component"`
+	CanonicalTerm    string   `bson:"canonical_term" json:"canonical_term"`
+	MainSynonyms     []string `bson:"main_synonyms" json:"main_synonyms"`
+	AlternativeTerms []string `bson:"alternative_terms" json:"alternative_terms"`
+	AvoidList        []string `bson:"avoid_list" json:"avoid_list"`
+	Reasoning        string   `bson:"reasoning,omitempty" json:"reasoning,omitempty"`
+}
+
+type KeywordsDevelopment struct {
+	Population   PICOKeyword `bson:"population" json:"population"`
+	Intervention PICOKeyword `bson:"intervention" json:"intervention"`
+	Comparison   PICOKeyword `bson:"comparison" json:"comparison"`
+	Outcome      PICOKeyword `bson:"outcome" json:"outcome"`
+}
+
 type SLRSession struct {
 	ID                  string               `bson:"_id,omitempty"`
 	Topic               string               `bson:"topic"`
@@ -132,6 +148,7 @@ type SLRSession struct {
 	FinerNoveltyCheck   *FinerNoveltyCheck   `bson:"finer_novelty_check,omitempty"`
 	Modul2Summary       *Modul2Summary       `bson:"modul2_summary,omitempty"`
 	DatabaseSelection   *DatabaseSelection   `bson:"database_selection,omitempty"`
+	Keywords            *KeywordsDevelopment `bson:"keywords,omitempty"`
 	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
