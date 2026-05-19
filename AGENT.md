@@ -151,7 +151,7 @@ Modul	Topik(Langkah di dalamnya)	Output
     5. Jika TIDAK sesuai (justifikasinya lemah atau tidak ada referensi), ubah status menjadi "M2_STEP4_NEEDS_REVISION", lalu isi instruksi perbaikan Anda di field feedback (misalnya: "Perkuat justifikasi teoretis dengan teori X").
     6. Jalankan ulang aplikasi. Jika approved, sistem akan melanjutkan ke Langkah 5 (Research Questions).
 	LANGKAH 5: FORMULASIKAN RESEARCH QUESTIONS
-    output: 
+    output: research_questions
     ```txt
     Sertakan RAG dari:
     - SelectedTopic
@@ -167,6 +167,7 @@ Modul	Topik(Langkah di dalamnya)	Output
     (a) Menjawab gap apa (trace ke tipe gap L1)
     (b) Berbeda dari prior reviews di aspek apa (trace ke selisih L2)
     (c) Dapat dijawab dengan PICO (trace ke L3)
+    (d) Sesuai dengan batasan (trace ke scope_justifications L4)
 
     Tulis ke dokumen research_questions di database dengan format:
 
@@ -174,6 +175,7 @@ Modul	Topik(Langkah di dalamnya)	Output
     → Menjawab gap: [...]
     → Selisih prior reviews: [...]
     → Answerable via PICO: [...]
+    → Sesuai dengan Scope: [...]
 
     SECONDARY RQ 1-3: format serupa.
 

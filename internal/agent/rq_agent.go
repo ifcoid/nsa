@@ -27,8 +27,9 @@ Setiap RQ WAJIB memiliki "GAP-RQ TRACEABILITY":
 a) gap: Sebutkan spesifik gap mana dari Topik yang dijawab.
 b) prior_reviews: Sebutkan spesifik perbedaannya dari review terdahulu.
 c) pico: Buktikan mengapa RQ ini bisa dijawab oleh kriteria PICO yang ada.
+d) scope: Buktikan mengapa RQ ini sesuai dan selaras dengan Batasan/Filter (Scope Justifications) yang telah ditetapkan.
 
-Jika ada RQ yang TIDAK BISA di-trace kuat ke ketiga elemen tersebut, berikan nilai "is_orphan": true. Jika kuat, "is_orphan": false.
+Jika ada RQ yang TIDAK BISA di-trace kuat ke keempat elemen tersebut, berikan nilai "is_orphan": true. Jika kuat, "is_orphan": false.
 
 Output WAJIB berupa JSON array dengan struktur:
 [
@@ -38,7 +39,8 @@ Output WAJIB berupa JSON array dengan struktur:
     "traceability": {
       "gap": "...",
       "prior_reviews": "...",
-      "pico": "..."
+      "pico": "...",
+      "scope": "..."
     },
     "is_orphan": false
   }

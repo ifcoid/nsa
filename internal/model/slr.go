@@ -70,6 +70,7 @@ type RQTraceability struct {
 	Gap          string `bson:"gap" json:"gap"`
 	PriorReviews string `bson:"prior_reviews" json:"prior_reviews"`
 	PICO         string `bson:"pico" json:"pico"`
+	Scope        string `bson:"scope" json:"scope"`
 }
 
 type ResearchQuestion struct {
