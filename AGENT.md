@@ -655,7 +655,71 @@ Modul	Topik(Langkah di dalamnya)	Output
     5. Jika semua terlihat sempurna sebagai meja kerja *Screening* Anda, ubah status ke `M4_STEP3_APPROVED`. Modul 4 pun rampung!
 5	Title & Abstract Screening	-> screening ( filled)
     LANGKAH 1: SCREENER BRIEFING (FINALISASI INTERPRETASI KRITERIA)
+    output : screener_briefing
+    ```txt
+    Berdasarkan pico_definitions dan reason codes di screening_setup
+
+    Eksekusi 2 task:
+
+    === TASK 1: VALIDASI KELENGKAPAN KRITERIA ===
+    - WHAT COUNTS per PICO sudah testable?
+    - EDGE CASES cukup menangkap borderline?
+    - Reason codes komprehensif untuk semua eksklusi plausible?
+
+    Jika ada gap → rekomendasi update ke Modul 2 L3 (bukan ad-hoc patch).
+
+    === TASK 2: GENERATE SCREENER BRIEFING ===
+
+    Tulis ke dokumen screener_briefing di database (source of truth untuk
+    2 reviewer):
+
+    ---
+    SCREENER BRIEFING — [topik]
+    Date: [YYYY-MM-DD]
+    Reviewers: [R1] & [R2]
+
+    1. CANONICAL TERMINOLOGY: [dari M2 L3]
+
+    2. OPERATIONAL DEFINITIONS (quick reference):
+    P/I/C/O: [WHAT COUNTS | WHAT DOESN'T | EDGE CASES per komponen]
+
+    3. DECISION TREE (kasus ambigu):
+    If [kondisi X] AND [Y] → INCLUDE
+    If [X] BUT NOT [Y] → UNCERTAIN, flag diskusi
+    If NOT [X] → EXCLUDE
+    [turunkan dari EDGE CASES]
+
+    4. REASON CODES (8 standard, wajib dipakai, no freeform):
+    [list dari screening.xlsx Row 5]
+
+    5. UNCERTAIN PROTOCOL:
+    - Cukup info di abstract tapi sulit decide → UNCERTAIN + notes
+    - Abstract tidak cukup info → "pending full-text" di Notes
+    - JANGAN decide INCLUDE/EXCLUDE tanpa grounded operational def
+
+    6. AI-ASSISTANT WORKFLOW:
+    - Cowork berikan DUAL PERSPECTIVE (Strict + Liberal) untuk record sulit
+    - Reviewer baca, decide independen
+    - Decision/Reason/Notes = ditulis HUMAN
+    - Cowork tidak menggantikan judgment, hanya enrich pertimbangan
+
+    7. REPORTING (untuk Methods M9):
+    - Cohen's kappa = R1 vs R2 (HUMAN, bukan AI)
+    - AI-assistance dideklarasikan di Methods
+    ---
+    ```
+    Cara Mengujinya Nanti:
+    1. Pastikan Anda berada di status `M5_INIT` atau `M5_STEP1_BRIEFING`.
+    2. Sistem akan memvalidasi apakah PICO Definitions di Modul 2 cukup solid, dan men-*generate* `screener_briefing` di MongoDB.
+    3. Buka Compass, cek dokumen sesi, temukan kolom `screener_briefing`.
+    4. Cermati isi instruksi (*Decision Tree*, dsb). Jika AI menemukan ambiguitas parah, ia akan meminta Anda merevisi (`decision: REVISE_M2`).
+    5. Jika keputusannya revisi dan Anda sepakat, ubah status ke `M5_STEP1_NEEDS_REVISION` (akan melempar Anda ke Modul 2).
+    6. Jika keputusannya `PROCEED` dan Anda setuju, ubah ke `M5_STEP1_APPROVED`.
     LANGKAH 2: KALIBRASI DUAL-REVIEW + COHEN'S KAPPA
+    output : 
+    ```txt
+    
+    ```
     LANGKAH 3: BATCH SCREENING MASSAL (AI-ASSISTED, HUMAN-DECIDED)
     LANGKAH 4: REVIEW HASIL + EXCLUSION TABLE + FULL-TEXT PREP + HASIL AKHIR
 6	Full-text Acquisition	-> pdfs/ + tracking

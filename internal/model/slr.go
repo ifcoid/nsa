@@ -223,6 +223,13 @@ type Modul4Summary struct {
 	Markdown string `bson:"markdown" json:"markdown"`
 }
 
+type ScreenerBriefing struct {
+	ValidationGap  string `bson:"validation_gap" json:"validation_gap"`
+	BriefingDoc    string `bson:"briefing_doc" json:"briefing_doc"`
+	Decision       string `bson:"decision" json:"decision"` // PROCEED or REVISE_M2
+	Recommendation string `bson:"recommendation" json:"recommendation"`
+}
+
 type DataMiningLog struct {
 	InitialSample InitialSearchSample `bson:"initial_sample" json:"initial_sample"`
 	SanityCheck   *SanityCheckVerdict `bson:"sanity_check,omitempty" json:"sanity_check,omitempty"`
@@ -251,6 +258,7 @@ type SLRSession struct {
 	DataMiningLog       *DataMiningLog       `bson:"data_mining_log,omitempty"`
 	ScreeningSetup      *ScreeningSetup      `bson:"screening_setup,omitempty"`
 	Modul4Summary       *Modul4Summary       `bson:"modul4_summary,omitempty"`
+	ScreenerBriefing    *ScreenerBriefing    `bson:"screener_briefing,omitempty"`
 	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
