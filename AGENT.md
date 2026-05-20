@@ -758,7 +758,7 @@ Modul	Topik(Langkah di dalamnya)	Output
     ```
     Cara Mengujinya Nanti:
     1. Sistem kita telah dilengkapi *fallback*. Jika Anda belum mensetting kredensial API `z-ai` atau `groq` di MongoDB (`llm_configs`), program akan cerdas melakukan *fallback* ke `gemini`.
-    2. Ubah status sesi Anda ke `M5_STEP2_CALIBRATION` lalu jalankan `go run cmd/cli/main.go --mode orchestrator --session [ID]`.
+    2. Ubah status sesi Anda ke `M5_STEP2_CALIBRATION` lalu jalankan `go run cmd/app/main.go`.
     3. Program akan secara acak memungut 20 *paper* dari `slr_screening`, dan mendelegasikannya ke dua agen independen. Anda akan melihat log proses eksekusinya di terminal (1 hingga 20).
     4. Setelah selesai, Go akan langsung membedah matriks probabilitas dan menghitung rasio **Cohen's Kappa**.
     5. Jika nilainya `< 0.60`, program otomatis mengunci status di `M5_STEP2_WAITING_APPROVAL`. Buka Compass Anda, cari baris-baris berlabel `DISAGREE` di collection `slr_screening` untuk mendiagnosis penyebab pertengkaran AI.
@@ -809,7 +809,7 @@ Modul	Topik(Langkah di dalamnya)	Output
     Append progress + drift events ke screening_results_log dalam database   
     ```
     Cara Mengujinya Nanti: 
-    1. Pastikan status sesi Anda `M5_STEP3_BATCH_SCREENING`. Jalankan `go run cmd/cli/main.go --mode orchestrator --session [ID]`.
+    1. Pastikan status sesi Anda `M5_STEP3_BATCH_SCREENING`. Jalankan `go run cmd/app/main.go`.
     2. Program akan menyedot 20 paper yang belum di-screen, mengirimnya ke AI, dan berhenti sejenak di status `M5_STEP3_WAITING_RESOLUTION`.
     3. Tugas Anda di Compass: Buka `slr_screening`, filter "Agreement" yang bernilai "DISAGREE" atau "UNCERTAIN".
     4. Baca kolom Notes (Anda bisa membandingkan argumen Strict vs Liberal dari kedua AI untuk paper yang sama).
@@ -895,7 +895,7 @@ Modul	Topik(Langkah di dalamnya)	Output
     ```
     Panduan Cara Mengujinya:
     1. Pastikan semua *paper* telah lolos kalibrasi dan *batch screening*, atau ubah status secara manual (untuk *bypass*) menjadi `M5_STEP4_REVIEW_HASIL`.
-    2. Jalankan perintah terminal: `go run cmd/cli/main.go --mode orchestrator --session [ID]`.
+    2. Jalankan perintah terminal: `go run cmd/app/main.go`.
     3. Go akan secara otomatis mengagregasi seluruh perhitungan matematis: **PRISMA Flow Numbers** dan **Tabel Persentase Exclusion Reasons**.
     4. Go juga akan mengambil 10% *paper* yang berstatus `INCLUDE` secara acak dan memanggil AI Auditor (`z-ai`) untuk melakukan *PICO-Consistency Audit* untuk memastikan tidak ada paper melenceng yang lolos (*slipped-through*).
     5. Terakhir, AI akan memprioritaskan semua paper `INCLUDE` menjadi tier HIGH/MEDIUM/LOW sebagai bekal Anda di Modul 6 nanti.
