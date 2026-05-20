@@ -91,3 +91,60 @@ Keluarkan HANYA JSON MURNI tanpa markdown blok awalan/akhiran:
 
 	return &result, nil
 }
+
+func (a *DataMiningAgent) GenerateModul4Summary(ctx context.Context, sessionData string) (*model.Modul4Summary, error) {
+	systemPrompt := `Anda adalah asisten pembuat Modul 4 Summary.
+Berdasarkan data mining log SLR, buat ringkasan Markdown dengan struktur persis seperti berikut:
+
+=== DATA MINING SUMMARY (SLR) ===
+
+SEARCH EXECUTION:
+- Date: [...]
+- Total hits per DB: [...]
+
+SANITY CHECK:
+- Paper-kunci: [...]
+- Volume verdict: reasonable
+- Go/no-go: PROCEED
+
+EXPORT:
+- Files: [...]
+- Records per DB sources: [...]
+- Fields preserved: [...]
+
+DEDUPLICATION:
+- Total → Unique slr_papers_post_dedup: [...]
+- Duplicates breakdown: [...]
+- Manual review flags: [...]
+
+PICO-CONSISTENCY PREVIEW:
+- MATCH "WHAT COUNTS": [...]%
+- Verdict: PROCEED
+
+SCREENING DATABASE:
+- Collection: screening
+- Embedded criteria Row 1-5: ✓
+- Reason codes: ✓ (8 standard)
+- Kappa sheet: ✓
+- Dual-reviewer columns: ✓
+
+Keluarkan HANYA JSON murni tanpa awalan/akhiran markdown blok:
+{
+  "markdown": "=== DATA MINING SUMMARY (SLR) ===\n..."
+}`
+
+	userPrompt := fmt.Sprintf("=== DATA MINING LOG ===\n%s", sessionData)
+
+	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("data_mining_agent gagal membuat summary: %w", err)
+	}
+
+	cleanJSON := CleanJSONResponse(rawResponse)
+	var result model.Modul4Summary
+	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON Modul4Summary (%w). Raw: %s", err, rawResponse)
+	}
+
+	return &result, nil
+}

@@ -565,6 +565,94 @@ Modul	Topik(Langkah di dalamnya)	Output
     7. Jika `match_counts_pct` > 60% dan verdict "PROCEED L3", ubah status ke `M4_STEP2_APPROVED`.
     8. Jika PICO Preview buruk (<30%), ubah status ke `M4_STEP2_NEEDS_REVISION`. Sistem akan membatalkan seluruh dataset ini dan menyuruh Anda mengulang kembali Modul 3 (membangun ulang *search string*).
     LANGKAH 3: SETUP SCREENING DATABASE + EMBEDDED CRITERIA + HASIL AKHIR
+    output: collection screening
+
+    ```txt
+    Gunakan RAG dari:
+    - collection slr_papers_post_dedup
+    - pico_definitions
+
+    Eksekusi 2 output:
+
+    === OUTPUT 1: collection screening ===
+
+    Bagian 1 "Screening":
+
+    HEADER META (Row 1-6) — embedded criteria:
+    Row 1: "Tanggal pencarian: [dari search_log]"
+    Row 2: "P Canonical: [term]"
+    Row 3: "P WHAT COUNTS: [...]"
+    Row 4: "P WHAT DOESN'T: [...]"
+    Row 5: "I/C/O WHAT COUNTS: [ringkas]"
+    Row 6: (separator kosong)
+
+    KOLOM DATA (mulai Row 7):
+    | ID | Source_DB | Authors | Year | Title | Abstract | Keywords | DOI | Journal |
+    | Screener_1_Decision | Screener_1_Reason_Code | Screener_1_Notes |
+    | Screener_2_Decision | Screener_2_Reason_Code | Screener_2_Notes |
+    | Agreement (formula =IF(S1=S2,"AGREE","DISAGREE")) |
+    | Conflict_Resolution | Final_Decision |
+    | Full_Text_Retrieved | Full_Text_Location |
+
+    REASON CODES STANDAR:
+    - P-NOMATCH | I-NOMATCH | O-NOMATCH | STUDY-DESIGN | LANGUAGE | DUPLICATE |
+    NO-ABSTRACT | OTHER (wajib isi notes)
+
+    Bagian 2 "Kappa_Calculation":
+    Tabel 2x2 + formula Cohen's kappa (po, pe, kappa).
+    Interpretasi: <0.20 Poor / 0.21-0.40 Fair / 0.41-0.60 Moderate /
+    0.61-0.80 Substantial (TARGET) / 0.81-1.00 Almost Perfect.
+
+    Bagian 3 "Summary":
+    Auto-calculated: total records, source DB breakdown, year distribution,
+    screening progress, agreement rate, current kappa, final INCLUDE count.
+
+    AUTO-FILL kolom Authors/Year/Title/Abstract/Keywords/DOI/Journal/Source_DB
+    dari collection slr_papers_post_dedup
+
+    === OUTPUT 2: dokumen modul4_summary di database (HASIL AKHIR) ===
+
+    === DATA MINING SUMMARY (SLR) ===
+
+    SEARCH EXECUTION:
+    - Date: [YYYY-MM-DD per DB]
+    - Total hits per DB: [breakdown]
+
+    SANITY CHECK:
+    - Paper-kunci: [X/Y found]
+    - Volume verdict: reasonable
+    - Go/no-go: PROCEED
+
+    EXPORT:
+    - Files: [list document atau collection]
+    - Records per DB sources
+    - Fields preserved
+
+    DEDUPLICATION:
+    - Total → Unique slr_papers_post_dedup
+    - Duplicates breakdown
+    - Manual review flags: [N]
+
+    PICO-CONSISTENCY PREVIEW:
+    - MATCH "WHAT COUNTS": X%
+    - Verdict: PROCEED
+
+    SCREENING DATABASE:
+    - Collection: screening
+    - Embedded criteria Row 1-5: ✓
+    - Reason codes: ✓ (8 standard)
+    - Kappa sheet: ✓
+    - Dual-reviewer columns: ✓
+
+    Konfirmasi collection screening + summary tersimpan.
+    NEXT: Title/abstract screening + kappa calibration (Modul 5)
+    ```
+    Cara Mengujinya Nanti:
+    1. Pastikan Anda sudah melewati Langkah 2 dengan `M4_STEP2_APPROVED`.
+    2. Program akan secara otomatis mengubah *papers* dari `slr_papers_post_dedup` dan membentuk sebuah collection baru bernama `slr_screening`.
+    3. Buka MongoDB Compass, periksa `slr_screening` tersebut. Anda akan melihat bahwa data asli (Title, Abstract) telah dipadukan dengan kolom kosong untuk `Screener_1_Decision`, `Agreement`, `Final_Decision`, dll.
+    4. Periksa juga *field* `screening_setup` (berisi *embedded criteria*) dan `modul4_summary` di dalam dokumen sesi Anda.
+    5. Jika semua terlihat sempurna sebagai meja kerja *Screening* Anda, ubah status ke `M4_STEP3_APPROVED`. Modul 4 pun rampung!
 5	Title & Abstract Screening	-> screening ( filled)
     LANGKAH 1: SCREENER BRIEFING (FINALISASI INTERPRETASI KRITERIA)
     LANGKAH 2: KALIBRASI DUAL-REVIEW + COHEN'S KAPPA

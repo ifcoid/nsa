@@ -210,6 +210,19 @@ type PICOPreviewCheck struct {
 	Recommendation  string            `bson:"recommendation" json:"recommendation"`
 }
 
+type ScreeningSetup struct {
+	SearchDate    string   `bson:"search_date" json:"search_date"`
+	PCanonical    string   `bson:"p_canonical" json:"p_canonical"`
+	PWhatCounts   string   `bson:"p_what_counts" json:"p_what_counts"`
+	PWhatDoesnt   string   `bson:"p_what_doesnt" json:"p_what_doesnt"`
+	ICOWhatCounts string   `bson:"ico_what_counts" json:"ico_what_counts"`
+	ReasonCodes   []string `bson:"reason_codes" json:"reason_codes"`
+}
+
+type Modul4Summary struct {
+	Markdown string `bson:"markdown" json:"markdown"`
+}
+
 type DataMiningLog struct {
 	InitialSample InitialSearchSample `bson:"initial_sample" json:"initial_sample"`
 	SanityCheck   *SanityCheckVerdict `bson:"sanity_check,omitempty" json:"sanity_check,omitempty"`
@@ -236,6 +249,8 @@ type SLRSession struct {
 	SearchLog           *SearchLog           `bson:"search_log,omitempty"`
 	Modul3Summary       *Modul3Summary       `bson:"modul3_summary,omitempty"`
 	DataMiningLog       *DataMiningLog       `bson:"data_mining_log,omitempty"`
+	ScreeningSetup      *ScreeningSetup      `bson:"screening_setup,omitempty"`
+	Modul4Summary       *Modul4Summary       `bson:"modul4_summary,omitempty"`
 	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"

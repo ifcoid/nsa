@@ -77,6 +77,10 @@ func (r *MongoRepository) GetPostDedupCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_papers_post_dedup")
 }
 
+func (r *MongoRepository) GetScreeningCollection() *mongo.Collection {
+	return r.client.Database(r.dbName).Collection("slr_screening")
+}
+
 // =========================================================================
 // 2. MANAJEMEN ARTIKEL / PAPERS (PRISMA SCREENING Pipeline)
 // =========================================================================

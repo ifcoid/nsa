@@ -257,8 +257,113 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M4_STEP3_SETUP_SCREENING":
-		fmt.Println("   [Langkah 4.3] Setup Screening Database (Belum diimplementasikan).")
+		fmt.Println("   [Langkah 4.3] Men-setup Database Screening & Modul 4 Summary...")
+		
+		postDedupColl := m.deps.MongoRepo.GetPostDedupCollection()
+		cursor, err := postDedupColl.Find(ctx, map[string]interface{}{})
+		if err != nil { return err }
+
+		var uniquePapers []map[string]interface{}
+		if err := cursor.All(ctx, &uniquePapers); err != nil { return err }
+
+		if len(uniquePapers) == 0 {
+			fmt.Println("   [ERROR] Collection 'slr_papers_post_dedup' kosong! Lakukan dedup terlebih dahulu.")
+			session.Status = "M4_STEP2_WAITING_IMPORT"
+			return m.deps.MongoRepo.UpdateSession(ctx, session)
+		}
+
+		screeningColl := m.deps.MongoRepo.GetScreeningCollection()
+		screeningColl.Drop(ctx)
+
+		var screeningDocs []interface{}
+		for _, p := range uniquePapers {
+			// Copy field mapping
+			title := getStringField(p, "Title", "title", "TITLE")
+			abs := getStringField(p, "Abstract", "abstract")
+			doi := getStringField(p, "DOI", "doi")
+			year := getStringField(p, "Year", "year")
+			authors := getStringField(p, "Authors", "authors", "Author")
+			keywords := getStringField(p, "Author Keywords", "Index Keywords", "keywords")
+			journal := getStringField(p, "Source title", "journal")
+			db := getStringField(p, "Database", "source_db", "Source")
+			
+			doc := map[string]interface{}{
+				"session_id": session.ID,
+				"Source_DB": db,
+				"Authors": authors,
+				"Year": year,
+				"Title": title,
+				"Abstract": abs,
+				"Keywords": keywords,
+				"DOI": doi,
+				"Journal": journal,
+				
+				// Dual reviewer columns
+				"Screener_1_Decision": "",
+				"Screener_1_Reason_Code": "",
+				"Screener_1_Notes": "",
+				"Screener_2_Decision": "",
+				"Screener_2_Reason_Code": "",
+				"Screener_2_Notes": "",
+				"Agreement": "",
+				"Conflict_Resolution": "",
+				"Final_Decision": "",
+				"Full_Text_Retrieved": false,
+				"Full_Text_Location": "",
+			}
+			screeningDocs = append(screeningDocs, doc)
+		}
+
+		if len(screeningDocs) > 0 {
+			_, err = screeningColl.InsertMany(ctx, screeningDocs)
+			if err != nil { return err }
+			fmt.Printf("   [Info] Berhasil membuat collection 'slr_screening' dengan %d paper siap di-review.\n", len(screeningDocs))
+		}
+
+		// Setup embedded criteria
+		pCanonical := "N/A"
+		pWhatCounts := "N/A"
+		pWhatDoesnt := "N/A"
+		if session.PICODefinitions != nil {
+			pCanonical = session.PICODefinitions.CanonicalTerm.Term
+			pWhatCounts = session.PICODefinitions.P.OperationalDef.WhatCounts
+			pWhatDoesnt = session.PICODefinitions.P.OperationalDef.WhatDoesntCount
+		}
+
+		session.ScreeningSetup = &model.ScreeningSetup{
+			SearchDate: time.Now().Format("2006-01-02"),
+			PCanonical: pCanonical,
+			PWhatCounts: pWhatCounts,
+			PWhatDoesnt: pWhatDoesnt,
+			ICOWhatCounts: "Lihat dokumen PICO untuk I, C, dan O",
+			ReasonCodes: []string{"P-NOMATCH", "I-NOMATCH", "O-NOMATCH", "STUDY-DESIGN", "LANGUAGE", "DUPLICATE", "NO-ABSTRACT", "OTHER"},
+		}
+
+		// LLM Summary
+		llmBrain, _ := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		sessionDataBytes, _ := json.MarshalIndent(session.DataMiningLog, "", "  ")
+		
+		dmAgent := agent.NewDataMiningAgent(llmBrain)
+		summary, err := dmAgent.GenerateModul4Summary(ctx, string(sessionDataBytes))
+		if err == nil {
+			session.Modul4Summary = summary
+		}
+
+		session.Status = "M4_STEP3_WAITING_APPROVAL"
+		fmt.Println("   [System] Database screening & Summary Modul 4 telah disiapkan. DIJEDA.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M4_STEP3_WAITING_APPROVAL":
+		fmt.Println("   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
+		fmt.Println("   1. Periksa collection 'slr_screening' pastikan data post-dedup masuk beserta kolom reviewer.")
+		fmt.Println("   2. Periksa dokumen 'screening_setup' & 'modul4_summary'.")
+		fmt.Println("   3. Ubah status ke 'M4_STEP3_APPROVED' jika semua valid.")
 		return nil
+		
+	case "M4_STEP3_APPROVED":
+		fmt.Println("   [Langkah 4.3] MODUL 4 SELESAI! Seluruh data siap untuk di-screening.")
+		session.Status = "M5_INIT"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	default:
 		fmt.Printf("   [Modul 4] Sub-status %s tidak dikenali atau belum diimplementasikan.\n", session.Status)
