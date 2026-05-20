@@ -114,3 +114,35 @@ Keluarkan HANYA JSON MURNI tanpa blok markdown:
 	}
 	return &result, nil
 }
+
+func (a *ScreeningAgent) BatchReviewPaper(ctx context.Context, briefing, title, abstract, keywords string) (*model.ScreeningPerspective, error) {
+	systemPrompt := fmt.Sprintf(`Anda adalah Reviewer Independen untuk Systematic Literature Review.
+Berikut adalah SCREENER BRIEFING yang WAJIB Anda patuhi:
+%s
+
+Tugas Anda adalah meninjau Title, Abstract, dan Keywords dari paper yang diberikan.
+
+Keluarkan HANYA JSON MURNI tanpa blok markdown dengan struktur berikut:
+{
+  "strict": "Perspektif jika Anda bersikap STRICT (bias EXCLUDE)",
+  "liberal": "Perspektif jika Anda bersikap LIBERAL (bias INCLUDE)",
+  "recommend": "INCLUDE" atau "EXCLUDE" atau "UNCERTAIN",
+  "reason_code": "WAJIB DIISI DARI REASON CODES JIKA EXCLUDE, '-' JIKA INCLUDE/UNCERTAIN",
+  "evidence": "Kalimat bukti dari abstract...",
+  "confidence": "HIGH" atau "MEDIUM" atau "LOW"
+}`, briefing)
+
+	userPrompt := fmt.Sprintf("Title: %s\nKeywords: %s\nAbstract: %s", title, keywords, abstract)
+
+	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("gagal batch review paper: %w", err)
+	}
+
+	cleanJSON := CleanJSONResponse(rawResponse)
+	var result model.ScreeningPerspective
+	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON BatchReviewPaper (%w). Raw: %s", err, rawResponse)
+	}
+	return &result, nil
+}

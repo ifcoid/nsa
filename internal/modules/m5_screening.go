@@ -6,6 +6,8 @@ import (
 	"time"
 	"nsa/internal/agent"
 	"nsa/internal/model"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 type M5Screening struct { deps *ModuleDeps }
 func NewM5Screening(deps *ModuleDeps) *M5Screening { return &M5Screening{deps: deps} }
@@ -190,6 +192,130 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		fmt.Println("   [Langkah 5.2] Kalibrasi disetujui! Lanjut ke Batch Screening Massal...")
 		session.Status = "M5_STEP3_BATCH_SCREENING"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M5_STEP3_BATCH_SCREENING":
+		fmt.Println("   [Langkah 5.3] Memulai Batch Screening Massal (Max 20 per batch)...")
+
+		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "z-ai")
+		if err != nil { llmR1, _ = m.deps.LLMFactory.CreateClient(ctx, "gemini") }
+		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
+		if err != nil { llmR2, _ = m.deps.LLMFactory.CreateClient(ctx, "gemini") }
+
+		scAgent1 := agent.NewScreeningAgent(llmR1)
+		scAgent2 := agent.NewScreeningAgent(llmR2)
+
+		briefingDoc := ""
+		if session.ScreenerBriefing != nil {
+			briefingDoc = session.ScreenerBriefing.BriefingDoc
+		}
+
+		papers, err := m.deps.MongoRepo.GetUnscreenedPapers(ctx, session.ID, 20)
+		if err != nil {
+			return fmt.Errorf("gagal mengambil unscreened papers: %w", err)
+		}
+		if len(papers) == 0 {
+			fmt.Println("   [System] Semua paper telah di-screening! Lanjut ke Langkah 4.")
+			session.Status = "M5_STEP4_REVIEW_HASIL"
+			return m.deps.MongoRepo.UpdateSession(ctx, session)
+		}
+
+		fmt.Printf("   [System] Memproses %d papers untuk batch ini...\n", len(papers))
+
+		var agreeCount, bothInclude, bothExclude, r1IncR2Exc, r1ExcR2Inc, total int
+
+		for i, p := range papers {
+			fmt.Printf("      -> Screening [%d/%d] ID: %v\n", i+1, len(papers), p["_id"])
+			
+			title := ""
+			if val, ok := p["Title"].(string); ok { title = val }
+			abs := ""
+			if val, ok := p["Abstract"].(string); ok { abs = val }
+			kwd := ""
+			if val, ok := p["Keywords"].(string); ok { kwd = val }
+
+			paperID := ""
+			if oid, ok := p["_id"].(primitive.ObjectID); ok {
+				paperID = oid.Hex()
+			}
+
+			res1, _ := scAgent1.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
+			if res1 == nil { res1 = &model.ScreeningPerspective{Recommend: "UNCERTAIN"} }
+			res1.PaperID = paperID
+			res1.Title = title
+
+			res2, _ := scAgent2.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
+			if res2 == nil { res2 = &model.ScreeningPerspective{Recommend: "UNCERTAIN"} }
+			res2.PaperID = paperID
+			res2.Title = title
+
+			session.Reviewer1Perspectives = append(session.Reviewer1Perspectives, *res1)
+			session.Reviewer2Perspectives = append(session.Reviewer2Perspectives, *res2)
+
+			agreement := "DISAGREE"
+			if res1.Recommend == res2.Recommend {
+				agreement = "AGREE"
+				agreeCount++
+			}
+
+			updateDoc := map[string]interface{}{
+				"Screener_1_Decision": res1.Recommend,
+				"Screener_1_Reason_Code": res1.ReasonCode,
+				"Screener_1_Notes": fmt.Sprintf("Strict: %s | Liberal: %s | Evidence: %s", res1.Strict, res1.Liberal, res1.Evidence),
+				"Screener_2_Decision": res2.Recommend,
+				"Screener_2_Reason_Code": res2.ReasonCode,
+				"Screener_2_Notes": fmt.Sprintf("Strict: %s | Liberal: %s | Evidence: %s", res2.Strict, res2.Liberal, res2.Evidence),
+				"Agreement": agreement,
+			}
+			m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], updateDoc)
+
+			d1 := res1.Recommend
+			d2 := res2.Recommend
+			if d1 == "INCLUDE" && d2 == "INCLUDE" { bothInclude++ }
+			if d1 == "EXCLUDE" && d2 == "EXCLUDE" { bothExclude++ }
+			if d1 == "INCLUDE" && d2 == "EXCLUDE" { r1IncR2Exc++ }
+			if d1 == "EXCLUDE" && d2 == "INCLUDE" { r1ExcR2Inc++ }
+			total++
+		}
+
+		kappa := 0.0
+		if total > 0 {
+			pO := float64(bothInclude + bothExclude) / float64(total)
+			probR1Inc := float64(bothInclude + r1IncR2Exc) / float64(total)
+			probR2Inc := float64(bothInclude + r1ExcR2Inc) / float64(total)
+			probR1Exc := float64(bothExclude + r1ExcR2Inc) / float64(total)
+			probR2Exc := float64(bothExclude + r1IncR2Exc) / float64(total)
+			pE := (probR1Inc * probR2Inc) + (probR1Exc * probR2Exc)
+			if 1-pE > 0 { kappa = (pO - pE) / (1 - pE) } else { kappa = 1.0 }
+		}
+
+		batchNum := len(session.ScreeningResultsLog) + 1
+		drift := kappa < 0.60 && total >= 10
+
+		logEntry := model.ScreeningResultsLog{
+			BatchNumber: batchNum,
+			ProcessedRecords: total,
+			CurrentKappa: kappa,
+			DisagreementCases: total - agreeCount,
+			DriftDetected: drift,
+			Tanggal: time.Now().Format("2006-01-02"),
+		}
+		session.ScreeningResultsLog = append(session.ScreeningResultsLog, logEntry)
+
+		fmt.Printf("   [Batch Result] Batch %d | Processed: %d | Kappa: %.3f | Disagreements: %d\n", batchNum, total, kappa, logEntry.DisagreementCases)
+
+		if drift {
+			fmt.Println("   [WARNING] Drift interpretasi terdeteksi (Kappa < 0.60)! Wajib resolusi.")
+		}
+		session.Status = "M5_STEP3_WAITING_RESOLUTION"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M5_STEP3_WAITING_RESOLUTION":
+		fmt.Println("   [System] Sesi dijeda untuk evaluasi batch (HitL).")
+		fmt.Println("   1. Buka Compass -> 'slr_screening'. Filter 'Agreement: DISAGREE' atau 'UNCERTAIN'.")
+		fmt.Println("   2. Lakukan diskusi dan perbarui 'Conflict_Resolution' serta 'Final_Decision' di record terkait.")
+		fmt.Println("   3. Jika ingin lanjut batch berikutnya, set status ke 'M5_STEP3_BATCH_SCREENING'.")
+		fmt.Println("   4. Jika sudah habis, set status ke 'M5_STEP4_REVIEW_HASIL'.")
+		return nil
 
 	default:
 		fmt.Printf("   [Modul 5] Sub-status %s tidak dikenali atau belum diimplementasikan.\n", session.Status)

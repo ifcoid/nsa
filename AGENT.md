@@ -766,7 +766,95 @@ Modul	Topik(Langkah di dalamnya)	Output
     7. Setelah direvisi, barulah *rerun* kalibrasi dengan mengembalikan status ke `M5_STEP2_CALIBRATION`. Program akan menarik 20 sampel **baru** secara otomatis.
     8. Jika nilainya `>= 0.60`, program akan secara otomatis mengesahkannya dengan status `M5_STEP2_APPROVED`.
     LANGKAH 3: BATCH SCREENING MASSAL (AI-ASSISTED, HUMAN-DECIDED)
+    output : 
+    ```txt
+    Setelah kappa kalibrasi ≥0.60.
+
+    Workflow per reviewer (jalankan agen review 1 dan 2 secara paralel di sesi masing-masing untuk seluruh collection slr_screening):
+
+    === PROMPT PER BATCH (sesuaikan dengan input output maksimal token a-ai dan groq, atau gunakan teknik chunking / batching sederhana dengan menjaga hemat token dan bebas halusinasi) ===
+
+    "Anda Reviewer [1 atau 2] untuk SLR [topik]. Briefing ada di dokumen
+    screener_briefing, kalibrasi κ=[X] (passed).
+
+    Proses records ID [start]-[end] dari collection slr_screening (yang
+    Screener_[X]_Decision masih kosong).
+
+    Per record output tabel:
+    | ID | Title (singkat) | Strict | Liberal | Recommend | Reason Code | Evidence | Confidence |
+
+    Recommend: INCLUDE / EXCLUDE / UNCERTAIN
+    Confidence: HIGH / MEDIUM / LOW
+
+    append dalam dokumen reviewer1_perspective dan reviewer2_perspective dan update slr_screening kolom Screener_[X]_*."
+
+    === Human-in-the-loop ===
+    1. Baca reviewer1_perspective dan reviewer2_perspective
+    2. Spot-check abstract original (llm bisa hallucinate paraphrase)
+    3. Cek hasil Screener_[X]_Decision + Reason_Code + Notes di slr_screening
+    4. Jika ada UNCERTAIN → flag untuk diskusi atau defer ke full-text
+
+    === RESOLVE DISAGREEMENTS ===
+
+    "Tampilkan DISAGREE cases dari slr_screening (Screener_1 != Screener_2) +
+    UNCERTAIN cases. Per kasus berikan analisis 1-2 kalimat + saran resolusi
+    (DISCUSS / DEFER-TO-FULLTEXT / UPDATE-BRIEFING jika pattern systematic)."
+
+    R1 + R2 + supervisor diskusi → consensus → update Conflict_Resolution.
+
+    === MONITOR KAPPA REAL-TIME ===
+    hitung Kappa_Calculation. Target kappa stabil ≥0.60. Jika drop
+    signifikan (drift interpretasi) → pause, refresh briefing, lanjut.
+
+    Append progress + drift events ke screening_results_log dalam database   
+    ```
+    Cara Mengujinya Nanti: 
+    1. Pastikan status sesi Anda `M5_STEP3_BATCH_SCREENING`. Jalankan `go run cmd/cli/main.go --mode orchestrator --session [ID]`.
+    2. Program akan menyedot 20 paper yang belum di-screen, mengirimnya ke AI, dan berhenti sejenak di status `M5_STEP3_WAITING_RESOLUTION`.
+    3. Tugas Anda di Compass: Buka `slr_screening`, filter "Agreement" yang bernilai "DISAGREE" atau "UNCERTAIN".
+    4. Baca kolom Notes (Anda bisa membandingkan argumen Strict vs Liberal dari kedua AI untuk paper yang sama).
+    5. Tentukan nasib paper tersebut: isi `Conflict_Resolution` dengan keputusan akhir Anda, dan samakan `Final_Decision` ke INCLUDE atau EXCLUDE.
+    6. Kembalikan status ke `M5_STEP3_BATCH_SCREENING` dan jalankan Go lagi untuk memproses 20 paper berikutnya. Ulangi sampai semua paper habis (Go akan otomatis pindah ke Langkah 4).
+    
     LANGKAH 4: REVIEW HASIL + EXCLUSION TABLE + FULL-TEXT PREP + HASIL AKHIR
+output : 
+    ```txt
+    Setelahkappa ≥0.60.
+    
+    === PART 1: FINAL REVIEW SCREENING (SESI SUPERVISOR SOLO) ===
+
+    Prompt:
+
+    "Tampilkan semua record dari screening.xlsx:
+    - Kolom Decision = INCLUDE
+    - Kolom Screener_1 dan Screener_2 terisi
+
+    Untuk tiap record:
+    1. Berikan ringkasan 1-2 kalimat.
+    2. Bandingkan reasoning R1 vs R2 (jika ada DISAGREE, jelaskan konflik).
+    3. Tentukan status final:
+        - APPROVED (saya konfirmasi INCLUDE)
+        - NEEDS_REVISION (perlu perbaikan di dokumen sumber/keputusan, lalu reroll screening)
+        - REJECT (perubahan status menjadi EXCLUDE + alasan)
+
+    Output format:
+    | ID | Title | R1_Notes | R2_Notes | Discrepancy | Final_Decision | Reason | Confidence |
+    
+    === PART 2: DEVELOP FULL-TEXT RETRIEVAL STRATEGY ( SESI SOLO ) ===
+
+    Prompt:
+    
+    "Berdasarkan screening.xlsx final:
+    1. Berikan daftar DOIs/URL yang perlu diambil (hanya INCLUDE).
+    2. Split per batch (maks 50 dokumen per batch, sesuaikan dengan kuota API/sumber).
+    3. Tentukan metode download:
+        - Direct download (jika ada DOI)
+        - OAI-PMH (jika institusi support)
+        - Link dari sumber (jika terdaftar di screening.xlsx)
+
+    Simpan sebagai full_text_strategy.yaml
+    ```
+
 6	Full-text Acquisition	-> pdfs/ + tracking
     LANGKAH 1: ACQUISITION STRATEGY + AUTO-DOWNLOAD + PRIORITY TRACKING
     LANGKAH 2: FULL-TEXT SCREENING (DUAL-REVIEWER + AI-ASSIST)

@@ -239,6 +239,26 @@ type KalibrasiIteration struct {
 	AgreementPct float64 `bson:"agreement_pct" json:"agreement_pct"`
 }
 
+type ScreeningPerspective struct {
+	PaperID    string `bson:"paper_id" json:"paper_id"`
+	Title      string `bson:"title" json:"title"`
+	Strict     string `bson:"strict" json:"strict"`
+	Liberal    string `bson:"liberal" json:"liberal"`
+	Recommend  string `bson:"recommend" json:"recommend"`
+	ReasonCode string `bson:"reason_code" json:"reason_code"`
+	Evidence   string `bson:"evidence" json:"evidence"`
+	Confidence string `bson:"confidence" json:"confidence"`
+}
+
+type ScreeningResultsLog struct {
+	BatchNumber       int     `bson:"batch_number" json:"batch_number"`
+	ProcessedRecords  int     `bson:"processed_records" json:"processed_records"`
+	CurrentKappa      float64 `bson:"current_kappa" json:"current_kappa"`
+	DisagreementCases int     `bson:"disagreement_cases" json:"disagreement_cases"`
+	DriftDetected     bool    `bson:"drift_detected" json:"drift_detected"`
+	Tanggal           string  `bson:"tanggal" json:"tanggal"`
+}
+
 type DataMiningLog struct {
 	InitialSample InitialSearchSample `bson:"initial_sample" json:"initial_sample"`
 	SanityCheck   *SanityCheckVerdict `bson:"sanity_check,omitempty" json:"sanity_check,omitempty"`
@@ -265,11 +285,14 @@ type SLRSession struct {
 	SearchLog           *SearchLog           `bson:"search_log,omitempty"`
 	Modul3Summary       *Modul3Summary       `bson:"modul3_summary,omitempty"`
 	DataMiningLog       *DataMiningLog       `bson:"data_mining_log,omitempty"`
-	ScreeningSetup      *ScreeningSetup      `bson:"screening_setup,omitempty"`
-	Modul4Summary       *Modul4Summary       `bson:"modul4_summary,omitempty"`
-	ScreenerBriefing    *ScreenerBriefing    `bson:"screener_briefing,omitempty"`
-	KalibrasiLog        []KalibrasiIteration `bson:"kalibrasi_log,omitempty"`
-	InclusionCriteria   []string             `bson:"inclusion_criteria"`
+	ScreeningSetup        *ScreeningSetup        `bson:"screening_setup,omitempty"`
+	Modul4Summary         *Modul4Summary         `bson:"modul4_summary,omitempty"`
+	ScreenerBriefing      *ScreenerBriefing      `bson:"screener_briefing,omitempty"`
+	KalibrasiLog          []KalibrasiIteration   `bson:"kalibrasi_log,omitempty"`
+	Reviewer1Perspectives []ScreeningPerspective `bson:"reviewer1_perspectives,omitempty"`
+	Reviewer2Perspectives []ScreeningPerspective `bson:"reviewer2_perspectives,omitempty"`
+	ScreeningResultsLog   []ScreeningResultsLog  `bson:"screening_results_log,omitempty"`
+	InclusionCriteria     []string               `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
 	Feedback          string            `bson:"feedback"` // Catatan dari manusia jika butuh revisi

@@ -95,6 +95,18 @@ func (r *MongoRepository) GetRandomScreeningPapers(ctx context.Context, sessionI
 	return results, err
 }
 
+func (r *MongoRepository) GetUnscreenedPapers(ctx context.Context, sessionID string, limit int) ([]map[string]interface{}, error) {
+	filter := bson.M{"session_id": sessionID, "Screener_1_Decision": ""}
+	findOptions := options.Find().SetLimit(int64(limit))
+	cursor, err := r.GetScreeningCollection().Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, err
+	}
+	var results []map[string]interface{}
+	err = cursor.All(ctx, &results)
+	return results, err
+}
+
 func (r *MongoRepository) UpdateScreeningPaper(ctx context.Context, id interface{}, updateDoc map[string]interface{}) error {
 	filter := bson.M{"_id": id}
 	_, err := r.GetScreeningCollection().UpdateOne(ctx, filter, bson.M{"$set": updateDoc})
