@@ -146,3 +146,38 @@ Keluarkan HANYA JSON MURNI tanpa blok markdown dengan struktur berikut:
 	}
 	return &result, nil
 }
+
+type ResolutionAdvice struct {
+	Analysis string `json:"analysis"`
+	Advice   string `json:"advice"`
+}
+
+func (a *ScreeningAgent) AnalyzeDisagreement(ctx context.Context, briefing, title, abstract, r1Notes, r2Notes string) (*ResolutionAdvice, error) {
+	systemPrompt := fmt.Sprintf(`Anda adalah Supervisor / Arbiter untuk Systematic Literature Review.
+Berikut adalah SCREENER BRIEFING:
+%s
+
+Terdapat kasus DISAGREE atau UNCERTAIN antara Reviewer 1 dan Reviewer 2.
+Berikan analisis 1-2 kalimat untuk mencari akar konflik dari 'notes' mereka, dan berikan saran resolusi.
+Saran resolusi ("advice") HARUS salah satu dari: "DISCUSS", "DEFER-TO-FULLTEXT", atau "UPDATE-BRIEFING" (jika polanya sistematis).
+
+Keluarkan HANYA JSON MURNI tanpa markdown:
+{
+  "analysis": "Reviewer 1 fokus pada X, sedangkan Reviewer 2 fokus pada Y...",
+  "advice": "DISCUSS"
+}`, briefing)
+
+	userPrompt := fmt.Sprintf("Title: %s\nAbstract: %s\nR1 Notes: %s\nR2 Notes: %s", title, abstract, r1Notes, r2Notes)
+
+	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("gagal analyze disagreement: %w", err)
+	}
+
+	cleanJSON := CleanJSONResponse(rawResponse)
+	var result ResolutionAdvice
+	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON ResolutionAdvice (%w). Raw: %s", err, rawResponse)
+	}
+	return &result, nil
+}

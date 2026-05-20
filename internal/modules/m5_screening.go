@@ -257,14 +257,28 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				agreeCount++
 			}
 
+			notes1 := fmt.Sprintf("Strict: %s | Liberal: %s | Evidence: %s", res1.Strict, res1.Liberal, res1.Evidence)
+			notes2 := fmt.Sprintf("Strict: %s | Liberal: %s | Evidence: %s", res2.Strict, res2.Liberal, res2.Evidence)
+
+			conflictRes := ""
+			if agreement == "DISAGREE" || res1.Recommend == "UNCERTAIN" || res2.Recommend == "UNCERTAIN" {
+				fmt.Printf("      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor...\n")
+				// Kita pinjam scAgent1 (z-ai/gemini) sebagai supervisor
+				advice, err := scAgent1.AnalyzeDisagreement(ctx, briefingDoc, title, abs, notes1, notes2)
+				if err == nil && advice != nil {
+					conflictRes = fmt.Sprintf("[AI_SUGGESTION: %s] %s", advice.Advice, advice.Analysis)
+				}
+			}
+
 			updateDoc := map[string]interface{}{
 				"Screener_1_Decision": res1.Recommend,
 				"Screener_1_Reason_Code": res1.ReasonCode,
-				"Screener_1_Notes": fmt.Sprintf("Strict: %s | Liberal: %s | Evidence: %s", res1.Strict, res1.Liberal, res1.Evidence),
+				"Screener_1_Notes": notes1,
 				"Screener_2_Decision": res2.Recommend,
 				"Screener_2_Reason_Code": res2.ReasonCode,
-				"Screener_2_Notes": fmt.Sprintf("Strict: %s | Liberal: %s | Evidence: %s", res2.Strict, res2.Liberal, res2.Evidence),
+				"Screener_2_Notes": notes2,
 				"Agreement": agreement,
+				"Conflict_Resolution": conflictRes,
 			}
 			m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], updateDoc)
 
