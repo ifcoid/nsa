@@ -762,7 +762,7 @@ Modul	Topik(Langkah di dalamnya)	Output
     3. Program akan secara acak memungut 20 *paper* dari `slr_screening`, dan mendelegasikannya ke dua agen independen. Anda akan melihat log proses eksekusinya di terminal (1 hingga 20).
     4. Setelah selesai, Go akan langsung membedah matriks probabilitas dan menghitung rasio **Cohen's Kappa**.
     5. Jika nilainya `< 0.60`, program otomatis mengunci status di `M5_STEP2_WAITING_APPROVAL`. Buka Compass Anda, cari baris-baris berlabel `DISAGREE` di collection `slr_screening` untuk mendiagnosis penyebab pertengkaran AI.
-    6. **PENTING SEBELUM RERUN**: Anda wajib merevisi teks pada `screener_briefing.briefing_doc` (tambahkan *edge cases* atau pertajam definisi) langsung dari dalam Compass agar AI tidak mengulangi kesalahan yang sama.
+    6. **PENTING SEBELUM RERUN**: Anda wajib merevisi teks pada `screener_briefing.briefing_doc` (tambahkan *edge cases* atau pertajam definisi. Contoh: Tambahkan kalimat: "If method = Simulation -> EXCLUDE") langsung dari dalam Compass agar AI tidak mengulangi kesalahan yang sama.
     7. Setelah direvisi, barulah *rerun* kalibrasi dengan mengembalikan status ke `M5_STEP2_CALIBRATION`. Program akan menarik 20 sampel **baru** secara otomatis.
     8. Jika nilainya `>= 0.60`, program akan secara otomatis mengesahkannya dengan status `M5_STEP2_APPROVED`.
     LANGKAH 3: BATCH SCREENING MASSAL (AI-ASSISTED, HUMAN-DECIDED)
