@@ -182,9 +182,40 @@ type SanityCheckVerdict struct {
 	Recommendation   string   `bson:"recommendation" json:"recommendation"`
 }
 
+type BasicQualityAudit struct {
+	TotalRecords     int            `bson:"total_records" json:"total_records"`
+	MissingAbstract  int            `bson:"missing_abstract" json:"missing_abstract"`
+	MissingDOI       int            `bson:"missing_doi" json:"missing_doi"`
+	YearDistribution map[string]int `bson:"year_distribution" json:"year_distribution"`
+	DocTypes         map[string]int `bson:"doc_types" json:"doc_types"`
+}
+
+type DedupBreakdown struct {
+	PrimaryMatch    int `bson:"primary_match" json:"primary_match"`
+	SecondaryMatch  int `bson:"secondary_match" json:"secondary_match"`
+	TotalDuplicates int `bson:"total_duplicates" json:"total_duplicates"`
+	TotalUnique     int `bson:"total_unique" json:"total_unique"`
+}
+
+type PICOPreviewItem struct {
+	Title          string `bson:"title" json:"title"`
+	Classification string `bson:"classification" json:"classification"` // MATCH WHAT COUNTS, MATCH WHAT DOESN'T, AMBIGU, OFF-TOPIC
+	Reasoning      string `bson:"reasoning" json:"reasoning"`
+}
+
+type PICOPreviewCheck struct {
+	SamplesAnalyzed []PICOPreviewItem `bson:"samples_analyzed" json:"samples_analyzed"`
+	MatchCountsPct  float64           `bson:"match_counts_pct" json:"match_counts_pct"`
+	Verdict         string            `bson:"verdict" json:"verdict"`
+	Recommendation  string            `bson:"recommendation" json:"recommendation"`
+}
+
 type DataMiningLog struct {
 	InitialSample InitialSearchSample `bson:"initial_sample" json:"initial_sample"`
 	SanityCheck   *SanityCheckVerdict `bson:"sanity_check,omitempty" json:"sanity_check,omitempty"`
+	QualityAudit  *BasicQualityAudit  `bson:"quality_audit,omitempty" json:"quality_audit,omitempty"`
+	Dedup         *DedupBreakdown     `bson:"dedup,omitempty" json:"dedup,omitempty"`
+	PICOPreview   *PICOPreviewCheck   `bson:"pico_preview,omitempty" json:"pico_preview,omitempty"`
 }
 
 type SLRSession struct {

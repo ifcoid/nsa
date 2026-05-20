@@ -50,3 +50,44 @@ Keluarkan HANYA JSON MURNI tanpa blok awalan/akhiran:
 
 	return &result, nil
 }
+
+func (a *DataMiningAgent) PicoConsistencyPreview(ctx context.Context, papersJSON, pico string) (*model.PICOPreviewCheck, error) {
+	systemPrompt := `Anda adalah validator PICO-Consistency untuk Systematic Literature Review.
+Tugas Anda mengklasifikasikan 20 sampel paper yang diberikan berdasarkan definisi operasional PICO.
+
+Untuk SETIAP paper, tentukan klasifikasi SALAH SATU dari:
+- "MATCH WHAT COUNTS": Sangat relevan dengan PICO.
+- "MATCH WHAT DOESN'T": Masuk ke kriteria eksklusi / AVOID list.
+- "AMBIGU": Judul/abstrak tidak memberi cukup informasi.
+- "OFF-TOPIC": Sama sekali tidak relevan dengan topik riset.
+
+Setelah klasifikasi semua paper, hitung persentase "MATCH WHAT COUNTS" dan berikan Verdict:
+- Jika >60% -> "PROCEED L3"
+- Jika 30-60% -> "ACCEPTABLE_HIGH_WORKLOAD"
+- Jika <30% -> "BACK_TO_MODUL_3"
+
+Keluarkan HANYA JSON MURNI tanpa markdown blok awalan/akhiran:
+{
+  "samples_analyzed": [
+    {"title": "Judul Paper 1", "classification": "MATCH WHAT COUNTS", "reasoning": "Alasan singkat..."}
+  ],
+  "match_counts_pct": 65.0,
+  "verdict": "PROCEED L3",
+  "recommendation": "Saran untuk langkah selanjutnya..."
+}`
+
+	userPrompt := fmt.Sprintf("=== PICO DEFINITIONS ===\n%s\n\n=== 20 SAMPEL PAPER ===\n%s", pico, papersJSON)
+
+	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("data_mining_agent gagal preview PICO: %w", err)
+	}
+
+	cleanJSON := CleanJSONResponse(rawResponse)
+	var result model.PICOPreviewCheck
+	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON PICOPreview (%w). Raw: %s", err, rawResponse)
+	}
+
+	return &result, nil
+}

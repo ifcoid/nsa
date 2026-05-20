@@ -497,6 +497,73 @@ Modul	Topik(Langkah di dalamnya)	Output
     5. Periksa dokumen `data_mining_log.sanity_check`. Jika agen merekomendasikan `PROCEED` dan Anda setuju, ubah status ke `M4_STEP1_APPROVED`.
     6. Jika keputusan `REVISE`, cukup ubah status ke `M4_STEP1_NEEDS_REVISION`. Sistem akan melempar Anda KEMBALI ke Modul 3 Langkah 3 secara otomatis dan meminta agen merumuskan ulang kueri.
     LANGKAH 2: EXPORT + MULTI-DB DEDUP + PICO-CONSISTENCY PREVIEW
+    output: data_mining_log dan slr_papers_post_dedup
+    ```txt
+    Minta user sudah melakukan export hasil search per DB (Misalnya: Scopus, IEEE, Web of Science) sesuai dengan dokumen search_string yang sudah dibuat di modul3. kemudian hasilnya masukkan ke dalam collection(saya minta saran kamu baiknya collecton atau dokumen? ) sources(misalnya: source_scopus, source_ieee, source_webofscience, dst) dengan isian data structure(bagaimana struktur data terbaiknya?):
+    - Authors
+    - Title
+    - Year
+    - Abstract
+    - Author Keywords
+    - Index Keywords
+    - DOI
+    - Source title
+    - Document Type
+    - lainnya yang perlu kamu tambahkan agar lebih detail dan komprehensif
+
+    Setelah source ada dan validitasnya isi database terkonfirmasi, eksekusi 3 task:
+    === TASK 1: BASIC QUALITY AUDIT ===
+    Per source/collection:
+    - Verify total records
+    - Identify essential fields
+    - Data quality issues: missing abstract / keywords / DOI %
+    - Ringkasan: distribusi tahun, top 5 journal, breakdown document type
+
+    === TASK 2: MULTI-DB DEDUPLICATION (jika multi-DB sources/collections) ===
+    Strategi bertingkat:
+    1. PRIMARY: DOI match
+    2. SECONDARY: normalized title (lowercase + strip punctuation) + year
+    3. TERTIARY: fuzzy title >90% similarity + first author surname
+
+    Output:
+    - Total records across all DB sources/collections
+    - Unique post-dedup disimpan dalam database (menurutmu di collection baru ok? hasil deduplikasinya)
+    - Duplicates breakdown per strategi
+    - Records eksklusif per DB sources/collections
+    - FLAG records dengan matching ambigu
+
+    Jika overlap lintas-DB sources/collections jauh lebih sedikit dari ekspektasi → cek normalisasi
+    DOI/title (formatting beda antar DB sources/collections).
+
+    === TASK 3: PICO-CONSISTENCY PREVIEW CHECK ===
+    Ambil RANDOM 20 records post-dedup. Untuk setiap, klasifikasi berdasar
+    title+abstract+keywords vs operational definitions di dokumen pico_definitions:
+
+    - MATCH "WHAT COUNTS": memenuhi
+    - MATCH "WHAT DOESN'T": termasuk yang harus dieksklusi
+    - AMBIGU: tidak cukup info di abstract
+    - OFF-TOPIC: noise
+
+    Sajikan tabel + persentase.
+
+    INTERPRETASI:
+    - MATCH "WHAT COUNTS" >60% → search bagus, PROCEED L3
+    - 30-60% → acceptable, screening workload tinggi
+    - <30% → BACK TO MODUL 3 (perbaikan AVOID list / operational def)
+    - MATCH "WHAT DOESN'T" tinggi → AVOID list belum lengkap
+
+    Verdict + saran.
+    Append ke dokumen data_mining_log
+    ```
+    Cara Mengujinya Nanti:
+    1. Lakukan export dataset dari masing-masing database (Scopus, WoS, IEEE) ke format CSV.
+    2. [PENTING] Buka CSV di Excel/Sheets, tambahkan kolom baru bernama `Database`, lalu isi dengan nama sumbernya (misal: "Scopus"). Simpan ulang CSV-nya.
+    3. Buka MongoDB Compass, klik Add Data -> Import File. Tumpuk/gabungkan semua CSV Anda ke dalam SATU collection bernama `slr_papers`. (Sistem Go kita sudah dilengkapi parser cerdas yang bisa mengenali format judul/abstrak yang beda antar database).
+    4. Ubah status sesion menjadi `M4_STEP2_PROCESS` dan biarkan program menghitung kualitas, mendeduplikasi (mencari irisan data dari tumpukan multi-DB tersebut), dan mencuplik 20 sampel paper untuk dites PICO Consistency oleh AI.
+    5. Cek dokumen `data_mining_log` di MongoDB (perhatikan isian `quality_audit`, `dedup`, dan `pico_preview`).
+    6. Anda juga WAJIB mengecek collection baru bernama `slr_papers_post_dedup` di MongoDB. Ini adalah hasil kumpulan data unik yang tervalidasi dan siap digunakan untuk proses *Screening*.
+    7. Jika `match_counts_pct` > 60% dan verdict "PROCEED L3", ubah status ke `M4_STEP2_APPROVED`.
+    8. Jika PICO Preview buruk (<30%), ubah status ke `M4_STEP2_NEEDS_REVISION`. Sistem akan membatalkan seluruh dataset ini dan menyuruh Anda mengulang kembali Modul 3 (membangun ulang *search string*).
     LANGKAH 3: SETUP SCREENING DATABASE + EMBEDDED CRITERIA + HASIL AKHIR
 5	Title & Abstract Screening	-> screening ( filled)
     LANGKAH 1: SCREENER BRIEFING (FINALISASI INTERPRETASI KRITERIA)
