@@ -81,6 +81,26 @@ func (r *MongoRepository) GetScreeningCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_screening")
 }
 
+func (r *MongoRepository) GetRandomScreeningPapers(ctx context.Context, sessionID string, limit int) ([]map[string]interface{}, error) {
+	pipeline := mongo.Pipeline{
+		{{"$match", bson.M{"session_id": sessionID, "Final_Decision": ""}}},
+		{{"$sample", bson.M{"size": limit}}},
+	}
+	cursor, err := r.GetScreeningCollection().Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	var results []map[string]interface{}
+	err = cursor.All(ctx, &results)
+	return results, err
+}
+
+func (r *MongoRepository) UpdateScreeningPaper(ctx context.Context, id interface{}, updateDoc map[string]interface{}) error {
+	filter := bson.M{"_id": id}
+	_, err := r.GetScreeningCollection().UpdateOne(ctx, filter, bson.M{"$set": updateDoc})
+	return err
+}
+
 // =========================================================================
 // 2. MANAJEMEN ARTIKEL / PAPERS (PRISMA SCREENING Pipeline)
 // =========================================================================

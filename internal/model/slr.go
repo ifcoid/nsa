@@ -230,6 +230,15 @@ type ScreenerBriefing struct {
 	Recommendation string `bson:"recommendation" json:"recommendation"`
 }
 
+type KalibrasiIteration struct {
+	Iterasi      int     `bson:"iterasi" json:"iterasi"`
+	Tanggal      string  `bson:"tanggal" json:"tanggal"`
+	Kappa        float64 `bson:"kappa" json:"kappa"`
+	Revisi       string  `bson:"revisi" json:"revisi"`
+	Passed       bool    `bson:"passed" json:"passed"`
+	AgreementPct float64 `bson:"agreement_pct" json:"agreement_pct"`
+}
+
 type DataMiningLog struct {
 	InitialSample InitialSearchSample `bson:"initial_sample" json:"initial_sample"`
 	SanityCheck   *SanityCheckVerdict `bson:"sanity_check,omitempty" json:"sanity_check,omitempty"`
@@ -259,6 +268,7 @@ type SLRSession struct {
 	ScreeningSetup      *ScreeningSetup      `bson:"screening_setup,omitempty"`
 	Modul4Summary       *Modul4Summary       `bson:"modul4_summary,omitempty"`
 	ScreenerBriefing    *ScreenerBriefing    `bson:"screener_briefing,omitempty"`
+	KalibrasiLog        []KalibrasiIteration `bson:"kalibrasi_log,omitempty"`
 	InclusionCriteria   []string             `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"

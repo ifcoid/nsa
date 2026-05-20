@@ -74,3 +74,43 @@ Keluarkan HANYA JSON MURNI (tanpa markdown blok):
 
 	return &result, nil
 }
+
+type ScreeningDecision struct {
+	Decision   string `json:"decision"`
+	ReasonCode string `json:"reason_code"`
+	Notes      string `json:"notes"`
+}
+
+func (a *ScreeningAgent) ReviewPaper(ctx context.Context, briefing, title, abstract, keywords string) (*ScreeningDecision, error) {
+	systemPrompt := fmt.Sprintf(`Anda adalah Reviewer Independen untuk Systematic Literature Review.
+Berikut adalah SCREENER BRIEFING yang WAJIB Anda patuhi:
+%s
+
+Tugas Anda adalah meninjau Title, Abstract, dan Keywords dari paper yang diberikan, lalu tentukan keputusan Anda:
+"INCLUDE", "EXCLUDE", atau "UNCERTAIN".
+
+ATURAN:
+1. Jika keputusan "EXCLUDE", Anda WAJIB mengisi field "reason_code" dengan salah satu dari REASON CODES di briefing. Jika "INCLUDE" atau "UNCERTAIN", kosongkan atau isi "-".
+2. Dalam field "notes", tuliskan analisis Anda secara komprehensif sebagai VERDICT-AID (termasuk pandangan STRICT dan LIBERAL).
+
+Keluarkan HANYA JSON MURNI tanpa blok markdown:
+{
+  "decision": "EXCLUDE",
+  "reason_code": "STUDY-DESIGN",
+  "notes": "Perspektif Strict: ... Perspektif Liberal: ... Verdict-Aid: ..."
+}`, briefing)
+
+	userPrompt := fmt.Sprintf("Title: %s\nKeywords: %s\nAbstract: %s", title, keywords, abstract)
+
+	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("gagal review paper: %w", err)
+	}
+
+	cleanJSON := CleanJSONResponse(rawResponse)
+	var result ScreeningDecision
+	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON ReviewPaper (%w). Raw: %s", err, rawResponse)
+	}
+	return &result, nil
+}

@@ -690,7 +690,7 @@ Modul	Topik(Langkah di dalamnya)	Output
     [turunkan dari EDGE CASES]
 
     4. REASON CODES (8 standard, wajib dipakai, no freeform):
-    [list dari screening.xlsx Row 5]
+    [list dari screening_setup pada SLRSession]
 
     5. UNCERTAIN PROTOCOL:
     - Cukup info di abstract tapi sulit decide → UNCERTAIN + notes
@@ -718,8 +718,53 @@ Modul	Topik(Langkah di dalamnya)	Output
     LANGKAH 2: KALIBRASI DUAL-REVIEW + COHEN'S KAPPA
     output : 
     ```txt
-    
+    Gunakan RAG:
+    - screener_briefing
+    - collection slr_screening
+
+    Prosedur kalibrasi (Hitl):
+    1. Siapkan dua agent untuk dijadikan reviewer 1 dan 2, Reviewer 1 menggunakan API Z-AI GLM dan Reviewer 2 menggunakan API groq. Keduanya menggunakan temperature 0.2.
+    2. Ambil Random 20 sample dari collection slr_screening (15 clear + 5 ambigu)
+    3. Kedua reviewer INDEPENDEN (tidak saling lihat)
+    4. Isi Screener_1_* dan Screener_2_* (Decision + Reason_Code + Notes), dimana Notes disi PERSPEKTIF + VERDICT-AID
+    5. Kemudian lakukan "Kappa_Calculation" dari hasil review
+
+    EVALUASI KAPPA (Hitl setelah user lihat hasil dari 20 sample):
+
+    Berdasarkan kappa hasil:
+
+    === JIKA KAPPA ≥0.60 ===
+    - Konfirmasi: PROCEED ke L3 batch screening
+    - Append ke dokumen kalibrasi_log: "Iterasi 1, kappa=[X], PASSED"
+
+    === JIKA KAPPA <0.60 ===
+    Root-cause analysis:
+    1. PATTERN DISAGREEMENT:
+    - Records mana yang berbeda?
+    - Disagreement di komponen tertentu (P/I/C/O)?
+    - Reason code berbeda meski decision sama (precision issue)?
+    2. AKAR MASALAH:
+    - Operational def ambigu? Komponen mana perlu dipertajam?
+    - Edge case belum tercover di briefing?
+    - Personality bias (R1 strict, R2 liberal)?
+    3. REKOMENDASI:
+    - Revisi screener_briefing (tambah edge cases)
+    - Diskusi 2 reviewer untuk disagreement → consensus → update interpretasi
+    - Rerun kalibrasi 20 sample BARU (bukan 20 yang sama)
+
+    Iterasi sampai kappa ≥0.60. Append setiap iterasi ke kalibrasi_log.
+    format: Iterasi | Tanggal | Kappa | Revisi yang dilakukan.
+    PROCEED ke Langkah3(L3) hanya jika kappa ≥0.60.
     ```
+    Cara Mengujinya Nanti:
+    1. Sistem kita telah dilengkapi *fallback*. Jika Anda belum mensetting kredensial API `z-ai` atau `groq` di MongoDB (`llm_configs`), program akan cerdas melakukan *fallback* ke `gemini`.
+    2. Ubah status sesi Anda ke `M5_STEP2_CALIBRATION` lalu jalankan `go run cmd/cli/main.go --mode orchestrator --session [ID]`.
+    3. Program akan secara acak memungut 20 *paper* dari `slr_screening`, dan mendelegasikannya ke dua agen independen. Anda akan melihat log proses eksekusinya di terminal (1 hingga 20).
+    4. Setelah selesai, Go akan langsung membedah matriks probabilitas dan menghitung rasio **Cohen's Kappa**.
+    5. Jika nilainya `< 0.60`, program otomatis mengunci status di `M5_STEP2_WAITING_APPROVAL`. Buka Compass Anda, cari baris-baris berlabel `DISAGREE` di collection `slr_screening` untuk mendiagnosis penyebab pertengkaran AI.
+    6. **PENTING SEBELUM RERUN**: Anda wajib merevisi teks pada `screener_briefing.briefing_doc` (tambahkan *edge cases* atau pertajam definisi) langsung dari dalam Compass agar AI tidak mengulangi kesalahan yang sama.
+    7. Setelah direvisi, barulah *rerun* kalibrasi dengan mengembalikan status ke `M5_STEP2_CALIBRATION`. Program akan menarik 20 sampel **baru** secara otomatis.
+    8. Jika nilainya `>= 0.60`, program akan secara otomatis mengesahkannya dengan status `M5_STEP2_APPROVED`.
     LANGKAH 3: BATCH SCREENING MASSAL (AI-ASSISTED, HUMAN-DECIDED)
     LANGKAH 4: REVIEW HASIL + EXCLUSION TABLE + FULL-TEXT PREP + HASIL AKHIR
 6	Full-text Acquisition	-> pdfs/ + tracking
