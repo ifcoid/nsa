@@ -181,3 +181,38 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	}
 	return &result, nil
 }
+
+type PICOAuditResult struct {
+	SlippedThroughCount int    `json:"slipped_through_count"`
+	Action              string `json:"action"`
+	Analysis            string `json:"analysis"`
+}
+
+func (a *ScreeningAgent) AuditPICO(ctx context.Context, pico, includedPapersJSON string) (*PICOAuditResult, error) {
+	systemPrompt := `Anda adalah Auditor Systematic Literature Review.
+Tugas Anda memeriksa ulang sampel acak (10%) dari paper yang sudah dilabeli "INCLUDE" untuk melihat apakah ada yang "lolos" padahal seharusnya tidak (slipped-through) berdasarkan PICO DEFINITIONS.
+
+Keluarkan HANYA JSON MURNI tanpa markdown:
+{
+  "slipped_through_count": 0,
+  "action": "none" atau "re-screening",
+  "analysis": "Penjelasan hasil audit..."
+}`
+	userPrompt := fmt.Sprintf("=== PICO ===\n%s\n\n=== INCLUDED PAPERS SAMPLE ===\n%s", pico, includedPapersJSON)
+	rawResp, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil { return nil, err }
+	
+	var res PICOAuditResult
+	if err := json.Unmarshal([]byte(CleanJSONResponse(rawResp)), &res); err != nil { return nil, err }
+	return &res, nil
+}
+
+type PrioritizationResult struct {
+	Report string `json:"report"`
+}
+
+func (a *ScreeningAgent) PrioritizeFullText(ctx context.Context, includedPapersJSON string) (string, error) {
+	systemPrompt := `Anda adalah Asisten Peneliti. Kelompokkan paper INCLUDE berikut menjadi prioritas full-text (HIGH, MEDIUM, LOW) berdasarkan abstract.
+Keluarkan output dalam bentuk teks Markdown murni (tanpa awalan markdown blok code).`
+	return a.llmProvider.Generate(ctx, systemPrompt, includedPapersJSON)
+}

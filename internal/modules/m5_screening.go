@@ -3,6 +3,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"time"
 	"nsa/internal/agent"
 	"nsa/internal/model"
@@ -330,6 +331,150 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		fmt.Println("   3. Jika ingin lanjut batch berikutnya, set status ke 'M5_STEP3_BATCH_SCREENING'.")
 		fmt.Println("   4. Jika sudah habis, set status ke 'M5_STEP4_REVIEW_HASIL'.")
 		return nil
+
+	case "M5_STEP4_REVIEW_HASIL":
+		fmt.Println("   [Langkah 5.4] Menyusun Exclusion Table dan Modul 5 Summary...")
+
+		papers, err := m.deps.MongoRepo.GetAllScreeningPapers(ctx, session.ID)
+		if err != nil { return fmt.Errorf("gagal get all papers: %w", err) }
+
+		totalIdentified := 0
+		if session.DataMiningLog != nil && session.DataMiningLog.QualityAudit != nil { totalIdentified = session.DataMiningLog.QualityAudit.TotalRecords }
+		duplicatesRemoved := 0
+		if session.DataMiningLog != nil && session.DataMiningLog.Dedup != nil { duplicatesRemoved = session.DataMiningLog.Dedup.TotalDuplicates }
+		recordsScreened := len(papers)
+
+		var included, excluded []map[string]interface{}
+		reasonCounts := make(map[string]int)
+		var deferredCount int
+		var resolvedDiscussCount int
+
+		for _, p := range papers {
+			finalDec := ""
+			if val, ok := p["Final_Decision"].(string); ok && val != "" {
+				finalDec = val
+			} else if val, ok := p["Screener_1_Decision"].(string); ok {
+				finalDec = val
+			}
+			
+			if finalDec == "INCLUDE" {
+				included = append(included, p)
+			} else if finalDec == "EXCLUDE" {
+				excluded = append(excluded, p)
+				reason := "OTHER"
+				if r1rc, ok := p["Screener_1_Reason_Code"].(string); ok && r1rc != "" && r1rc != "-" {
+					reason = r1rc
+				}
+				reasonCounts[reason]++
+			} else {
+				deferredCount++ // Uncertain
+			}
+
+			if cr, ok := p["Conflict_Resolution"].(string); ok && cr != "" {
+				resolvedDiscussCount++
+			}
+		}
+
+		// 1. FLOW NUMBERS
+		flowNumbers := fmt.Sprintf("- Total records identified: %d\n- Duplicates removed: %d\n- Records screened: %d\n- Records excluded: %d\n- Records included for full-text: %d", 
+			totalIdentified, duplicatesRemoved, recordsScreened, len(excluded), len(included))
+
+		// 2. EXCLUSION REASONS TABLE
+		exclusionReasons := "| Reason Code | Count | % | Deskripsi |\n|---|---|---|---|\n"
+		for code, count := range reasonCounts {
+			pct := 0.0
+			if len(excluded) > 0 { pct = float64(count) / float64(len(excluded)) * 100 }
+			exclusionReasons += fmt.Sprintf("| %s | %d | %.1f%% | - |\n", code, count, pct)
+		}
+
+		// 3. KAPPA REPORT
+		iter1Kappa := 0.0
+		finalKappa := 0.0
+		if len(session.KalibrasiLog) > 0 {
+			iter1Kappa = session.KalibrasiLog[0].Kappa
+			finalKappa = session.KalibrasiLog[len(session.KalibrasiLog)-1].Kappa
+		}
+		
+		batchKappa := 0.0
+		if len(session.ScreeningResultsLog) > 0 {
+			batchKappa = session.ScreeningResultsLog[len(session.ScreeningResultsLog)-1].CurrentKappa
+		}
+		
+		kappaClass := "Fair"
+		if finalKappa >= 0.80 { kappaClass = "Almost Perfect" } else if finalKappa >= 0.60 { kappaClass = "Substantial" }
+		
+		kappaReport := fmt.Sprintf("- Kalibrasi iterasi 1: %.3f\n- Jumlah iterasi kalibrasi: %d\n- Kalibrasi final: %.3f\n- Batch massal final: %.3f\n- Klasifikasi: %s\n- Disagreements resolved: %d\n- Deferred ke full-text: %d",
+			iter1Kappa, len(session.KalibrasiLog), finalKappa, batchKappa, kappaClass, resolvedDiscussCount, deferredCount)
+
+		// Initialize Agent
+		llm, _ := m.deps.LLMFactory.CreateClient(ctx, "z-ai")
+		scAgent := agent.NewScreeningAgent(llm)
+
+		// 4. PICO AUDIT (10% Random INCLUDE)
+		picoAuditText := "Audit dilewati (Tidak ada paper INCLUDE)"
+		if len(included) > 0 {
+			fmt.Println("      -> Menjalankan PICO-Consistency Audit (10% Sample)...")
+			sampleSize := len(included) / 10
+			if sampleSize < 1 { sampleSize = 1 }
+			if sampleSize > 10 { sampleSize = 10 } // limit token
+
+			rand.Seed(time.Now().UnixNano())
+			rand.Shuffle(len(included), func(i, j int) { included[i], included[j] = included[j], included[i] })
+			
+			sampleData, _ := json.Marshal(included[:sampleSize])
+			
+			picoDef := ""
+			if session.PICODefinitions != nil {
+				picoBytes, _ := json.Marshal(session.PICODefinitions)
+				picoDef = string(picoBytes)
+			}
+
+			auditRes, err := scAgent.AuditPICO(ctx, picoDef, string(sampleData))
+			if err == nil && auditRes != nil {
+				picoAuditText = fmt.Sprintf("Slipped-through: %d\nAction: %s\nAnalysis: %s", auditRes.SlippedThroughCount, auditRes.Action, auditRes.Analysis)
+			} else {
+				picoAuditText = "Gagal menjalankan audit: " + err.Error()
+			}
+		}
+
+		// 5. FULL-TEXT PRIORITIZATION
+		fullTextPrep := "Tidak ada paper untuk diprioritaskan."
+		if len(included) > 0 {
+			fmt.Println("      -> Menjalankan Full-Text Prioritization...")
+			// Batasi jumlah yang dikirim ke LLM jika terlalu banyak (max 50)
+			limit := len(included)
+			if limit > 50 { limit = 50 }
+			sampleData, _ := json.Marshal(included[:limit])
+			res, err := scAgent.PrioritizeFullText(ctx, string(sampleData))
+			if err == nil { fullTextPrep = res }
+		}
+
+		session.ExclusionTable = &model.ExclusionTable{
+			FlowNumbers: flowNumbers,
+			ExclusionReasons: exclusionReasons,
+			KappaReport: kappaReport,
+			PICOAudit: picoAuditText,
+			FullTextPrep: fullTextPrep,
+		}
+
+		// OUTPUT 2: MODUL 5 SUMMARY
+		summaryMd := fmt.Sprintf("=== TITLE/ABSTRACT SCREENING SUMMARY ===\n\n"+
+			"KALIBRASI:\n- Sample 20 records, %d iterasi\n- Kappa iter 1 -> final: %.3f -> %.3f\n\n"+
+			"BATCH SCREENING:\n- Total screened: %d\n- R1 + R2 complete: ✓\n- Final kappa: %.3f\n\n"+
+			"DECISIONS:\n- INCLUDE for full-text: %d\n- EXCLUDE: %d\n- UNCERTAIN deferred: %d\n\n"+
+			"DISAGREEMENT RESOLUTION:\n- Total resolved/discussed: %d\n\n"+
+			"PICO-CONSISTENCY AUDIT:\n%s\n\n"+
+			"FULL-TEXT PREP:\n%s", 
+			len(session.KalibrasiLog), iter1Kappa, finalKappa, recordsScreened, batchKappa, 
+			len(included), len(excluded), deferredCount, resolvedDiscussCount, picoAuditText, fullTextPrep)
+
+		session.Modul5Summary = &model.Modul5Summary{Markdown: summaryMd}
+
+		session.Status = "M5_DONE"
+		fmt.Println("   [System] Exclusion Table & Modul 5 Summary berhasil di-generate!")
+		fmt.Println("   [System] Modul 5 SELESAI. Anda siap melangkah ke Modul 6 (Full-Text Acquisition).")
+
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	default:
 		fmt.Printf("   [Modul 5] Sub-status %s tidak dikenali atau belum diimplementasikan.\n", session.Status)

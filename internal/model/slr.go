@@ -259,6 +259,18 @@ type ScreeningResultsLog struct {
 	Tanggal           string  `bson:"tanggal" json:"tanggal"`
 }
 
+type Modul5Summary struct {
+	Markdown string `bson:"markdown" json:"markdown"`
+}
+
+type ExclusionTable struct {
+	FlowNumbers      string `bson:"flow_numbers" json:"flow_numbers"`
+	ExclusionReasons string `bson:"exclusion_reasons" json:"exclusion_reasons"`
+	KappaReport      string `bson:"kappa_report" json:"kappa_report"`
+	PICOAudit        string `bson:"pico_audit" json:"pico_audit"`
+	FullTextPrep     string `bson:"full_text_prep" json:"full_text_prep"`
+}
+
 type DataMiningLog struct {
 	InitialSample InitialSearchSample `bson:"initial_sample" json:"initial_sample"`
 	SanityCheck   *SanityCheckVerdict `bson:"sanity_check,omitempty" json:"sanity_check,omitempty"`
@@ -292,6 +304,8 @@ type SLRSession struct {
 	Reviewer1Perspectives []ScreeningPerspective `bson:"reviewer1_perspectives,omitempty"`
 	Reviewer2Perspectives []ScreeningPerspective `bson:"reviewer2_perspectives,omitempty"`
 	ScreeningResultsLog   []ScreeningResultsLog  `bson:"screening_results_log,omitempty"`
+	ExclusionTable        *ExclusionTable        `bson:"exclusion_table,omitempty"`
+	Modul5Summary         *Modul5Summary         `bson:"modul5_summary,omitempty"`
 	InclusionCriteria     []string               `bson:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria"`
 	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"

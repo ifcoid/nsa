@@ -107,6 +107,16 @@ func (r *MongoRepository) GetUnscreenedPapers(ctx context.Context, sessionID str
 	return results, err
 }
 
+func (r *MongoRepository) GetAllScreeningPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
+	cursor, err := r.GetScreeningCollection().Find(ctx, bson.M{"session_id": sessionID})
+	if err != nil {
+		return nil, err
+	}
+	var results []map[string]interface{}
+	err = cursor.All(ctx, &results)
+	return results, err
+}
+
 func (r *MongoRepository) UpdateScreeningPaper(ctx context.Context, id interface{}, updateDoc map[string]interface{}) error {
 	filter := bson.M{"_id": id}
 	_, err := r.GetScreeningCollection().UpdateOne(ctx, filter, bson.M{"$set": updateDoc})

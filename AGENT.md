@@ -817,42 +817,81 @@ Modul	Topik(Langkah di dalamnya)	Output
     6. Kembalikan status ke `M5_STEP3_BATCH_SCREENING` dan jalankan Go lagi untuk memproses 20 paper berikutnya. Ulangi sampai semua paper habis (Go akan otomatis pindah ke Langkah 4).
     
     LANGKAH 4: REVIEW HASIL + EXCLUSION TABLE + FULL-TEXT PREP + HASIL AKHIR
-output : 
+    output : 
     ```txt
-    Setelahkappa ≥0.60.
-    
-    === PART 1: FINAL REVIEW SCREENING (SESI SUPERVISOR SOLO) ===
+    Eksekusi 2 dokumen output sekaligus:
 
-    Prompt:
+    === OUTPUT 1: dokumen exclusion_table (Methods-ready appendix) ===
 
-    "Tampilkan semua record dari screening.xlsx:
-    - Kolom Decision = INCLUDE
-    - Kolom Screener_1 dan Screener_2 terisi
+    1. FLOW NUMBERS untuk PRISMA 2020 diagram (Modul 9):
+    - Total records identified
+    - Duplicates removed
+    - Records screened
+    - Records excluded
+    - Records included for full-text
 
-    Untuk tiap record:
-    1. Berikan ringkasan 1-2 kalimat.
-    2. Bandingkan reasoning R1 vs R2 (jika ada DISAGREE, jelaskan konflik).
-    3. Tentukan status final:
-        - APPROVED (saya konfirmasi INCLUDE)
-        - NEEDS_REVISION (perlu perbaikan di dokumen sumber/keputusan, lalu reroll screening)
-        - REJECT (perubahan status menjadi EXCLUDE + alasan)
+    2. EXCLUSION REASONS TABLE (agregasi Reason_Code semua EXCLUDE):
+    | Reason Code | Count | % | Deskripsi |
+    | P-NOMATCH | X | Y% | Population tidak sesuai |
+    | I-NOMATCH | X | Y% | ... |
+    | O-NOMATCH | X | Y% | ... |
+    | STUDY-DESIGN | X | Y% | ... |
+    | LANGUAGE | X | Y% | ... |
+    | DUPLICATE | X | Y% | ... |
+    | NO-ABSTRACT | X | Y% | ... |
+    | OTHER | X | Y% | (ringkas notes) |
 
-    Output format:
-    | ID | Title | R1_Notes | R2_Notes | Discrepancy | Final_Decision | Reason | Confidence |
-    
-    === PART 2: DEVELOP FULL-TEXT RETRIEVAL STRATEGY ( SESI SOLO ) ===
+    3. KAPPA REPORT untuk Methods:
+    - Kalibrasi iterasi 1: [X]
+    - Jumlah iterasi
+    - Kalibrasi final: [≥0.60]
+    - Batch massal final: [Y]
+    - Klasifikasi: Substantial/Almost Perfect
+    - Disagreements: [N], Resolved via discussion: [N], Deferred ke full-text: [N]
 
-    Prompt:
-    
-    "Berdasarkan screening.xlsx final:
-    1. Berikan daftar DOIs/URL yang perlu diambil (hanya INCLUDE).
-    2. Split per batch (maks 50 dokumen per batch, sesuaikan dengan kuota API/sumber).
-    3. Tentukan metode download:
-        - Direct download (jika ada DOI)
-        - OAI-PMH (jika institusi support)
-        - Link dari sumber (jika terdaftar di screening.xlsx)
+    4. PICO-CONSISTENCY POST-SCREENING AUDIT:
+    Random 10% INCLUDED → cek konsisten dengan WHAT COUNTS.
+    Slipped-through: [N], Action: [re-screening / none]
 
-    Simpan sebagai full_text_strategy.yaml
+    5. FULL-TEXT PRIORITIZATION (untuk Modul 6):
+    - HIGH: clearly match PICO berdasar abstract
+    - MEDIUM: match sebagian, butuh full-text verify
+    - LOW: UNCERTAIN, defer ke full-text
+
+    === OUTPUT 2: dokumen modul5_summary (HASIL AKHIR) ===
+
+    === TITLE/ABSTRACT SCREENING SUMMARY (SLR) ===
+
+    KALIBRASI:
+    - Sample 20 records, [N] iterasi
+    - Kappa iter 1 → final: [X] → [Y]
+    - Revisi briefing: [ringkas]
+
+    BATCH SCREENING:
+    - Total screened: [N]
+    - R1 + R2 complete: ✓
+    - Agreement rate: [%]
+    - Final kappa: [X]
+    - AI-assistance: [dideklarasikan di Methods]
+
+    DECISIONS:
+    - INCLUDE for full-text: [N] ([%])
+    - EXCLUDE: [N] ([%])
+    - UNCERTAIN deferred: [N] ([%])
+
+    DISAGREEMENT RESOLUTION:
+    - Total: [N]
+    - Resolved discussion: [N]
+    - Resolved via full-text deferral: [N]
+
+    EXCLUSION REASONS (→ Methods appendix): di exclusion_table
+    PICO-CONSISTENCY AUDIT: [slipped-through count + action]
+    KAPPA REPORT (→ Methods): di exclusion_table
+    FULL-TEXT PREP (→ Modul 6):
+    - HIGH: [N] | MEDIUM: [N] | LOW: [N]
+
+    Konfirmasi 2 dokumen valid dan tersimpan.
+    NEXT: Full-text acquisition + screening (Modul 6)
     ```
 
 6	Full-text Acquisition	-> pdfs/ + tracking
