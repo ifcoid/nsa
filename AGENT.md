@@ -893,6 +893,13 @@ Modul	Topik(Langkah di dalamnya)	Output
     Konfirmasi 2 dokumen valid dan tersimpan.
     NEXT: Full-text acquisition + screening (Modul 6)
     ```
+    Panduan Cara Mengujinya:
+    1. Pastikan semua *paper* telah lolos kalibrasi dan *batch screening*, atau ubah status secara manual (untuk *bypass*) menjadi `M5_STEP4_REVIEW_HASIL`.
+    2. Jalankan perintah terminal: `go run cmd/cli/main.go --mode orchestrator --session [ID]`.
+    3. Go akan secara otomatis mengagregasi seluruh perhitungan matematis: **PRISMA Flow Numbers** dan **Tabel Persentase Exclusion Reasons**.
+    4. Go juga akan mengambil 10% *paper* yang berstatus `INCLUDE` secara acak dan memanggil AI Auditor (`z-ai`) untuk melakukan *PICO-Consistency Audit* untuk memastikan tidak ada paper melenceng yang lolos (*slipped-through*).
+    5. Terakhir, AI akan memprioritaskan semua paper `INCLUDE` menjadi tier HIGH/MEDIUM/LOW sebagai bekal Anda di Modul 6 nanti.
+    6. Semua hasil agregasi ini (*ExclusionTable* & *Modul5Summary*) akan ditanam secara permanen ke dalam koleksi dokumen sesi SLR Anda di MongoDB, lalu status dikunci menjadi `M5_DONE`. Silakan verifikasi wujud dokumen JSON tersebut melalui MongoDB Compass.
 
 6	Full-text Acquisition	-> pdfs/ + tracking
     LANGKAH 1: ACQUISITION STRATEGY + AUTO-DOWNLOAD + PRIORITY TRACKING
