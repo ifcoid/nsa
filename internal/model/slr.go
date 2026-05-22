@@ -7,8 +7,9 @@ type SuggestedTopic struct {
 	Gap        string `bson:"gap" json:"gap"`
 	Type       string `bson:"type" json:"type"` // A, B, atau C
 	TypeReason string `bson:"type_reason" json:"type_reason"`
-	Evidence   string `bson:"evidence" json:"evidence"` // DOI / URL
-	Importance string `bson:"importance" json:"importance"`
+	Evidence   string   `bson:"evidence" json:"evidence"` // DOI / URL
+	Importance string   `bson:"importance" json:"importance"`
+	References []string `bson:"references" json:"references"`
 }
 
 type PriorReview struct {

@@ -38,7 +38,8 @@ Keluarkan output HANYA dalam bentuk array JSON dengan struktur berikut:
     "type": "TIPE A / TIPE B / TIPE C",
     "type_reason": "Alasan mengapa masuk tipe ini",
     "evidence": "Contoh literatur/DOI/URL/fenomena terbaru",
-    "importance": "Mengapa topik ini krusial diteliti sekarang"
+    "importance": "Mengapa topik ini krusial diteliti sekarang",
+    "references": ["Daftar 2-3 judul literatur asli / URL hasil pencarian Search Grounding Anda"]
   }
 ]
 Pastikan mengembalikan tepat 3 saran topik berbeda. Output HANYA array JSON murni.`
