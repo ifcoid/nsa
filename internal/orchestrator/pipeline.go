@@ -90,13 +90,32 @@ func (p *SLRPipeline) Execute(ctx context.Context, sessionID string) error {
 func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 	go func() {
 		// Gunakan background context baru agar tidak ter-cancel saat request HTTP selesai
-		// Namun kita buat timeout yang cukup panjang untuk amannya
-		asyncCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second) // atau lebih lama
+		// Beri timeout panjang karena panggilan LLM bisa memakan waktu
+		asyncCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 
-		err := p.Execute(asyncCtx, sessionID)
-		if err != nil {
-			fmt.Printf("❌ [ExecuteAsync] Pipeline error untuk session %s: %v\n", sessionID, err)
+		for {
+			err := p.Execute(asyncCtx, sessionID)
+			if err != nil {
+				logger.Logf(sessionID, "❌ [ExecuteAsync] Pipeline error untuk session %s: %v\n", sessionID, err)
+				break
+			}
+
+			// Ambil state terbaru untuk mengecek apakah harus berhenti
+			session, err := p.mongoRepo.GetSession(asyncCtx, sessionID)
+			if err != nil {
+				break
+			}
+
+			// Berhenti looping jika butuh interaksi manusia atau sudah selesai
+			if strings.Contains(session.Status, "WAITING_APPROVAL") || 
+			   strings.Contains(session.Status, "NEEDS_REVISION") || 
+			   session.Status == "COMPLETED" {
+				break
+			}
+			
+			// Jeda singkat antar eksekusi untuk keamanan
+			time.Sleep(500 * time.Millisecond)
 		}
 	}()
 }
