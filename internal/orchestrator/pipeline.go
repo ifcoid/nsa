@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"nsa/internal/llm"
+	"nsa/internal/logger"
 	"nsa/internal/modules"
 	"nsa/internal/repository"
 )
@@ -60,10 +61,10 @@ func (p *SLRPipeline) Execute(ctx context.Context, sessionID string) error {
 		}
 	}
 
-	fmt.Printf("\n[Orchestrator] Memeriksa status sesi: %s\n", session.Status)
+	logger.Logf(sessionID, "\n[Orchestrator] Memeriksa status sesi: %s\n", session.Status)
 
 	if session.Status == "COMPLETED" {
-		fmt.Println("[Orchestrator] HORE! Seluruh pipeline SLR telah selesai (Manuskrip PRISMA siap).")
+		logger.Log(sessionID, "[Orchestrator] HORE! Seluruh pipeline SLR telah selesai (Manuskrip PRISMA siap).")
 		return nil
 	}
 
@@ -77,7 +78,7 @@ func (p *SLRPipeline) Execute(ctx context.Context, sessionID string) error {
 	}
 
 	if activeModule == nil {
-		fmt.Printf("[Orchestrator] Belum ada modul terdaftar yang bisa menangani status: %s\n", session.Status)
+		logger.Logf(sessionID, "[Orchestrator] Belum ada modul terdaftar yang bisa menangani status: %s\n", session.Status)
 		return nil
 	}
 

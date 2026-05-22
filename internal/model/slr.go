@@ -280,37 +280,37 @@ type DataMiningLog struct {
 }
 
 type SLRSession struct {
-	ID                  string               `bson:"_id,omitempty"`
-	Topic               string               `bson:"topic"`
-	SuggestedTopics     []SuggestedTopic     `bson:"suggested_topics,omitempty"`
-	SelectedTopic       *SuggestedTopic      `bson:"selected_topic,omitempty"`
-	PriorReviewsMatrix  *PriorReviewsMatrix  `bson:"prior_reviews_matrix,omitempty"`
-	PICODefinitions     *PICODefinitions     `bson:"pico_definitions,omitempty"`
-	ScopeFilters        *ScopeFilters        `bson:"scope_filters,omitempty"`
-	ScopeJustifications []ScopeJustification `bson:"scope_justifications,omitempty"`
-	ResearchQuestions   []ResearchQuestion   `bson:"research_questions,omitempty"`
-	FinerNoveltyCheck   *FinerNoveltyCheck   `bson:"finer_novelty_check,omitempty"`
-	Modul2Summary       *Modul2Summary       `bson:"modul2_summary,omitempty"`
-	DatabaseSelection   *DatabaseSelection   `bson:"database_selection,omitempty"`
-	Keywords            *KeywordsDevelopment `bson:"keywords,omitempty"`
-	SearchString        *SearchStringData    `bson:"search_string,omitempty"`
-	SearchLog           *SearchLog           `bson:"search_log,omitempty"`
-	Modul3Summary       *Modul3Summary       `bson:"modul3_summary,omitempty"`
-	DataMiningLog       *DataMiningLog       `bson:"data_mining_log,omitempty"`
-	ScreeningSetup        *ScreeningSetup        `bson:"screening_setup,omitempty"`
-	Modul4Summary         *Modul4Summary         `bson:"modul4_summary,omitempty"`
-	ScreenerBriefing      *ScreenerBriefing      `bson:"screener_briefing,omitempty"`
-	KalibrasiLog          []KalibrasiIteration   `bson:"kalibrasi_log,omitempty"`
-	Reviewer1Perspectives []ScreeningPerspective `bson:"reviewer1_perspectives,omitempty"`
-	Reviewer2Perspectives []ScreeningPerspective `bson:"reviewer2_perspectives,omitempty"`
-	ScreeningResultsLog   []ScreeningResultsLog  `bson:"screening_results_log,omitempty"`
-	ExclusionTable        *ExclusionTable        `bson:"exclusion_table,omitempty"`
-	Modul5Summary         *Modul5Summary         `bson:"modul5_summary,omitempty"`
-	InclusionCriteria     []string               `bson:"inclusion_criteria"`
-	ExclusionCriteria []string          `bson:"exclusion_criteria"`
-	Status            string            `bson:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
-	Feedback          string            `bson:"feedback"` // Catatan dari manusia jika butuh revisi
-	UpdatedAt         time.Time         `bson:"updated_at"`
+	ID                  string               `bson:"_id,omitempty" json:"id"`
+	Topic               string               `bson:"topic" json:"topic"`
+	SuggestedTopics     []SuggestedTopic     `bson:"suggested_topics,omitempty" json:"suggested_topics,omitempty"`
+	SelectedTopic       *SuggestedTopic      `bson:"selected_topic,omitempty" json:"selected_topic,omitempty"`
+	PriorReviewsMatrix  *PriorReviewsMatrix  `bson:"prior_reviews_matrix,omitempty" json:"prior_reviews_matrix,omitempty"`
+	PICODefinitions     *PICODefinitions     `bson:"pico_definitions,omitempty" json:"pico_definitions,omitempty"`
+	ScopeFilters        *ScopeFilters        `bson:"scope_filters,omitempty" json:"scope_filters,omitempty"`
+	ScopeJustifications []ScopeJustification `bson:"scope_justifications,omitempty" json:"scope_justifications,omitempty"`
+	ResearchQuestions   []ResearchQuestion   `bson:"research_questions,omitempty" json:"research_questions,omitempty"`
+	FinerNoveltyCheck   *FinerNoveltyCheck   `bson:"finer_novelty_check,omitempty" json:"finer_novelty_check,omitempty"`
+	Modul2Summary       *Modul2Summary       `bson:"modul2_summary,omitempty" json:"modul2_summary,omitempty"`
+	DatabaseSelection   *DatabaseSelection   `bson:"database_selection,omitempty" json:"database_selection,omitempty"`
+	Keywords            *KeywordsDevelopment `bson:"keywords,omitempty" json:"keywords,omitempty"`
+	SearchString        *SearchStringData    `bson:"search_string,omitempty" json:"search_string,omitempty"`
+	SearchLog           *SearchLog           `bson:"search_log,omitempty" json:"search_log,omitempty"`
+	Modul3Summary       *Modul3Summary       `bson:"modul3_summary,omitempty" json:"modul3_summary,omitempty"`
+	DataMiningLog       *DataMiningLog       `bson:"data_mining_log,omitempty" json:"data_mining_log,omitempty"`
+	ScreeningSetup        *ScreeningSetup        `bson:"screening_setup,omitempty" json:"screening_setup,omitempty"`
+	Modul4Summary         *Modul4Summary         `bson:"modul4_summary,omitempty" json:"modul4_summary,omitempty"`
+	ScreenerBriefing      *ScreenerBriefing      `bson:"screener_briefing,omitempty" json:"screener_briefing,omitempty"`
+	KalibrasiLog          []KalibrasiIteration   `bson:"kalibrasi_log,omitempty" json:"kalibrasi_log,omitempty"`
+	Reviewer1Perspectives []ScreeningPerspective `bson:"reviewer1_perspectives,omitempty" json:"reviewer1_perspectives,omitempty"`
+	Reviewer2Perspectives []ScreeningPerspective `bson:"reviewer2_perspectives,omitempty" json:"reviewer2_perspectives,omitempty"`
+	ScreeningResultsLog   []ScreeningResultsLog  `bson:"screening_results_log,omitempty" json:"screening_results_log,omitempty"`
+	ExclusionTable        *ExclusionTable        `bson:"exclusion_table,omitempty" json:"exclusion_table,omitempty"`
+	Modul5Summary         *Modul5Summary         `bson:"modul5_summary,omitempty" json:"modul5_summary,omitempty"`
+	InclusionCriteria     []string               `bson:"inclusion_criteria" json:"inclusion_criteria"`
+	ExclusionCriteria []string          `bson:"exclusion_criteria" json:"exclusion_criteria"`
+	Status            string            `bson:"status" json:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
+	Feedback          string            `bson:"feedback" json:"feedback"` // Catatan dari manusia jika butuh revisi
+	UpdatedAt         time.Time         `bson:"updated_at" json:"updated_at"`
 }
 
 type Paper struct {

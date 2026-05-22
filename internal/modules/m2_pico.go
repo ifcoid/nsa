@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"nsa/internal/agent"
+	"nsa/internal/logger"
 	"nsa/internal/model"
 )
 
@@ -21,7 +22,7 @@ func NewM2Pico(deps *ModuleDeps) *M2Pico {
 func (m *M2Pico) Name() string { return "M2_PICO" }
 
 func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
-	fmt.Printf(">> [MODUL 2: PICO] Memproses State: %s\n", session.Status)
+	logger.Logf(session.ID, ">> [MODUL 2: PICO] Memproses State: %s\n", session.Status)
 
 	switch session.Status {
 
@@ -29,7 +30,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// LANGKAH 1: TENTUKAN TOPIK + KLASIFIKASI TIPE GAP
 	// =========================================================================
 	case "M2_STEP1_TOPIC_GAP":
-		fmt.Println("   [Langkah 2.1] Menganalisis Topik Mentah & Mengklasifikasi tipe GAP...")
+		logger.Log(session.ID, "   [Langkah 2.1] Menganalisis Topik Mentah & Mengklasifikasi tipe GAP...")
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 
@@ -40,23 +41,15 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.SuggestedTopics = suggestions
 		session.Status = "M2_STEP1_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] DIJEDA. Menunggu Anda memilih 1 dari 3 topik yang disarankan.")
+		logger.Log(session.ID, "   [System] DIJEDA. Menunggu Anda memilih 1 dari 3 topik yang disarankan.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP1_WAITING_APPROVAL":
-		fmt.Println("   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
-		fmt.Println("   1. Buka array 'suggested_topics' pada document sesi riset Anda.")
-		fmt.Println("   2. Jika Anda SUKA salah satunya:")
-		fmt.Println("      a. Copy (salin) keseluruhan object/document dari topik pilihan Anda.")
-		fmt.Println("      b. Buat field baru bernama 'selected_topic' di root document, lalu Paste isinya di sana.")
-		fmt.Println("      c. Ubah 'status' menjadi 'M2_STEP1_APPROVED' lalu Update.")
-		fmt.Println("   3. Jika Anda TIDAK SUKA ketiganya:")
-		fmt.Println("      a. Ubah 'status' menjadi 'M2_STEP1_NEEDS_REVISION'.")
-		fmt.Println("      b. Isi field 'feedback' dengan instruksi Anda lalu Update.")
+		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan setujui di UI Frontend.")
 		return nil
 
 	case "M2_STEP1_NEEDS_REVISION":
-		fmt.Printf("   [Revisi 2.1] Mencari ulang saran Topik berdasarkan feedback: '%s'\n", session.Feedback)
+		logger.Logf(session.ID, "   [Revisi 2.1] Mencari ulang saran Topik berdasarkan feedback: '%s'\n", session.Feedback)
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 

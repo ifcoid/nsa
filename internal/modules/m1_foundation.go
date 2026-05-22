@@ -2,7 +2,7 @@ package modules
 
 import (
 	"context"
-	"fmt"
+	"nsa/internal/logger"
 	"nsa/internal/model"
 )
 
@@ -17,14 +17,14 @@ func NewM1Foundation(deps *ModuleDeps) *M1Foundation {
 func (m *M1Foundation) Name() string { return "M1_FOUNDATION" }
 
 func (m *M1Foundation) Execute(ctx context.Context, session *model.SLRSession) error {
-	fmt.Println(">> [MODUL 1: FONDASI TEORI] Memulai briefing agen terkait aturan PRISMA 2020...")
+	logger.Log(session.ID, ">> [MODUL 1: FONDASI TEORI] Memulai briefing agen terkait aturan PRISMA 2020...")
 	
 	// Simulasi eksekusi langkah 1.1 - 1.5
-	fmt.Println("   [Langkah 1.1] Pengenalan Systematic Literature Review...")
-	fmt.Println("   [Langkah 1.5] Menerapkan Aturan Global SLR + CoWork...")
+	logger.Log(session.ID, "   [Langkah 1.1] Pengenalan Systematic Literature Review...")
+	logger.Log(session.ID, "   [Langkah 1.5] Menerapkan Aturan Global SLR + CoWork...")
 
 	// Jika sukses, transisi langsung ke Modul 2
-	fmt.Println(">> [MODUL 1] Selesai. Transisi otomatis ke M2_STEP1_TOPIC_GAP.")
+	logger.Log(session.ID, ">> [MODUL 1] Selesai. Transisi otomatis ke M2_STEP1_TOPIC_GAP.")
 	session.Status = "M2_STEP1_TOPIC_GAP"
 	return m.deps.MongoRepo.UpdateSession(ctx, session)
 }
