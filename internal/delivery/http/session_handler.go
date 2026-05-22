@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"nsa/internal/model"
 	"nsa/internal/orchestrator"
@@ -107,15 +108,12 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 	// The client can pass data they want to update (e.g. selected_topic)
 	var updateData map[string]interface{}
 	if err := json.NewDecoder(req.Body).Decode(&updateData); err == nil {
-		// Manually patch the session based on what step we're approving
-		if session.Status == "M2_STEP1_WAITING_APPROVAL" {
+		if retry, ok := updateData["is_retry"].(bool); ok && retry {
+			// Jika ini retry dari error, kembalikan status dengan menghapus akhiran _ERROR
+			session.Status = strings.ReplaceAll(session.Status, "_ERROR", "")
+			session.Feedback = "" // Hapus log error sebelumnya
+		} else if session.Status == "M2_STEP1_WAITING_APPROVAL" {
 			if selected, ok := updateData["selected_topic"]; ok {
-				// We need to unmarshal to the right type or just keep it simple
-				// Since model.SLRSession is a struct, we should probably fetch and decode properly.
-				// For simplicity in this handler, we update the status, and save.
-				// In a real app, we'd map updateData to session fields.
-				
-				// A quick way for this is to re-encode and decode
 				b, _ := json.Marshal(selected)
 				var st model.SuggestedTopic
 				json.Unmarshal(b, &st)
@@ -135,7 +133,9 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 		}
 	} else {
 		// Default simple approve without body
-		session.Status = fmt.Sprintf("%s_APPROVED", session.Status[:len(session.Status)-17]) // removing _WAITING_APPROVAL
+		if strings.HasSuffix(session.Status, "_WAITING_APPROVAL") {
+			session.Status = session.Status[:len(session.Status)-17] + "_APPROVED"
+		}
 	}
 
 	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {

@@ -98,6 +98,19 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 			err := p.Execute(asyncCtx, sessionID)
 			if err != nil {
 				logger.Logf(sessionID, "❌ [ExecuteAsync] Pipeline error untuk session %s: %v\n", sessionID, err)
+				
+				// Set status ke ERROR agar UI frontend berhenti loading dan memunculkan tombol revisi/retry
+				session, getErr := p.mongoRepo.GetSession(asyncCtx, sessionID)
+				if getErr == nil {
+					// Tandai error di feedback
+					session.Feedback = fmt.Sprintf("System Error: %v", err)
+					
+					// Jika status belum memiliki _ERROR
+					if !strings.Contains(session.Status, "_ERROR") {
+						session.Status = session.Status + "_ERROR"
+						_ = p.mongoRepo.UpdateSession(asyncCtx, session)
+					}
+				}
 				break
 			}
 
