@@ -10,16 +10,18 @@ import (
 // bungkusan markdown (triple backticks) yang sering ikut keluar dari output LLM.
 // Fungsi ini diekspor (huruf kapital di awal) agar bisa dipakai oleh semua file di package agent.
 func CleanJSONResponse(rawResponse string) string {
-	cleanJSON := strings.TrimSpace(rawResponse)
+	// Temukan indeks karakter awal JSON (array '[' atau object '{')
+	startIdx := strings.IndexAny(rawResponse, "[{")
+	if startIdx == -1 {
+		return strings.TrimSpace(rawResponse) // Kembalikan apa adanya jika tidak ditemukan
+	}
 
-	// Bersihkan prefix markdown jika ada
-	cleanJSON = strings.TrimPrefix(cleanJSON, "```json")
-	cleanJSON = strings.TrimPrefix(cleanJSON, "```JSON") // Antisipasi jika LLM menulis huruf besar
-	cleanJSON = strings.TrimPrefix(cleanJSON, "```")
+	// Temukan indeks karakter akhir JSON (array ']' atau object '}')
+	endIdx := strings.LastIndexAny(rawResponse, "]}")
+	if endIdx == -1 || endIdx < startIdx {
+		return strings.TrimSpace(rawResponse)
+	}
 
-	// Bersihkan suffix markdown jika ada
-	cleanJSON = strings.TrimSuffix(cleanJSON, "```")
-
-	// Potong spasi/pindah baris yang tersisa di ujung-ujung string
-	return strings.TrimSpace(cleanJSON)
+	// Ekstrak hanya bagian JSON-nya saja, membuang semua teks pengantar/penutup
+	return rawResponse[startIdx : endIdx+1]
 }
