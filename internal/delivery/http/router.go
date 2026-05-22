@@ -57,6 +57,7 @@ func (r *Router) registerRoutes() {
 	
 	// LLM config endpoints
 	r.mux.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
+	r.mux.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
 }
 
 // Utility function to send JSON response

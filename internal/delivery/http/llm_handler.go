@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"nsa/internal/model"
@@ -70,5 +71,122 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 	sendJSONResponse(w, http.StatusOK, map[string]string{
 		"message": "LLM config updated successfully",
 		"provider": payload.Provider,
+	})
+}
+
+// FetchModels mengambil daftar model langsung dari API Vendor menggunakan API Key yang diberikan
+func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
+	provider := req.PathValue("id")
+	if provider == "" {
+		sendJSONError(w, http.StatusBadRequest, "Provider ID is required")
+		return
+	}
+
+	var payload struct {
+		APIKey  string `json:"api_key"`
+		BaseURL string `json:"base_url,omitempty"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	if payload.APIKey == "" && provider != "claude" {
+		sendJSONError(w, http.StatusBadRequest, "API Key is required to fetch models")
+		return
+	}
+
+	var models []string
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	switch provider {
+	case "gemini":
+		url := "https://generativelanguage.googleapis.com/v1beta/models?key=" + payload.APIKey
+		resp, err := client.Get(url)
+		if err != nil || resp.StatusCode != 200 {
+			sendJSONError(w, http.StatusInternalServerError, "Failed to fetch from Gemini API")
+			return
+		}
+		defer resp.Body.Close()
+
+		var res struct {
+			Models []struct {
+				Name string `json:"name"`
+			} `json:"models"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
+			for _, m := range res.Models {
+				// Format name is usually "models/gemini-1.5-pro", we extract the part after slash
+				parts := strings.Split(m.Name, "/")
+				if len(parts) > 1 {
+					models = append(models, parts[1])
+				} else {
+					models = append(models, m.Name)
+				}
+			}
+		}
+
+	case "claude":
+		url := "https://api.anthropic.com/v1/models"
+		httpReq, _ := http.NewRequest("GET", url, nil)
+		httpReq.Header.Set("x-api-key", payload.APIKey)
+		httpReq.Header.Set("anthropic-version", "2023-06-01")
+		
+		resp, err := client.Do(httpReq)
+		if err != nil || resp.StatusCode != 200 {
+			sendJSONError(w, http.StatusInternalServerError, "Failed to fetch from Anthropic API")
+			return
+		}
+		defer resp.Body.Close()
+
+		var res struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
+			for _, m := range res.Data {
+				models = append(models, m.ID)
+			}
+		}
+
+	default: // groq, zhipu (OpenAI compatible)
+		baseURL := payload.BaseURL
+		if baseURL == "" {
+			sendJSONError(w, http.StatusBadRequest, "Base URL is required for this provider")
+			return
+		}
+		
+		// Pastikan tidak berakhiran slash
+		baseURL = strings.TrimSuffix(baseURL, "/")
+		url := baseURL + "/models"
+		
+		httpReq, _ := http.NewRequest("GET", url, nil)
+		httpReq.Header.Set("Authorization", "Bearer "+payload.APIKey)
+		
+		resp, err := client.Do(httpReq)
+		if err != nil || resp.StatusCode != 200 {
+			sendJSONError(w, http.StatusInternalServerError, "Failed to fetch from OpenAI-compatible API")
+			return
+		}
+		defer resp.Body.Close()
+
+		var res struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
+			for _, m := range res.Data {
+				models = append(models, m.ID)
+			}
+		}
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"provider": provider,
+		"models":   models,
 	})
 }

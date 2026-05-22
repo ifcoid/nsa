@@ -42,15 +42,12 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, req *http.Request)
 	ctx := context.Background()
 
 	// Check if session exists
-	_, err := h.mongoRepo.GetSession(ctx, payload.ID)
+	existingSession, err := h.mongoRepo.GetSession(ctx, payload.ID)
 	if err == nil {
-		// If it exists, let's just reset it to INIT
-		session := &model.SLRSession{
-			ID:     payload.ID,
-			Topic:  payload.Topic,
-			Status: "INIT",
-		}
-		if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		// Jika sesi sudah ada, biarkan state-nya seperti semula (Resume)
+		// Tapi kita update topiknya jika ternyata user memasukkan topik baru
+		existingSession.Topic = payload.Topic
+		if err := h.mongoRepo.UpdateSession(ctx, existingSession); err != nil {
 			sendJSONError(w, http.StatusInternalServerError, "Failed to update session")
 			return
 		}
