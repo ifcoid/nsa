@@ -133,7 +133,7 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 		if retry, ok := updateData["is_retry"].(bool); ok && retry {
 			// Jika ini retry dari error, kembalikan status dengan menghapus akhiran _ERROR
 			session.Status = strings.ReplaceAll(session.Status, "_ERROR", "")
-			session.Feedback = "" // Hapus log error sebelumnya
+			session.SystemError = "" // Hapus log error sebelumnya (biarkan feedback tetap utuh)
 		} else if session.Status == "M2_STEP1_WAITING_APPROVAL" {
 			if selected, ok := updateData["selected_topic"]; ok {
 				b, _ := json.Marshal(selected)

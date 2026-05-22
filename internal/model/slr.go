@@ -311,6 +311,7 @@ type SLRSession struct {
 	ExclusionCriteria []string          `bson:"exclusion_criteria" json:"exclusion_criteria"`
 	Status            string            `bson:"status" json:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
 	Feedback          string            `bson:"feedback" json:"feedback"` // Catatan dari manusia jika butuh revisi
+	SystemError       string            `bson:"system_error" json:"system_error"` // Pesan error dari mesin/pipeline
 	UpdatedAt         time.Time         `bson:"updated_at" json:"updated_at"`
 }
 

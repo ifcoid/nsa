@@ -120,8 +120,8 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 				// Set status ke ERROR agar UI frontend berhenti loading dan memunculkan tombol revisi/retry
 				session, getErr := p.mongoRepo.GetSession(asyncCtx, sessionID)
 				if getErr == nil {
-					// Tandai error di feedback
-					session.Feedback = fmt.Sprintf("System Error: %v", err)
+					// Tandai error di system_error (biarkan feedback tetap utuh)
+					session.SystemError = fmt.Sprintf("System Error: %v", err)
 					
 					// Jika status belum memiliki _ERROR
 					if !strings.Contains(session.Status, "_ERROR") {
