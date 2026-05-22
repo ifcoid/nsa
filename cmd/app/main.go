@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/joho/godotenv"
 
+	httpapi "nsa/internal/delivery/http"
 	"nsa/internal/llm"
 	"nsa/internal/model"
 	"nsa/internal/orchestrator"
@@ -16,7 +18,7 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	fmt.Println("====================================================")
@@ -67,15 +69,25 @@ func main() {
 	// Kita perbarui pipeline agar menerima factory dinamis
 	pipeline := orchestrator.NewSLRPipeline(mongoRepo, llmFactory)
 
-	// 5. Jalankan Siklus State Machine
-	fmt.Printf("\n[Orchestrator] Mengeksekusi Pipeline untuk Sesi: %s...\n", sessionID)
-	err = pipeline.Execute(ctx, sessionID)
+	// 5. Inisialisasi HTTP Router
+	router := httpapi.NewRouter(mongoRepo, pipeline)
+
+	// 6. Jalankan Web Server
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	
+	fmt.Printf("🚀 Server berjalan di http://localhost:%s\n", port)
+	
+	// Server blocking
+	err = http.ListenAndServe(":"+port, router)
 	if err != nil {
-		log.Fatalf("❌ Pipeline mengalami error saat eksekusi: %v", err)
+		log.Fatalf("❌ Gagal menjalankan server: %v", err)
 	}
 
 	fmt.Println("\n====================================================")
-	fmt.Println("          PROSES ORCHESTRATOR SELESAI               ")
+	fmt.Println("          SERVER BERHENTI                           ")
 	fmt.Println("====================================================")
 }
 

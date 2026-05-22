@@ -1,0 +1,191 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Agentic SLR Orchestrator API",
+    "description": "API untuk mengelola sistem Systematic Literature Review berbasis agen Multi-LLM.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/api/sessions": {
+      "post": {
+        "summary": "Membuat atau me-reset sesi SLR baru.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "example": "bci_2026"
+                  },
+                  "topic": {
+                    "type": "string",
+                    "example": "Penggunaan Active Learning untuk EEG BCI"
+                  }
+                },
+                "required": ["id", "topic"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sesi berhasil dibuat dan pipeline agen mulai berjalan di background."
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}": {
+      "get": {
+        "summary": "Mendapatkan status dan data sesi SLR.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil mengambil data sesi.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/approve": {
+      "put": {
+        "summary": "Menyetujui langkah saat ini dan memicu agen untuk lanjut ke langkah berikutnya.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Payload opsional untuk meng-update field tertentu seperti selected_topic."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Langkah disetujui, pipeline berlanjut."
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/revise": {
+      "put": {
+        "summary": "Meminta revisi pada langkah saat ini.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "feedback": {
+                    "type": "string",
+                    "example": "Tolong gunakan referensi yang lebih baru dari tahun 2024."
+                  }
+                },
+                "required": ["feedback"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Revisi dicatat, agen mengulang pekerjaannya."
+          }
+        }
+      }
+    },
+    "/api/llm/config": {
+      "put": {
+        "summary": "Memperbarui konfigurasi API Key Provider (Gemini, Groq, dll).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "example": "gemini"
+                  },
+                  "api_key": {
+                    "type": "string",
+                    "example": "AIzaSy..."
+                  },
+                  "default_model": {
+                    "type": "string",
+                    "example": "gemini-2.5-flash"
+                  },
+                  "base_url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["provider", "api_key"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Konfigurasi berhasil disimpan di MongoDB."
+          }
+        }
+      }
+    }
+  }
+}

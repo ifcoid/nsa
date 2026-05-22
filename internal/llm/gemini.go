@@ -44,9 +44,14 @@ func (g *GeminiClient) Generate(ctx context.Context, systemPrompt, userPrompt st
 		return "", fmt.Errorf("gemini tidak mengembalikan kandidat jawaban")
 	}
 
+	candidate := res.Candidates[0]
+	if candidate.Content == nil {
+		return "", fmt.Errorf("gemini tidak mengembalikan content (finish reason: %s)", candidate.FinishReason)
+	}
+
 	// Gabungkan semua part teks dari response
 	var output strings.Builder
-	for _, part := range res.Candidates[0].Content.Parts {
+	for _, part := range candidate.Content.Parts {
 		output.WriteString(part.Text)
 	}
 

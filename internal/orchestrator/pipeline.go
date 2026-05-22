@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"nsa/internal/llm"
 	"nsa/internal/modules"
@@ -83,3 +84,19 @@ func (p *SLRPipeline) Execute(ctx context.Context, sessionID string) error {
 	// 4. Eksekusi Modul Terpilih
 	return activeModule.Execute(ctx, session)
 }
+
+// ExecuteAsync menjalankan pipeline di goroutine terpisah
+func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
+	go func() {
+		// Gunakan background context baru agar tidak ter-cancel saat request HTTP selesai
+		// Namun kita buat timeout yang cukup panjang untuk amannya
+		asyncCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second) // atau lebih lama
+		defer cancel()
+
+		err := p.Execute(asyncCtx, sessionID)
+		if err != nil {
+			fmt.Printf("❌ [ExecuteAsync] Pipeline error untuk session %s: %v\n", sessionID, err)
+		}
+	}()
+}
+
