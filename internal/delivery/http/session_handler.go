@@ -90,6 +90,28 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, req *http.Request) {
 	sendJSONResponse(w, http.StatusOK, session)
 }
 
+func (h *SessionHandler) ResumeSession(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	_, err := h.mongoRepo.GetSession(context.Background(), id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Trigger pipeline asynchronously (will be ignored if already running)
+	h.pipeline.ExecuteAsync(context.Background(), id)
+
+	sendJSONResponse(w, http.StatusOK, map[string]string{
+		"message": "Session resume triggered",
+		"id":      id,
+	})
+}
+
 func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {

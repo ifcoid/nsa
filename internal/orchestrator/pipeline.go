@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"nsa/internal/llm"
@@ -13,9 +14,11 @@ import (
 )
 
 type SLRPipeline struct {
-	mongoRepo  *repository.MongoRepository
-	llmFactory *llm.LLMFactory
-	registry   map[string]modules.Module
+	mongoRepo     *repository.MongoRepository
+	llmFactory    *llm.LLMFactory
+	registry      map[string]modules.Module
+	activeWorkers map[string]bool
+	mu            sync.Mutex
 }
 
 func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory) *SLRPipeline {
@@ -39,9 +42,10 @@ func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory) 
 	}
 
 	return &SLRPipeline{
-		mongoRepo:  mongo,
-		llmFactory: factory,
-		registry:   registry,
+		mongoRepo:     mongo,
+		llmFactory:    factory,
+		registry:      registry,
+		activeWorkers: make(map[string]bool),
 	}
 }
 
@@ -88,11 +92,25 @@ func (p *SLRPipeline) Execute(ctx context.Context, sessionID string) error {
 
 // ExecuteAsync menjalankan pipeline di goroutine terpisah
 func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
+	p.mu.Lock()
+	if p.activeWorkers[sessionID] {
+		p.mu.Unlock()
+		return // Worker sudah berjalan
+	}
+	p.activeWorkers[sessionID] = true
+	p.mu.Unlock()
+
 	go func() {
 		// Gunakan background context baru agar tidak ter-cancel saat request HTTP selesai
 		// Beri timeout panjang karena panggilan LLM bisa memakan waktu
 		asyncCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
+		
+		defer func() {
+			cancel()
+			p.mu.Lock()
+			delete(p.activeWorkers, sessionID)
+			p.mu.Unlock()
+		}()
 
 		for {
 			err := p.Execute(asyncCtx, sessionID)
