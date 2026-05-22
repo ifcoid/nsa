@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"time"
 	"nsa/internal/agent"
+	"nsa/internal/logger"
 	"nsa/internal/model"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -19,7 +20,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 	// LANGKAH 1: SCREENER BRIEFING
 	// =========================================================================
 	case "M5_INIT", "M5_STEP1_BRIEFING":
-		fmt.Println("   [Langkah 5.1] Mengevaluasi kriteria & menyusun Screener Briefing...")
+		logger.Log(session.ID, "   [Langkah 5.1] Mengevaluasi kriteria & menyusun Screener Briefing...")
 
 		if session.ScreeningSetup == nil {
 			return fmt.Errorf("[ERROR] ScreeningSetup belum disiapkan. Pastikan Modul 4 Langkah 3 telah selesai.")
@@ -38,41 +39,41 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		session.ScreenerBriefing = briefing
 		session.Status = "M5_STEP1_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] Screener Briefing berhasil di-generate. DIJEDA.")
+		logger.Log(session.ID, "   [System] Screener Briefing berhasil di-generate. DIJEDA.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M5_STEP1_WAITING_APPROVAL":
-		fmt.Println("   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
-		fmt.Println("   1. Periksa dokumen 'screener_briefing'.")
-		fmt.Println("   2. Baca 'validation_gap' dan 'briefing_doc'.")
-		fmt.Println("   3a. Jika 'decision' merekomendasikan 'REVISE_M2', ubah status ke 'M5_STEP1_NEEDS_REVISION'.")
-		fmt.Println("   3b. Jika Anda setuju untuk lanjut, ubah status ke 'M5_STEP1_APPROVED'.")
+		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   1. Periksa dokumen 'screener_briefing'.")
+		logger.Log(session.ID, "   2. Baca 'validation_gap' dan 'briefing_doc'.")
+		logger.Log(session.ID, "   3a. Jika 'decision' merekomendasikan 'REVISE_M2', ubah status ke 'M5_STEP1_NEEDS_REVISION'.")
+		logger.Log(session.ID, "   3b. Jika Anda setuju untuk lanjut, ubah status ke 'M5_STEP1_APPROVED'.")
 		return nil
 
 	case "M5_STEP1_NEEDS_REVISION":
-		fmt.Println("   [System] Kriteria tidak memadai. Mengembalikan riset ke Modul 2 Langkah 3 (PICO Definitions).")
+		logger.Log(session.ID, "   [System] Kriteria tidak memadai. Mengembalikan riset ke Modul 2 Langkah 3 (PICO Definitions).")
 		session.Status = "M2_STEP3_NEEDS_REVISION" 
 		session.Feedback = fmt.Sprintf("Revisi Kriteria PICO dari Modul 5: %s", session.ScreenerBriefing.Recommendation)
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M5_STEP1_APPROVED":
-		fmt.Println("   [Langkah 5.1] Screener Briefing disetujui! Lanjut ke Kalibrasi Dual-Review...")
+		logger.Log(session.ID, "   [Langkah 5.1] Screener Briefing disetujui! Lanjut ke Kalibrasi Dual-Review...")
 		session.Status = "M5_STEP2_CALIBRATION"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M5_STEP2_CALIBRATION":
-		fmt.Println("   [Langkah 5.2] Menjalankan Kalibrasi Dual-Review (20 Sample) dengan API Z-AI GLM & Groq...")
+		logger.Log(session.ID, "   [Langkah 5.2] Menjalankan Kalibrasi Dual-Review (20 Sample) dengan API Z-AI GLM & Groq...")
 
 		// Inisialisasi LLM 
 		// (Fallback ke gemini jika z-ai atau groq tidak ada di DB, tapi kita coba panggil ID tersebut)
 		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "z-ai")
 		if err != nil { 
-			fmt.Printf("   [WARNING] LLM z-ai gagal dimuat (%v). Fallback ke gemini.\n", err)
+			logger.Logf(session.ID, "   [WARNING] LLM z-ai gagal dimuat (%v). Fallback ke gemini.\n", err)
 			llmR1, _ = m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		}
 		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
 		if err != nil { 
-			fmt.Printf("   [WARNING] LLM groq gagal dimuat (%v). Fallback ke gemini.\n", err)
+			logger.Logf(session.ID, "   [WARNING] LLM groq gagal dimuat (%v). Fallback ke gemini.\n", err)
 			llmR2, _ = m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		}
 
@@ -86,11 +87,11 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 		papers, err := m.deps.MongoRepo.GetRandomScreeningPapers(ctx, session.ID, 20)
 		if err != nil || len(papers) == 0 {
-			fmt.Println("   [ERROR] Gagal mengambil 20 sampel atau collection kosong.")
+			logger.Log(session.ID, "   [ERROR] Gagal mengambil 20 sampel atau collection kosong.")
 			return err
 		}
 
-		fmt.Printf("   [System] Berhasil mengambil %d sampel. Memulai review paralel...\n", len(papers))
+		logger.Logf(session.ID, "   [System] Berhasil mengambil %d sampel. Memulai review paralel...\n", len(papers))
 
 		var agreeCount, total int
 		var pO, pE, kappa float64
@@ -98,7 +99,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		var bothInclude, bothExclude, r1IncR2Exc, r1ExcR2Inc int
 
 		for i, p := range papers {
-			fmt.Printf("      -> Reviewing sampel %d/%d...\n", i+1, len(papers))
+			logger.Logf(session.ID, "      -> Reviewing sampel %d/%d...\n", i+1, len(papers))
 			
 			title := ""
 			if val, ok := p["Title"].(string); ok { title = val }
@@ -169,33 +170,33 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		}
 		session.KalibrasiLog = append(session.KalibrasiLog, logEntry)
 
-		fmt.Printf("   [Hasil Kalibrasi] Iterasi %d: Agreement %.1f%% | Kappa: %.3f\n", iter, logEntry.AgreementPct, kappa)
+		logger.Logf(session.ID, "   [Hasil Kalibrasi] Iterasi %d: Agreement %.1f%% | Kappa: %.3f\n", iter, logEntry.AgreementPct, kappa)
 
 		if passed {
-			fmt.Println("   [System] KAPPA >= 0.60 (PASSED). Kalibrasi berhasil!")
+			logger.Log(session.ID, "   [System] KAPPA >= 0.60 (PASSED). Kalibrasi berhasil!")
 			session.Status = "M5_STEP2_APPROVED"
 		} else {
-			fmt.Println("   [System] KAPPA < 0.60 (FAILED). Membutuhkan analisis Root-Cause.")
+			logger.Log(session.ID, "   [System] KAPPA < 0.60 (FAILED). Membutuhkan analisis Root-Cause.")
 			session.Status = "M5_STEP2_WAITING_APPROVAL"
 		}
 
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M5_STEP2_WAITING_APPROVAL":
-		fmt.Println("   [System] Kalibrasi GAGAL (Kappa < 0.60). Silakan buka MongoDB Compass:")
-		fmt.Println("   1. Buka collection 'slr_screening', filter data dengan 'Agreement: DISAGREE'.")
-		fmt.Println("   2. Lakukan Root-Cause Analysis (lihat notes dari AI).")
-		fmt.Println("   3. Jika kriteria salah, perbaiki 'screener_briefing' Anda.")
-		fmt.Println("   4. Ubah status kembali ke 'M5_STEP2_CALIBRATION' untuk me-rerun kalibrasi 20 sample baru.")
+		logger.Log(session.ID, "   [System] Kalibrasi GAGAL (Kappa < 0.60). Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   1. Buka collection 'slr_screening', filter data dengan 'Agreement: DISAGREE'.")
+		logger.Log(session.ID, "   2. Lakukan Root-Cause Analysis (lihat notes dari AI).")
+		logger.Log(session.ID, "   3. Jika kriteria salah, perbaiki 'screener_briefing' Anda.")
+		logger.Log(session.ID, "   4. Ubah status kembali ke 'M5_STEP2_CALIBRATION' untuk me-rerun kalibrasi 20 sample baru.")
 		return nil
 
 	case "M5_STEP2_APPROVED":
-		fmt.Println("   [Langkah 5.2] Kalibrasi disetujui! Lanjut ke Batch Screening Massal...")
+		logger.Log(session.ID, "   [Langkah 5.2] Kalibrasi disetujui! Lanjut ke Batch Screening Massal...")
 		session.Status = "M5_STEP3_BATCH_SCREENING"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M5_STEP3_BATCH_SCREENING":
-		fmt.Println("   [Langkah 5.3] Memulai Batch Screening Massal (Max 20 per batch)...")
+		logger.Log(session.ID, "   [Langkah 5.3] Memulai Batch Screening Massal (Max 20 per batch)...")
 
 		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "z-ai")
 		if err != nil { llmR1, _ = m.deps.LLMFactory.CreateClient(ctx, "gemini") }
@@ -215,17 +216,17 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			return fmt.Errorf("gagal mengambil unscreened papers: %w", err)
 		}
 		if len(papers) == 0 {
-			fmt.Println("   [System] Semua paper telah di-screening! Lanjut ke Langkah 4.")
+			logger.Log(session.ID, "   [System] Semua paper telah di-screening! Lanjut ke Langkah 4.")
 			session.Status = "M5_STEP4_REVIEW_HASIL"
 			return m.deps.MongoRepo.UpdateSession(ctx, session)
 		}
 
-		fmt.Printf("   [System] Memproses %d papers untuk batch ini...\n", len(papers))
+		logger.Logf(session.ID, "   [System] Memproses %d papers untuk batch ini...\n", len(papers))
 
 		var agreeCount, bothInclude, bothExclude, r1IncR2Exc, r1ExcR2Inc, total int
 
 		for i, p := range papers {
-			fmt.Printf("      -> Screening [%d/%d] ID: %v\n", i+1, len(papers), p["_id"])
+			logger.Logf(session.ID, "      -> Screening [%d/%d] ID: %v\n", i+1, len(papers), p["_id"])
 			
 			title := ""
 			if val, ok := p["Title"].(string); ok { title = val }
@@ -263,7 +264,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 			conflictRes := ""
 			if agreement == "DISAGREE" || res1.Recommend == "UNCERTAIN" || res2.Recommend == "UNCERTAIN" {
-				fmt.Printf("      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor...\n")
+				logger.Logf(session.ID, "      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor...\n")
 				// Kita pinjam scAgent1 (z-ai/gemini) sebagai supervisor
 				advice, err := scAgent1.AnalyzeDisagreement(ctx, briefingDoc, title, abs, notes1, notes2)
 				if err == nil && advice != nil {
@@ -316,24 +317,24 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		}
 		session.ScreeningResultsLog = append(session.ScreeningResultsLog, logEntry)
 
-		fmt.Printf("   [Batch Result] Batch %d | Processed: %d | Kappa: %.3f | Disagreements: %d\n", batchNum, total, kappa, logEntry.DisagreementCases)
+		logger.Logf(session.ID, "   [Batch Result] Batch %d | Processed: %d | Kappa: %.3f | Disagreements: %d\n", batchNum, total, kappa, logEntry.DisagreementCases)
 
 		if drift {
-			fmt.Println("   [WARNING] Drift interpretasi terdeteksi (Kappa < 0.60)! Wajib resolusi.")
+			logger.Log(session.ID, "   [WARNING] Drift interpretasi terdeteksi (Kappa < 0.60)! Wajib resolusi.")
 		}
 		session.Status = "M5_STEP3_WAITING_RESOLUTION"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M5_STEP3_WAITING_RESOLUTION":
-		fmt.Println("   [System] Sesi dijeda untuk evaluasi batch (HitL).")
-		fmt.Println("   1. Buka Compass -> 'slr_screening'. Filter 'Agreement: DISAGREE' atau 'UNCERTAIN'.")
-		fmt.Println("   2. Lakukan diskusi dan perbarui 'Conflict_Resolution' serta 'Final_Decision' di record terkait.")
-		fmt.Println("   3. Jika ingin lanjut batch berikutnya, set status ke 'M5_STEP3_BATCH_SCREENING'.")
-		fmt.Println("   4. Jika sudah habis, set status ke 'M5_STEP4_REVIEW_HASIL'.")
+		logger.Log(session.ID, "   [System] Sesi dijeda untuk evaluasi batch (HitL).")
+		logger.Log(session.ID, "   1. Buka Compass -> 'slr_screening'. Filter 'Agreement: DISAGREE' atau 'UNCERTAIN'.")
+		logger.Log(session.ID, "   2. Lakukan diskusi dan perbarui 'Conflict_Resolution' serta 'Final_Decision' di record terkait.")
+		logger.Log(session.ID, "   3. Jika ingin lanjut batch berikutnya, set status ke 'M5_STEP3_BATCH_SCREENING'.")
+		logger.Log(session.ID, "   4. Jika sudah habis, set status ke 'M5_STEP4_REVIEW_HASIL'.")
 		return nil
 
 	case "M5_STEP4_REVIEW_HASIL":
-		fmt.Println("   [Langkah 5.4] Menyusun Exclusion Table dan Modul 5 Summary...")
+		logger.Log(session.ID, "   [Langkah 5.4] Menyusun Exclusion Table dan Modul 5 Summary...")
 
 		papers, err := m.deps.MongoRepo.GetAllScreeningPapers(ctx, session.ID)
 		if err != nil { return fmt.Errorf("gagal get all papers: %w", err) }
@@ -413,7 +414,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		// 4. PICO AUDIT (10% Random INCLUDE)
 		picoAuditText := "Audit dilewati (Tidak ada paper INCLUDE)"
 		if len(included) > 0 {
-			fmt.Println("      -> Menjalankan PICO-Consistency Audit (10% Sample)...")
+			logger.Log(session.ID, "      -> Menjalankan PICO-Consistency Audit (10% Sample)...")
 			sampleSize := len(included) / 10
 			if sampleSize < 1 { sampleSize = 1 }
 			if sampleSize > 10 { sampleSize = 10 } // limit token
@@ -440,7 +441,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		// 5. FULL-TEXT PRIORITIZATION
 		fullTextPrep := "Tidak ada paper untuk diprioritaskan."
 		if len(included) > 0 {
-			fmt.Println("      -> Menjalankan Full-Text Prioritization...")
+			logger.Log(session.ID, "      -> Menjalankan Full-Text Prioritization...")
 			// Batasi jumlah yang dikirim ke LLM jika terlalu banyak (max 50)
 			limit := len(included)
 			if limit > 50 { limit = 50 }
@@ -471,13 +472,13 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		session.Modul5Summary = &model.Modul5Summary{Markdown: summaryMd}
 
 		session.Status = "M5_DONE"
-		fmt.Println("   [System] Exclusion Table & Modul 5 Summary berhasil di-generate!")
-		fmt.Println("   [System] Modul 5 SELESAI. Anda siap melangkah ke Modul 6 (Full-Text Acquisition).")
+		logger.Log(session.ID, "   [System] Exclusion Table & Modul 5 Summary berhasil di-generate!")
+		logger.Log(session.ID, "   [System] Modul 5 SELESAI. Anda siap melangkah ke Modul 6 (Full-Text Acquisition).")
 
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	default:
-		fmt.Printf("   [Modul 5] Sub-status %s tidak dikenali atau belum diimplementasikan.\n", session.Status)
+		logger.Logf(session.ID, "   [Modul 5] Sub-status %s tidak dikenali atau belum diimplementasikan.\n", session.Status)
 	}
 	return nil
 }

@@ -63,16 +63,16 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.Feedback = ""
 		session.Status = "M2_STEP1_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] 3 Topik Baru berhasil disarankan. DIJEDA kembali menunggu persetujuan manusia.")
+		logger.Log(session.ID, "   [System] 3 Topik Baru berhasil disarankan. DIJEDA kembali menunggu persetujuan manusia.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP1_APPROVED":
 		if session.SelectedTopic == nil {
-			fmt.Println("   [System] ERROR: Field 'selected_topic' belum ditemukan di MongoDB. Silakan isi terlebih dahulu.")
+			logger.Log(session.ID, "   [System] ERROR: Field 'selected_topic' belum ditemukan di MongoDB. Silakan isi terlebih dahulu.")
 			return nil
 		}
 		
-		fmt.Printf("   [Langkah 2.1] Topik '%s' (Tipe GAP: %s) telah disetujui. Melanjutkan ke Analisis Prior Reviews...\n", session.SelectedTopic.Name, session.SelectedTopic.Type)
+		logger.Logf(session.ID, "   [Langkah 2.1] Topik '%s' (Tipe GAP: %s) telah disetujui. Melanjutkan ke Analisis Prior Reviews...\n", session.SelectedTopic.Name, session.SelectedTopic.Type)
 		
 		// Sinkronisasi field topic lama agar rapi
 		session.Topic = session.SelectedTopic.Name
@@ -83,9 +83,9 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// LANGKAH 2: REVIEW OF PRIOR REVIEWS (MATRIKS)
 	// =========================================================================
 	case "M2_STEP2_PRIOR_REVIEWS":
-		fmt.Println("   [Langkah 2.2] Menganalisis literatur review terdahulu (Matriks)...")
+		logger.Log(session.ID, "   [Langkah 2.2] Menganalisis literatur review terdahulu (Matriks)...")
 		if session.SelectedTopic == nil {
-			fmt.Println("   [System] ERROR: Field 'selected_topic' kosong. Anda tidak bisa melanjutkan ke Langkah 2 tanpa Topik.")
+			logger.Log(session.ID, "   [System] ERROR: Field 'selected_topic' kosong. Anda tidak bisa melanjutkan ke Langkah 2 tanpa Topik.")
 			return nil
 		}
 
@@ -103,19 +103,19 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.PriorReviewsMatrix = matrix
 		session.Status = "M2_STEP2_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] Matriks Prior Reviews berhasil disusun. DIJEDA menunggu persetujuan manusia.")
+		logger.Log(session.ID, "   [System] Matriks Prior Reviews berhasil disusun. DIJEDA menunggu persetujuan manusia.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP2_WAITING_APPROVAL":
-		fmt.Println("   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
-		fmt.Println("   1. Lihat document sesi Anda, buka field 'prior_reviews_matrix'.")
-		fmt.Println("   2. Verifikasi tabel 'reviews' dan 'synthesis_novelty'.")
-		fmt.Println("   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M2_STEP2_APPROVED' lalu Update.")
-		fmt.Println("   3b. Jika TIDAK sesuai, ubah 'status' menjadi 'M2_STEP2_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback' lalu Update.")
+		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   1. Lihat document sesi Anda, buka field 'prior_reviews_matrix'.")
+		logger.Log(session.ID, "   2. Verifikasi tabel 'reviews' dan 'synthesis_novelty'.")
+		logger.Log(session.ID, "   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M2_STEP2_APPROVED' lalu Update.")
+		logger.Log(session.ID, "   3b. Jika TIDAK sesuai, ubah 'status' menjadi 'M2_STEP2_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback' lalu Update.")
 		return nil
 
 	case "M2_STEP2_NEEDS_REVISION":
-		fmt.Printf("   [Revisi 2.2] Memperbaiki Matriks Prior Reviews berdasarkan feedback: '%s'\n", session.Feedback)
+		logger.Logf(session.ID, "   [Revisi 2.2] Memperbaiki Matriks Prior Reviews berdasarkan feedback: '%s'\n", session.Feedback)
 		if session.SelectedTopic == nil {
 			return fmt.Errorf("selected_topic kosong")
 		}
@@ -135,11 +135,11 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.Feedback = "" // Bersihkan feedback setelah direvisi
 		session.Status = "M2_STEP2_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] Matriks Prior Reviews berhasil direvisi. DIJEDA kembali menunggu persetujuan manusia.")
+		logger.Log(session.ID, "   [System] Matriks Prior Reviews berhasil direvisi. DIJEDA kembali menunggu persetujuan manusia.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP2_APPROVED":
-		fmt.Println("   [Langkah 2.2] Matriks Prior Reviews disetujui! Lanjut ke penyusunan PICO...")
+		logger.Log(session.ID, "   [Langkah 2.2] Matriks Prior Reviews disetujui! Lanjut ke penyusunan PICO...")
 		session.Status = "M2_STEP3_PICO"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
@@ -147,7 +147,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// LANGKAH 3: PICO FRAMEWORK + OPERATIONAL DEFINITIONS + TERMINOLOGI KANONIKAL
 	// =========================================================================
 	case "M2_STEP3_PICO":
-		fmt.Println("   [Langkah 2.3] Menyusun PICO Framework 3-Lapis...")
+		logger.Log(session.ID, "   [Langkah 2.3] Menyusun PICO Framework 3-Lapis...")
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 
@@ -172,19 +172,19 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.PICODefinitions = picoResult
 		session.Status = "M2_STEP3_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] PICO 3-Lapis berhasil disusun. DIJEDA menunggu persetujuan manusia.")
+		logger.Log(session.ID, "   [System] PICO 3-Lapis berhasil disusun. DIJEDA menunggu persetujuan manusia.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP3_WAITING_APPROVAL":
-		fmt.Println("   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
-		fmt.Println("   1. Lihat document sesi Anda, buka field 'pico_definitions'.")
-		fmt.Println("   2. Verifikasi 3 lapisan PICO (Operational Definitions & Canonical Term).")
-		fmt.Println("   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M2_STEP3_APPROVED' lalu Update.")
-		fmt.Println("   3b. Jika TIDAK sesuai, ubah 'status' menjadi 'M2_STEP3_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback' lalu Update.")
+		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   1. Lihat document sesi Anda, buka field 'pico_definitions'.")
+		logger.Log(session.ID, "   2. Verifikasi 3 lapisan PICO (Operational Definitions & Canonical Term).")
+		logger.Log(session.ID, "   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M2_STEP3_APPROVED' lalu Update.")
+		logger.Log(session.ID, "   3b. Jika TIDAK sesuai, ubah 'status' menjadi 'M2_STEP3_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback' lalu Update.")
 		return nil
 
 	case "M2_STEP3_NEEDS_REVISION":
-		fmt.Printf("   [Revisi 2.3] Memperbaiki PICO berdasarkan feedback: '%s'\n", session.Feedback)
+		logger.Logf(session.ID, "   [Revisi 2.3] Memperbaiki PICO berdasarkan feedback: '%s'\n", session.Feedback)
 
 		topicContext := session.Topic
 		if session.SelectedTopic != nil {
@@ -210,11 +210,11 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.Feedback = ""
 		session.Status = "M2_STEP3_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] PICO 3-Lapis berhasil direvisi. DIJEDA kembali menunggu persetujuan manusia.")
+		logger.Log(session.ID, "   [System] PICO 3-Lapis berhasil direvisi. DIJEDA kembali menunggu persetujuan manusia.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP3_APPROVED":
-		fmt.Println("   [Langkah 2.3] PICO 3-Lapis disetujui! Menyiapkan template Batasan/Filter untuk pra-Langkah 4...")
+		logger.Log(session.ID, "   [Langkah 2.3] PICO 3-Lapis disetujui! Menyiapkan template Batasan/Filter untuk pra-Langkah 4...")
 		
 		// Inisialisasi template kosong untuk diisi user
 		session.ScopeFilters = &model.ScopeFilters{
@@ -228,18 +228,18 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP3_5_WAITING_FILTERS":
-		fmt.Println("   [System] Sesi dikunci. Anda WAJIB melengkapi parameter filter dasar riset!")
-		fmt.Println("   Silakan buka MongoDB Compass:")
-		fmt.Println("   1. Buka document sesi Anda, cari object 'scope_filters'.")
-		fmt.Println("   2. Ganti semua teks '[ISI DI SINI...]' dengan parameter riset Anda.")
-		fmt.Println("   3. Ubah 'status' menjadi 'M2_STEP3_5_FILTERS_PROVIDED' lalu Update.")
+		logger.Log(session.ID, "   [System] Sesi dikunci. Anda WAJIB melengkapi parameter filter dasar riset!")
+		logger.Log(session.ID, "   Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   1. Buka document sesi Anda, cari object 'scope_filters'.")
+		logger.Log(session.ID, "   2. Ganti semua teks '[ISI DI SINI...]' dengan parameter riset Anda.")
+		logger.Log(session.ID, "   3. Ubah 'status' menjadi 'M2_STEP3_5_FILTERS_PROVIDED' lalu Update.")
 		return nil
 
 	case "M2_STEP3_5_FILTERS_PROVIDED":
 		// Validasi isian user
 		if session.ScopeFilters == nil {
 			session.Status = "M2_STEP3_5_WAITING_FILTERS"
-			fmt.Println("   [Error] Object 'scope_filters' tidak ditemukan. Mengembalikan status untuk diisi.")
+			logger.Log(session.ID, "   [Error] Object 'scope_filters' tidak ditemukan. Mengembalikan status untuk diisi.")
 			return m.deps.MongoRepo.UpdateSession(ctx, session)
 		}
 
@@ -248,12 +248,12 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		   strings.Contains(f.Sektor, "[ISI DI SINI") || strings.Contains(f.Bahasa, "[ISI DI SINI") {
 			
 			session.Status = "M2_STEP3_5_WAITING_FILTERS"
-			fmt.Println("   [Error] Masih ada isian filter yang menggunakan placeholder default '[ISI DI SINI...]'.")
-			fmt.Println("   [System] Sistem tidak bisa lanjut. Mohon isi data dengan lengkap lalu set status ke M2_STEP3_5_FILTERS_PROVIDED lagi.")
+			logger.Log(session.ID, "   [Error] Masih ada isian filter yang menggunakan placeholder default '[ISI DI SINI...]'.")
+			logger.Log(session.ID, "   [System] Sistem tidak bisa lanjut. Mohon isi data dengan lengkap lalu set status ke M2_STEP3_5_FILTERS_PROVIDED lagi.")
 			return m.deps.MongoRepo.UpdateSession(ctx, session)
 		}
 
-		fmt.Println("   [Validasi] Batasan/Filter berhasil divalidasi sistem! Lanjut menyusun Kriteria Scope (Langkah 4)...")
+		logger.Log(session.ID, "   [Validasi] Batasan/Filter berhasil divalidasi sistem! Lanjut menyusun Kriteria Scope (Langkah 4)...")
 		session.Status = "M2_STEP4_SCOPE"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
@@ -261,7 +261,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// LANGKAH 4: JUSTIFIKASI BATASAN SCOPE (3-LAPIS)
 	// =========================================================================
 	case "M2_STEP4_SCOPE":
-		fmt.Println("   [Langkah 2.4] Merumuskan Justifikasi Batasan Scope 3-Lapis...")
+		logger.Log(session.ID, "   [Langkah 2.4] Merumuskan Justifikasi Batasan Scope 3-Lapis...")
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 
@@ -275,19 +275,19 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.ScopeJustifications = justifications
 		session.Status = "M2_STEP4_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] Justifikasi Batasan Scope berhasil disusun. DIJEDA menunggu persetujuan manusia.")
+		logger.Log(session.ID, "   [System] Justifikasi Batasan Scope berhasil disusun. DIJEDA menunggu persetujuan manusia.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP4_WAITING_APPROVAL":
-		fmt.Println("   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
-		fmt.Println("   1. Lihat document sesi Anda, buka field 'scope_justifications'.")
-		fmt.Println("   2. Verifikasi 3 lapisan justifikasi (Teoretis, Metodologis, Praktis).")
-		fmt.Println("   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M2_STEP4_APPROVED' lalu Update.")
-		fmt.Println("   3b. Jika TIDAK sesuai, ubah 'status' menjadi 'M2_STEP4_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback' lalu Update.")
+		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   1. Lihat document sesi Anda, buka field 'scope_justifications'.")
+		logger.Log(session.ID, "   2. Verifikasi 3 lapisan justifikasi (Teoretis, Metodologis, Praktis).")
+		logger.Log(session.ID, "   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M2_STEP4_APPROVED' lalu Update.")
+		logger.Log(session.ID, "   3b. Jika TIDAK sesuai, ubah 'status' menjadi 'M2_STEP4_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback' lalu Update.")
 		return nil
 
 	case "M2_STEP4_NEEDS_REVISION":
-		fmt.Printf("   [Revisi 2.4] Memperbaiki Justifikasi Scope berdasarkan feedback: '%s'\n", session.Feedback)
+		logger.Logf(session.ID, "   [Revisi 2.4] Memperbaiki Justifikasi Scope berdasarkan feedback: '%s'\n", session.Feedback)
 
 		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
 		filtersBytes, _ := json.MarshalIndent(session.ScopeFilters, "", "  ")
@@ -306,11 +306,11 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.Feedback = ""
 		session.Status = "M2_STEP4_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] Justifikasi Batasan Scope direvisi. DIJEDA kembali menunggu persetujuan manusia.")
+		logger.Log(session.ID, "   [System] Justifikasi Batasan Scope direvisi. DIJEDA kembali menunggu persetujuan manusia.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP4_APPROVED":
-		fmt.Println("   [Langkah 2.4] Justifikasi Scope disetujui! Lanjut ke penyusunan Research Questions...")
+		logger.Log(session.ID, "   [Langkah 2.4] Justifikasi Scope disetujui! Lanjut ke penyusunan Research Questions...")
 		session.Status = "M2_STEP5_RQ"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
@@ -318,7 +318,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// LANGKAH 5: FORMULASIKAN RESEARCH QUESTIONS
 	// =========================================================================
 	case "M2_STEP5_RQ":
-		fmt.Println("   [Langkah 2.5] Memformulasikan Research Questions (RQ)...")
+		logger.Log(session.ID, "   [Langkah 2.5] Memformulasikan Research Questions (RQ)...")
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 
@@ -361,24 +361,24 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		}
 
 		if adaOrphan {
-			fmt.Println("   [WARNING] Ditemukan RQ yang berstatus 'RQ-orphan' (Tidak ter-trace ke PICO/GAP)!")
-			fmt.Println("   [WARNING] Anda diwajibkan merevisinya sebelum lanjut ke Langkah 6!")
+			logger.Log(session.ID, "   [WARNING] Ditemukan RQ yang berstatus 'RQ-orphan' (Tidak ter-trace ke PICO/GAP)!")
+			logger.Log(session.ID, "   [WARNING] Anda diwajibkan merevisinya sebelum lanjut ke Langkah 6!")
 		} else {
-			fmt.Println("   [System] Research Questions berhasil diformulasikan. DIJEDA menunggu persetujuan manusia.")
+			logger.Log(session.ID, "   [System] Research Questions berhasil diformulasikan. DIJEDA menunggu persetujuan manusia.")
 		}
 
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP5_WAITING_APPROVAL":
-		fmt.Println("   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
-		fmt.Println("   1. Buka document sesi Anda, cari array 'research_questions'.")
-		fmt.Println("   2. Verifikasi 1 Primary RQ dan 3 Secondary RQs beserta traceability-nya.")
-		fmt.Println("   3a. Jika SUDAH sempurna (dan is_orphan: false semua), ubah 'status' menjadi 'M2_STEP5_APPROVED' lalu Update.")
-		fmt.Println("   3b. Jika TIDAK sesuai (atau ada orphan), ubah 'status' menjadi 'M2_STEP5_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback' lalu Update.")
+		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   1. Buka document sesi Anda, cari array 'research_questions'.")
+		logger.Log(session.ID, "   2. Verifikasi 1 Primary RQ dan 3 Secondary RQs beserta traceability-nya.")
+		logger.Log(session.ID, "   3a. Jika SUDAH sempurna (dan is_orphan: false semua), ubah 'status' menjadi 'M2_STEP5_APPROVED' lalu Update.")
+		logger.Log(session.ID, "   3b. Jika TIDAK sesuai (atau ada orphan), ubah 'status' menjadi 'M2_STEP5_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback' lalu Update.")
 		return nil
 
 	case "M2_STEP5_NEEDS_REVISION":
-		fmt.Printf("   [Revisi 2.5] Memperbaiki RQ berdasarkan feedback: '%s'\n", session.Feedback)
+		logger.Logf(session.ID, "   [Revisi 2.5] Memperbaiki RQ berdasarkan feedback: '%s'\n", session.Feedback)
 
 		topicContext := "Belum ada topik"
 		if session.SelectedTopic != nil {
@@ -415,11 +415,11 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.Feedback = ""
 		session.Status = "M2_STEP5_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] Research Questions direvisi. DIJEDA kembali menunggu persetujuan manusia.")
+		logger.Log(session.ID, "   [System] Research Questions direvisi. DIJEDA kembali menunggu persetujuan manusia.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP5_APPROVED":
-		fmt.Println("   [Langkah 2.5] Research Questions disetujui! Lanjut ke Validasi FINER (Langkah 6)...")
+		logger.Log(session.ID, "   [Langkah 2.5] Research Questions disetujui! Lanjut ke Validasi FINER (Langkah 6)...")
 		session.Status = "M2_STEP6_FINER_CHECK"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
@@ -427,7 +427,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// LANGKAH 6: CEK FINER + NOVELTY + INTERNAL COHERENCE + HASIL AKHIR
 	// =========================================================================
 	case "M2_STEP6_FINER_CHECK":
-		fmt.Println("   [Langkah 2.6] Melakukan validasi akhir FINER, Novelty & Internal Coherence...")
+		logger.Log(session.ID, "   [Langkah 2.6] Melakukan validasi akhir FINER, Novelty & Internal Coherence...")
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 
@@ -444,23 +444,23 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		session.Modul2Summary = &result.Summary
 		session.Status = "M2_STEP6_WAITING_APPROVAL"
 		
-		fmt.Println("   [System] Dokumen 'finer_novelty_check' dan 'modul2_summary' berhasil disusun.")
+		logger.Log(session.ID, "   [System] Dokumen 'finer_novelty_check' dan 'modul2_summary' berhasil disusun.")
 		if !result.Check.IsPass {
-			fmt.Println("   [WARNING] Evaluasi FINER mengindikasikan FAIL/TIDAK LULUS. Silakan cek rekomendasi revisi di database!")
+			logger.Log(session.ID, "   [WARNING] Evaluasi FINER mengindikasikan FAIL/TIDAK LULUS. Silakan cek rekomendasi revisi di database!")
 		}
-		fmt.Println("   [System] DIJEDA menunggu persetujuan manusia.")
+		logger.Log(session.ID, "   [System] DIJEDA menunggu persetujuan manusia.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP6_WAITING_APPROVAL":
-		fmt.Println("   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
-		fmt.Println("   1. Buka document sesi Anda, cari 'finer_novelty_check' dan 'modul2_summary'.")
-		fmt.Println("   2. Verifikasi evaluasi FINER dan ringkasan Modul 2.")
-		fmt.Println("   3a. Jika SUDAH lulus dan sempurna, ubah 'status' menjadi 'M2_STEP6_APPROVED' lalu Update.")
-		fmt.Println("   3b. Jika BUTUH REVISI, ubah 'status' menjadi 'M2_STEP6_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback'.")
+		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   1. Buka document sesi Anda, cari 'finer_novelty_check' dan 'modul2_summary'.")
+		logger.Log(session.ID, "   2. Verifikasi evaluasi FINER dan ringkasan Modul 2.")
+		logger.Log(session.ID, "   3a. Jika SUDAH lulus dan sempurna, ubah 'status' menjadi 'M2_STEP6_APPROVED' lalu Update.")
+		logger.Log(session.ID, "   3b. Jika BUTUH REVISI, ubah 'status' menjadi 'M2_STEP6_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback'.")
 		return nil
 
 	case "M2_STEP6_NEEDS_REVISION":
-		fmt.Printf("   [Revisi 2.6] Memperbaiki FINER & Summary berdasarkan feedback: '%s'\n", session.Feedback)
+		logger.Logf(session.ID, "   [Revisi 2.6] Memperbaiki FINER & Summary berdasarkan feedback: '%s'\n", session.Feedback)
 		
 		rqsBytes, _ := json.MarshalIndent(session.ResearchQuestions, "", "  ")
 		matrixBytes, _ := json.MarshalIndent(session.PriorReviewsMatrix, "", "  ")
@@ -492,7 +492,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 
 	default:
 		// Jika status diawali "M2_" namun belum terdaftar spesifik
-		fmt.Printf("   [Modul 2] Sub-status %s tidak dikenali atau belum diimplementasikan.\n", session.Status)
+		logger.Logf(session.ID, "   [Modul 2] Sub-status %s tidak dikenali atau belum diimplementasikan.\n", session.Status)
 	}
 
 	return nil
