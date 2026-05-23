@@ -214,6 +214,9 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		logger.Log(session.ID, analysis)
 		logger.Log(session.ID, "==========================\n")
 
+		if session.SearchString != nil {
+			session.SearchString.PreValidation = analysis
+		}
 		session.Status = "M3_STEP4_WAITING_EXECUTION"
 		
 		logger.Log(session.ID, "   [System] FASE 2: INSTRUKSI EKSEKUSI MANUAL DI SCOPUS")

@@ -151,6 +151,7 @@ type SearchStringData struct {
 	ScopusQuery    string          `bson:"scopus_query" json:"scopus_query"`
 	AdaptedStrings []AdaptedString `bson:"adapted_strings,omitempty" json:"adapted_strings,omitempty"`
 	Filters        []FilterSpec    `bson:"filters" json:"filters"`
+	PreValidation  string          `bson:"pre_validation,omitempty" json:"pre_validation,omitempty"`
 }
 
 type SearchLog struct {
