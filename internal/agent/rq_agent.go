@@ -18,7 +18,7 @@ func NewRQAgent(provider llm.LLMClient) *RQAgent {
 	}
 }
 
-func (a *RQAgent) GenerateRQ(ctx context.Context, topic, matrix, pico, scope string) ([]model.ResearchQuestion, error) {
+func (a *RQAgent) GenerateRQ(ctx context.Context, topic, matrix, pico, scope string) ([]model.ResearchQuestion, string, error) {
 	systemPrompt := `Anda adalah ahli riset akademis spesialis merumuskan Research Questions (RQ) untuk Systematic Literature Review.
 Tugas Anda adalah memformulasikan 1 PRIMARY RQ (utama) dan 3 SECONDARY RQs (pendukung) berdasarkan Konteks (Topik, Matriks Prior Reviews, PICO, dan Scope Justifications) yang diberikan.
 
@@ -50,7 +50,7 @@ Output WAJIB berupa JSON array dengan struktur:
 
 	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {
-		return nil, fmt.Errorf("rq_agent gagal memanggil LLM: %w", err)
+		return nil, "", fmt.Errorf("rq_agent gagal memanggil LLM: %w", err)
 	}
 
 	cleanJSON := CleanJSONResponse(rawResponse)
@@ -58,8 +58,8 @@ Output WAJIB berupa JSON array dengan struktur:
 	var result []model.ResearchQuestion
 	err = json.Unmarshal([]byte(cleanJSON), &result)
 	if err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON RQ (%w). Raw: %s", err, rawResponse)
+		return nil, rawResponse, fmt.Errorf("gagal parsing JSON RQ (%w). Raw: %s", err, rawResponse)
 	}
 
-	return result, nil
+	return result, rawResponse, nil
 }

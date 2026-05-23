@@ -348,9 +348,12 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 			scopeContext = string(scopeBytes)
 		}
 
+		logger.Log(session.ID, "   [API] Memanggil Gemini (gemini-pro-latest) dengan Google Search Grounding...")
 		rqAgent := agent.NewRQAgent(llmBrain)
-		rqs, err := rqAgent.GenerateRQ(ctx, topicContext, matrixContext, picoContext, scopeContext)
+		rqs, rawOutput, err := rqAgent.GenerateRQ(ctx, topicContext, matrixContext, picoContext, scopeContext)
 		if err != nil { return err }
+
+		logger.Log(session.ID, "   [LLM Raw Output]:\n" + rawOutput)
 
 		session.ResearchQuestions = rqs
 		session.Status = "M2_STEP5_WAITING_APPROVAL"
@@ -411,9 +414,12 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 
+		logger.Log(session.ID, "   [API] Memanggil Gemini (gemini-pro-latest) dengan Google Search Grounding...")
 		rqAgent := agent.NewRQAgent(llmBrain)
-		rqs, err := rqAgent.GenerateRQ(ctx, topicContext, matrixContext, picoContext, scopeContext)
+		rqs, rawOutput, err := rqAgent.GenerateRQ(ctx, topicContext, matrixContext, picoContext, scopeContext)
 		if err != nil { return err }
+
+		logger.Log(session.ID, "   [LLM Raw Output]:\n" + rawOutput)
 
 		session.ResearchQuestions = rqs
 		session.Feedback = ""
