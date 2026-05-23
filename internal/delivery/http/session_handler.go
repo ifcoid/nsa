@@ -180,37 +180,28 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Here we just change the status based on current status
 	// The client can pass data they want to update (e.g. selected_topic)
 	var updateData map[string]interface{}
-	if err := json.NewDecoder(req.Body).Decode(&updateData); err == nil {
-		if retry, ok := updateData["is_retry"].(bool); ok && retry {
-			// Jika ini retry dari error, kembalikan status dengan menghapus akhiran _ERROR
-			session.Status = strings.ReplaceAll(session.Status, "_ERROR", "")
-			session.SystemError = "" // Hapus log error sebelumnya (biarkan feedback tetap utuh)
-		} else if session.Status == "M2_STEP1_WAITING_APPROVAL" {
+	err = json.NewDecoder(req.Body).Decode(&updateData)
+
+	if err == nil && updateData["is_retry"] == true {
+		// Jika ini retry dari error, kembalikan status dengan menghapus akhiran _ERROR
+		session.Status = strings.ReplaceAll(session.Status, "_ERROR", "")
+		session.SystemError = "" // Hapus log error sebelumnya
+	} else {
+		// Default simple approve
+		if strings.HasSuffix(session.Status, "_WAITING_APPROVAL") {
+			session.Status = session.Status[:len(session.Status)-17] + "_APPROVED"
+		}
+		
+		// Custom data handling untuk M2_STEP1
+		if err == nil && session.Status == "M2_STEP1_APPROVED" {
 			if selected, ok := updateData["selected_topic"]; ok {
 				b, _ := json.Marshal(selected)
 				var st model.SuggestedTopic
 				json.Unmarshal(b, &st)
 				session.SelectedTopic = &st
 			}
-			session.Status = "M2_STEP1_APPROVED"
-		} else if session.Status == "M2_STEP2_WAITING_APPROVAL" {
-			session.Status = "M2_STEP2_APPROVED"
-		} else if session.Status == "M2_STEP3_WAITING_APPROVAL" {
-			session.Status = "M2_STEP3_APPROVED"
-		} else if session.Status == "M2_STEP4_WAITING_APPROVAL" {
-			session.Status = "M2_STEP4_APPROVED"
-		} else if session.Status == "M2_STEP5_WAITING_APPROVAL" {
-			session.Status = "M2_STEP5_APPROVED"
-		} else if session.Status == "M2_STEP6_WAITING_APPROVAL" {
-			session.Status = "M2_STEP6_APPROVED"
-		}
-	} else {
-		// Default simple approve without body
-		if strings.HasSuffix(session.Status, "_WAITING_APPROVAL") {
-			session.Status = session.Status[:len(session.Status)-17] + "_APPROVED"
 		}
 	}
 
