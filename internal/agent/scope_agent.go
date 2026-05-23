@@ -23,7 +23,7 @@ func (a *ScopeAgent) GenerateJustifications(ctx context.Context, picoContext, fi
 Tugas Anda adalah membuat justifikasi 3-Lapis untuk SETIAP batasan/filter riset (Rentang Tahun, Geografi, Sektor, Bahasa, dll).
 
 Untuk SETIAP filter, bangun 3 lapis justifikasi:
-1. TEORETIS: landasan konseptual (GUNAKAN KEMAMPUAN WEB SEARCH ANDA untuk memverifikasi klaim, sertakan referensi literatur/tahun/teori).
+1. TEORETIS: landasan konseptual (GUNAKAN KEMAMPUAN WEB SEARCH ANDA untuk memverifikasi klaim. WAJIB tuliskan Judul/URL sumber secara LANGSUNG di dalam teks kalimat, hindari sitasi angka kurung siku [1] karena metadata link-nya akan terhapus).
 2. METODOLOGIS: mengapa batasan ini memperbaiki atau menjaga kualitas review.
 3. PRAKTIS: relevansi kebijakan atau praktik nyata di lapangan (misal: SDG, ILO, Bappenas).
 
