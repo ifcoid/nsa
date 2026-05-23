@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"regexp"
 	"strings"
 )
 
@@ -34,21 +35,13 @@ func CleanJSONResponse(rawResponse string) string {
 		}
 	}
 
-	// 3. Fallback: Temukan indeks karakter awal JSON (array '[' atau object '{')
-	// Kita cari "[\n" atau "{\n" atau "[ " atau "{ " untuk menghindari terpotong di sitasi "[1]"
-	startIdx := strings.Index(rawResponse, "[\n")
-	if startIdx == -1 {
-		startIdx = strings.Index(rawResponse, "{\n")
-	}
-	if startIdx == -1 {
-		startIdx = strings.Index(rawResponse, "[ ")
-	}
-	if startIdx == -1 {
-		startIdx = strings.Index(rawResponse, "{ ")
-	}
-	if startIdx == -1 {
-		// Paling mentok, cari yang pertama
-		startIdx = strings.IndexAny(rawResponse, "[{")
+	// 3. Fallback: Gunakan regex untuk mencari awal struktur JSON yang valid
+	// Mencari '[' atau '{' yang diikuti oleh spasi/newline/tab lalu karakter '"' atau '{' atau '['
+	re := regexp.MustCompile(`([\[\{])\s*["\{\[]`)
+	loc := re.FindStringIndex(rawResponse)
+	startIdx := -1
+	if loc != nil {
+		startIdx = loc[0]
 	}
 
 	if startIdx == -1 {

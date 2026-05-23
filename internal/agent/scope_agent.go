@@ -29,8 +29,9 @@ Untuk SETIAP filter, bangun 3 lapis justifikasi:
 
 Jika suatu batasan tidak memiliki justifikasi teoretis/ilmiah yang kuat sama sekali, isi status dengan "Perlu Diubah/Dihapus". Jika argumentasinya kuat, isi dengan "Valid".
 
-Output WAJIB berupa JSON array murni tanpa teks awalan dan tanpa blok markdown.
+Output WAJIB berupa blok markdown JSON murni (diapit oleh ` + "```json" + ` dan ` + "```" + `).
 Contoh Output:
+` + "```json" + `
 [
   {
     "name": "Rentang Tahun: 2020-2024",
@@ -39,7 +40,8 @@ Contoh Output:
     "practical": "Relevan dengan agenda transformasi digital Bappenas 2024.",
     "status": "Valid"
   }
-]`
+]
+` + "```"
 
 	userPrompt := fmt.Sprintf("=== PICO DEFINITIONS ===\n%s\n\n=== SCOPE FILTERS (BATASAN YANG AKAN DIJUSTIFIKASI) ===\n%s", picoContext, filtersContext)
 
