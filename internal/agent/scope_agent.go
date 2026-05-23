@@ -18,7 +18,7 @@ func NewScopeAgent(provider llm.LLMClient) *ScopeAgent {
 	}
 }
 
-func (a *ScopeAgent) GenerateJustifications(ctx context.Context, picoContext, filtersContext string) ([]model.ScopeJustification, error) {
+func (a *ScopeAgent) GenerateJustifications(ctx context.Context, picoContext, filtersContext string) ([]model.ScopeJustification, string, error) {
 	systemPrompt := `Anda adalah asisten peneliti akademik profesional dengan akses Internet (Web Search).
 Tugas Anda adalah membuat justifikasi 3-Lapis untuk SETIAP batasan/filter riset (Rentang Tahun, Geografi, Sektor, Bahasa, dll).
 
@@ -47,7 +47,7 @@ Contoh Output:
 
 	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {
-		return nil, fmt.Errorf("scope_agent gagal memanggil LLM: %w", err)
+		return nil, "", fmt.Errorf("scope_agent gagal memanggil LLM: %w", err)
 	}
 
 	cleanJSON := CleanJSONResponse(rawResponse)
@@ -55,8 +55,8 @@ Contoh Output:
 	var result []model.ScopeJustification
 	err = json.Unmarshal([]byte(cleanJSON), &result)
 	if err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON dari LLM (%w). Raw response: %s", err, rawResponse)
+		return nil, rawResponse, fmt.Errorf("gagal parsing JSON dari LLM (%w). Raw response: %s", err, rawResponse)
 	}
 
-	return result, nil
+	return result, rawResponse, nil
 }

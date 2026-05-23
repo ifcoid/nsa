@@ -269,8 +269,10 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		filtersBytes, _ := json.MarshalIndent(session.ScopeFilters, "", "  ")
 
 		scopeAgent := agent.NewScopeAgent(llmBrain)
-		justifications, err := scopeAgent.GenerateJustifications(ctx, string(picoBytes), string(filtersBytes))
+		justifications, rawOutput, err := scopeAgent.GenerateJustifications(ctx, string(picoBytes), string(filtersBytes))
 		if err != nil { return err }
+
+		logger.Log(session.ID, "   [LLM Raw Output]:\n" + rawOutput)
 
 		session.ScopeJustifications = justifications
 		session.Status = "M2_STEP4_WAITING_APPROVAL"
@@ -299,8 +301,10 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		if err != nil { return err }
 
 		scopeAgent := agent.NewScopeAgent(llmBrain)
-		justifications, err := scopeAgent.GenerateJustifications(ctx, string(picoBytes), filtersContext)
+		justifications, rawOutput, err := scopeAgent.GenerateJustifications(ctx, string(picoBytes), filtersContext)
 		if err != nil { return err }
+
+		logger.Log(session.ID, "   [LLM Raw Output]:\n" + rawOutput)
 
 		session.ScopeJustifications = justifications
 		session.Feedback = ""
