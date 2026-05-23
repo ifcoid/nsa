@@ -50,6 +50,7 @@ func (r *Router) registerRoutes() {
 	r.mux.HandleFunc("POST /api/sessions", r.sessionHndlr.CreateSession)
 	r.mux.HandleFunc("POST /api/sessions/{id}/resume", r.sessionHndlr.ResumeSession)
 	r.mux.HandleFunc("GET /api/sessions/{id}", r.sessionHndlr.GetSession)
+	r.mux.HandleFunc("PUT /api/sessions/{id}", r.sessionHndlr.UpdateSession)
 	r.mux.HandleFunc("PUT /api/sessions/{id}/approve", r.sessionHndlr.ApproveStep)
 	r.mux.HandleFunc("PUT /api/sessions/{id}/revise", r.sessionHndlr.ReviseStep)
 	

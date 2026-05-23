@@ -112,6 +112,60 @@ func (h *SessionHandler) ResumeSession(w http.ResponseWriter, req *http.Request)
 	})
 }
 
+func (h *SessionHandler) UpdateSession(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	var updateData map[string]interface{}
+	if err := json.NewDecoder(req.Body).Decode(&updateData); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	// Dynamic updates based on what frontend sends
+	if status, ok := updateData["status"].(string); ok {
+		session.Status = status
+	}
+	if filters, ok := updateData["scope_filters"]; ok {
+		b, _ := json.Marshal(filters)
+		var sf model.ScopeFilters
+		json.Unmarshal(b, &sf)
+		session.ScopeFilters = &sf
+	}
+	if feedback, ok := updateData["feedback"].(string); ok {
+		session.Feedback = feedback // M3_STEP4 uses this for hits
+	}
+	if logData, ok := updateData["data_mining_log"]; ok {
+		b, _ := json.Marshal(logData)
+		var dml model.DataMiningLog
+		json.Unmarshal(b, &dml)
+		session.DataMiningLog = &dml
+	}
+
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update session")
+		return
+	}
+
+	// Jika update status meminta pipeline lanjut
+	h.pipeline.ExecuteAsync(ctx, session.ID)
+
+	sendJSONResponse(w, http.StatusOK, map[string]string{
+		"message": "Session updated successfully",
+		"status":  session.Status,
+	})
+}
+
 func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {
