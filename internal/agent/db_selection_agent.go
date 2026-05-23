@@ -17,7 +17,7 @@ func NewDBSelectionAgent(provider llm.LLMClient) *DBSelectionAgent {
 	return &DBSelectionAgent{llmProvider: provider}
 }
 
-func (a *DBSelectionAgent) Analyze(ctx context.Context, pico, scope string) (*model.DatabaseSelection, error) {
+func (a *DBSelectionAgent) Analyze(ctx context.Context, pico, scope string) (*model.DatabaseSelection, string, error) {
 	currentDate := time.Now().Format("2006-01-02")
 	systemPrompt := fmt.Sprintf(`Anda adalah ahli metodologi pencarian literatur (Information Specialist) untuk Systematic Literature Review.
 Tugas Anda adalah memilih database akademik yang paling tepat berdasarkan PICO dan Batasan Scope riset, menggunakan bantuan WEB SEARCH.
@@ -47,14 +47,14 @@ Format Output WAJIB berupa JSON MURNI tanpa markdown blok awalan/akhiran:
 
 	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {
-		return nil, fmt.Errorf("db_selection_agent gagal memanggil LLM: %w", err)
+		return nil, "", fmt.Errorf("db_selection_agent gagal memanggil LLM: %w", err)
 	}
 
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.DatabaseSelection
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON DB Selection (%w). Raw: %s", err, rawResponse)
+		return nil, "", fmt.Errorf("gagal parsing JSON DB Selection (%w). Raw: %s", err, rawResponse)
 	}
 
-	return &result, nil
+	return &result, rawResponse, nil
 }

@@ -34,9 +34,12 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
 		scopeBytes, _ := json.MarshalIndent(session.ScopeJustifications, "", "  ")
 
+		logger.Log(session.ID, "   [API] Memanggil Gemini (gemini-pro-latest) dengan Google Search Grounding...")
 		dbAgent := agent.NewDBSelectionAgent(llmBrain)
-		dbResult, err := dbAgent.Analyze(ctx, string(picoBytes), string(scopeBytes))
+		dbResult, rawOutput, err := dbAgent.Analyze(ctx, string(picoBytes), string(scopeBytes))
 		if err != nil { return err }
+
+		logger.Log(session.ID, "   [LLM Raw Output]:\n"+rawOutput)
 
 		session.DatabaseSelection = dbResult
 		session.Status = "M3_STEP1_WAITING_APPROVAL"
@@ -63,9 +66,12 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 
+		logger.Log(session.ID, "   [API] Memanggil Gemini (gemini-pro-latest) dengan Google Search Grounding...")
 		dbAgent := agent.NewDBSelectionAgent(llmBrain)
-		dbResult, err := dbAgent.Analyze(ctx, string(picoBytes), scopeContext)
+		dbResult, rawOutput, err := dbAgent.Analyze(ctx, string(picoBytes), scopeContext)
 		if err != nil { return err }
+
+		logger.Log(session.ID, "   [LLM Raw Output]:\n"+rawOutput)
 
 		session.DatabaseSelection = dbResult
 		session.Feedback = ""

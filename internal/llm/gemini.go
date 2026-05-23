@@ -55,5 +55,15 @@ func (g *GeminiClient) Generate(ctx context.Context, systemPrompt, userPrompt st
 		output.WriteString(part.Text)
 	}
 
+	// Ekstrak referensi Google Search Grounding (jika ada)
+	if candidate.GroundingMetadata != nil && len(candidate.GroundingMetadata.GroundingChunks) > 0 {
+		output.WriteString("\n\n=== GROUNDING REFERENCES ===\n")
+		for i, chunk := range candidate.GroundingMetadata.GroundingChunks {
+			if chunk.Web != nil {
+				output.WriteString(fmt.Sprintf("[%d] [%s](%s)\n", i+1, chunk.Web.Title, chunk.Web.URI))
+			}
+		}
+	}
+
 	return output.String(), nil
 }
