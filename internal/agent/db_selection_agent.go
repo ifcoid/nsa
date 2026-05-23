@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"nsa/internal/llm"
 	"nsa/internal/model"
+	"strings"
 	"time"
 )
 
@@ -54,6 +55,11 @@ Format Output WAJIB berupa JSON MURNI tanpa markdown blok awalan/akhiran:
 	var result model.DatabaseSelection
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
 		return nil, "", fmt.Errorf("gagal parsing JSON DB Selection (%w). Raw: %s", err, rawResponse)
+	}
+
+	// Sisipkan referensi grounding ke UI via JustifikasiFinal
+	if refIdx := strings.Index(rawResponse, "=== GROUNDING REFERENCES ==="); refIdx != -1 {
+		result.JustifikasiFinal += "\n\n" + rawResponse[refIdx:]
 	}
 
 	return &result, rawResponse, nil
