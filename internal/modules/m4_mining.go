@@ -266,7 +266,13 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 	case "M4_STEP2_NEEDS_REVISION":
 		logger.Log(session.ID, "   [System] PICO Consistency gagal. Mengembalikan riset ke Modul 3 (Perbaikan Keywords/AVOID List).")
 		session.Status = "M3_STEP3_NEEDS_REVISION"
-		session.Feedback = "PICO Consistency sangat buruk (banyak noise). Tolong revisi Search String dan ketatkan AVOID list."
+		
+		userFb := session.Feedback
+		if userFb == "" {
+			userFb = "PICO Consistency sangat buruk (banyak noise). Tolong revisi Search String dan ketatkan AVOID list."
+		}
+		session.Feedback = "Catatan dari evaluasi PICO Modul 4: " + userFb
+		
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M4_STEP2_APPROVED":
