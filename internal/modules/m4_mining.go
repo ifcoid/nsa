@@ -213,16 +213,27 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		}
 
 		// 3. PICO Consistency Preview
-		logger.Logf(session.ID, "   [Info] Deduplikasi selesai: %d unik, %d duplikat. Menjalankan LLM PICO Preview...\n", dedup.TotalUnique, dedup.TotalDuplicates)
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
-		if err != nil { return err }
+		var picoVerdict *model.PICOPreviewCheck
+		if audit.MissingAbstract > 0 || audit.MissingDOI > 0 {
+			logger.Log(session.ID, "   [WARNING] Ditemukan data tidak lengkap (Missing Abstract / DOI). Menghentikan proses sebelum memanggil LLM untuk menghemat token.")
+			logger.Log(session.ID, "   Silakan perbaiki file CSV Anda dan klik 'Ulangi Import CSV'.")
+			picoVerdict = &model.PICOPreviewCheck{
+				MatchCountsPct: 0,
+				Verdict:        "HALTED_MISSING_DATA",
+				Recommendation: "Proses dihentikan otomatis karena ada data abstrak/DOI yang hilang. Wajib melakukan Re-Import CSV yang sudah diperbaiki untuk melanjutkan.",
+			}
+		} else {
+			logger.Logf(session.ID, "   [Info] Deduplikasi selesai: %d unik, %d duplikat. Menjalankan LLM PICO Preview...\n", dedup.TotalUnique, dedup.TotalDuplicates)
+			llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+			if err != nil { return err }
 
-		sampleBytes, _ := json.Marshal(sampleToPreview)
-		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
+			sampleBytes, _ := json.Marshal(sampleToPreview)
+			picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
 
-		dmAgent := agent.NewDataMiningAgent(llmBrain)
-		picoVerdict, err := dmAgent.PicoConsistencyPreview(ctx, string(sampleBytes), string(picoBytes))
-		if err != nil { return err }
+			dmAgent := agent.NewDataMiningAgent(llmBrain)
+			picoVerdict, err = dmAgent.PicoConsistencyPreview(ctx, string(sampleBytes), string(picoBytes))
+			if err != nil { return err }
+		}
 
 		// 4. Save unique papers to post-dedup collection
 		if len(uniquePapers) > 0 {
