@@ -27,7 +27,7 @@ ATURAN SEARCH STRING (SCOPUS):
 4. Gunakan quotation marks untuk frasa ("machine learning").
 5. HINDARI sepenuhnya kata-kata yang ada di "avoid_list" dari Keywords (jangan masukkan ke dalam query).
 6. Buat query yang komprehensif (sensitive) tapi tidak terlalu broad (specific).
-7. Jika ada indikasi Multi-DB, sertakan query adaptasi untuk database relevan (WoS, PubMed).
+7. Sertakan WAJIB query adaptasi untuk 3 database berikut: "Web of Science", "PubMed", dan "IEEE Xplore".
 
 ATURAN FILTER TABLE:
 Setiap filter (Tahun, Bahasa, Tipe Dokumen, Area Subjek, dll) WAJIB memiliki justifikasi yang jelas dari Scope Justifications.
@@ -38,8 +38,16 @@ Keluarkan HANYA JSON MURNI tanpa markdown blok awalan/akhiran:
   "scopus_query": "TITLE-ABS-KEY(...)",
   "adapted_strings": [
     {
+      "database": "IEEE Xplore",
+      "query": "(\"Document Title\":...) AND ..."
+    },
+    {
       "database": "Web of Science",
       "query": "TS=(...)"
+    },
+    {
+      "database": "PubMed",
+      "query": "(...[Title/Abstract]) AND ..."
     }
   ],
   "filters": [
