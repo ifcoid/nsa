@@ -317,10 +317,15 @@ type SLRSession struct {
 }
 
 type Paper struct {
-	ID        string `bson:"_id,omitempty"`
-	SessionID string `bson:"session_id"`
-	Title     string `bson:"title"`
-	Abstract  string `bson:"abstract"`
-	Status    string `bson:"status"` // "PENDING", "ACCEPT", "REJECT"
-	Reason    string `bson:"reason"`
+	ID           string `bson:"_id,omitempty" json:"id"`
+	SessionID    string `bson:"session_id" json:"session_id"`
+	Title        string `bson:"title" json:"title"`
+	Abstract     string `bson:"abstract" json:"abstract"`
+	DOI          string `bson:"doi" json:"doi"`
+	Year         string `bson:"year" json:"year"`
+	Authors      string `bson:"authors" json:"authors"`
+	Database     string `bson:"database" json:"database"` // e.g. "Scopus", "IEEE", "PubMed"
+	DocumentType string `bson:"document_type" json:"document_type"`
+	Status       string `bson:"status" json:"status"` // "PENDING", "ACCEPT", "REJECT"
+	Reason       string `bson:"reason" json:"reason"`
 }

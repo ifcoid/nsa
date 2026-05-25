@@ -77,6 +77,24 @@ func (r *MongoRepository) GetPostDedupCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_papers_post_dedup")
 }
 
+func (r *MongoRepository) ClearAndInsertPapers(ctx context.Context, sessionID string, papers []interface{}) error {
+	coll := r.GetPapersCollection()
+	
+	// Delete old papers for this session
+	_, err := coll.DeleteMany(ctx, bson.M{"session_id": sessionID})
+	if err != nil {
+		return err
+	}
+	
+	// Insert new papers
+	if len(papers) > 0 {
+		_, err = coll.InsertMany(ctx, papers)
+		return err
+	}
+	
+	return nil
+}
+
 func (r *MongoRepository) GetScreeningCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_screening")
 }

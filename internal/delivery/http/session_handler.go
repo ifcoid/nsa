@@ -9,6 +9,7 @@ import (
 
 	"nsa/internal/model"
 	"nsa/internal/orchestrator"
+	"nsa/internal/parser"
 	"nsa/internal/repository"
 )
 
@@ -261,6 +262,100 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 
 	sendJSONResponse(w, http.StatusOK, map[string]string{
 		"message": "Revision requested successfully, pipeline processing",
+		"status":  session.Status,
+	})
+}
+
+func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	err = req.ParseMultipartForm(50 << 20) // Max 50 MB
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Failed to parse multipart form")
+		return
+	}
+
+	files := req.MultipartForm.File["files"]
+	if len(files) == 0 {
+		sendJSONError(w, http.StatusBadRequest, "No files uploaded")
+		return
+	}
+
+	var allPapers []interface{}
+
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			sendJSONError(w, http.StatusInternalServerError, "Failed to open file")
+			return
+		}
+		defer file.Close()
+
+		content := make([]byte, fileHeader.Size)
+		_, err = file.Read(content)
+		if err != nil {
+			sendJSONError(w, http.StatusInternalServerError, "Failed to read file")
+			return
+		}
+
+		// We use parser.ParseFile
+		parsedDocs, err := parser.ParseFile(fileHeader.Filename, content)
+		if err != nil {
+			// fallback silently or log
+			continue
+		}
+
+		for _, doc := range parsedDocs {
+			p := model.Paper{
+				SessionID:    session.ID,
+				Title:        doc.Title,
+				Abstract:     doc.Abstract,
+				DOI:          doc.DOI,
+				Year:         doc.Year,
+				Authors:      doc.Authors,
+				Database:     doc.Database,
+				DocumentType: doc.DocumentType,
+				Status:       "PENDING", // Initial state
+			}
+			allPapers = append(allPapers, p)
+		}
+	}
+
+	if len(allPapers) == 0 {
+		sendJSONError(w, http.StatusBadRequest, "No valid papers extracted from files")
+		return
+	}
+
+	err = h.mongoRepo.ClearAndInsertPapers(ctx, session.ID, allPapers)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to insert papers into database: "+err.Error())
+		return
+	}
+
+	// Update session status to M4_STEP2_PROCESS
+	session.Status = "M4_STEP2_PROCESS"
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update session status")
+		return
+	}
+
+	// Trigger pipeline
+	h.pipeline.ExecuteAsync(ctx, session.ID)
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": "Files imported successfully",
+		"total":   len(allPapers),
 		"status":  session.Status,
 	})
 }
