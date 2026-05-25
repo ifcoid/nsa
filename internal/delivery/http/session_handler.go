@@ -228,7 +228,8 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var payload struct {
-		Feedback string `json:"feedback"`
+		Feedback     string `json:"feedback"`
+		TargetStatus string `json:"target_status,omitempty"`
 	}
 
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
@@ -246,7 +247,9 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 	session.Feedback = payload.Feedback
 
 	// Determine NEEDS_REVISION status
-	if session.Status == "M2_STEP1_WAITING_APPROVAL" {
+	if payload.TargetStatus != "" {
+		session.Status = payload.TargetStatus
+	} else if session.Status == "M2_STEP1_WAITING_APPROVAL" {
 		session.Status = "M2_STEP1_NEEDS_REVISION"
 	} else {
 		session.Status = fmt.Sprintf("%s_NEEDS_REVISION", session.Status[:len(session.Status)-17])
