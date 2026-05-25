@@ -266,6 +266,34 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+func (h *SessionHandler) RequestReimport(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Change status back to import
+	session.Status = "M4_STEP2_WAITING_IMPORT"
+	
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to set re-import status")
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]string{
+		"message": "Re-import requested successfully",
+		"status":  session.Status,
+	})
+}
+
 func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {

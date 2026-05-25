@@ -151,6 +151,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 			TotalRecords: len(rawPapers),
 			YearDistribution: make(map[string]int),
 			DocTypes: make(map[string]int),
+			MissingAbstractSources: make(map[string]int),
 		}
 		dedup := model.DedupBreakdown{TotalUnique: 0, TotalDuplicates: 0}
 
@@ -167,8 +168,13 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 			abs := getStringField(p, "Abstract", "abstract")
 			year := getStringField(p, "Year", "year")
 			dtype := getStringField(p, "Document Type", "document_type", "Document type")
+			dbSource := getStringField(p, "Database", "database", "Source", "source")
+			if dbSource == "" { dbSource = "Unknown" }
 
-			if abs == "" || abs == "[No abstract available]" { audit.MissingAbstract++ }
+			if abs == "" || abs == "[No abstract available]" { 
+				audit.MissingAbstract++
+				audit.MissingAbstractSources[dbSource]++
+			}
 			if doi == "" { audit.MissingDOI++ }
 			if year != "" { audit.YearDistribution[year]++ }
 			if dtype != "" { audit.DocTypes[dtype]++ }

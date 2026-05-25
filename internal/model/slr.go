@@ -185,11 +185,12 @@ type SanityCheckVerdict struct {
 }
 
 type BasicQualityAudit struct {
-	TotalRecords     int            `bson:"total_records" json:"total_records"`
-	MissingAbstract  int            `bson:"missing_abstract" json:"missing_abstract"`
-	MissingDOI       int            `bson:"missing_doi" json:"missing_doi"`
-	YearDistribution map[string]int `bson:"year_distribution" json:"year_distribution"`
-	DocTypes         map[string]int `bson:"doc_types" json:"doc_types"`
+	TotalRecords           int            `bson:"total_records" json:"total_records"`
+	MissingAbstract        int            `bson:"missing_abstract" json:"missing_abstract"`
+	MissingAbstractSources map[string]int `bson:"missing_abstract_sources,omitempty" json:"missing_abstract_sources,omitempty"`
+	MissingDOI             int            `bson:"missing_doi" json:"missing_doi"`
+	YearDistribution       map[string]int `bson:"year_distribution" json:"year_distribution"`
+	DocTypes               map[string]int `bson:"doc_types" json:"doc_types"`
 }
 
 type DedupBreakdown struct {
