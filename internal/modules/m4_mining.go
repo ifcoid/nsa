@@ -174,8 +174,18 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 			if abs == "" || abs == "[No abstract available]" { 
 				audit.MissingAbstract++
 				audit.MissingAbstractSources[dbSource]++
+				audit.MissingAbstractDetails = append(audit.MissingAbstractDetails, model.MissingDataDetail{
+					Title:    title,
+					Database: dbSource,
+				})
 			}
-			if doi == "" { audit.MissingDOI++ }
+			if doi == "" { 
+				audit.MissingDOI++
+				audit.MissingDOIDetails = append(audit.MissingDOIDetails, model.MissingDataDetail{
+					Title:    title,
+					Database: dbSource,
+				})
+			}
 			if year != "" { audit.YearDistribution[year]++ }
 			if dtype != "" { audit.DocTypes[dtype]++ }
 
