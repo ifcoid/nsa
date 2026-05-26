@@ -3,11 +3,12 @@
 ## 1 Fondasi Teori + Aturan Global -> (briefing)
 
     Langkah :
- 1.1. PENGENALAN SYSTEMATIC LITERATURE REVIEW (Teori Definisi, Tujuan, dan Jenis-jenis Literature Review)
- 1.2. METODOLOGI SLR(Research Question Formulasi PICO Framework)
- 1.3. PENGENALAN GENERATIVE AI DALAM PENELITIAN(Etika Penggunaan AI Transparansi, Bias, Limitasi)
- 1.4. KAPABILITAS LLM UNTUK PENELITIAN SLR
- 1.5. ATURAN GLOBAL SLR + COWORK (BERLAKU UNTUK SEMUA MODUL 2-9)
+
+ 1. PENGENALAN SYSTEMATIC LITERATURE REVIEW (Teori Definisi, Tujuan, dan Jenis-jenis Literature Review)
+ 2. METODOLOGI SLR(Research Question Formulasi PICO Framework)
+ 3. PENGENALAN GENERATIVE AI DALAM PENELITIAN(Etika Penggunaan AI Transparansi, Bias, Limitasi)
+ 4. KAPABILITAS LLM UNTUK PENELITIAN SLR
+ 5. ATURAN GLOBAL SLR + COWORK (BERLAKU UNTUK SEMUA MODUL 2-9)
 
 ## 2 Topik Penelitian (PICO) -> pico_definitions
 
