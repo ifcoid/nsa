@@ -1,14 +1,17 @@
 # Modul Topik(Langkah di dalamnya) Output
 
-1	Fondasi Teori + Aturan Global	-> (briefing)
-	Langkah :
-	1.1. PENGENALAN SYSTEMATIC LITERATURE REVIEW (Teori Definisi, Tujuan, dan Jenis-jenis Literature Review)
-	1.2. METODOLOGI SLR(Research Question Formulasi PICO Framework)
-	1.3. PENGENALAN GENERATIVE AI DALAM PENELITIAN(Etika Penggunaan AI Transparansi, Bias, Limitasi)
-	1.4. KAPABILITAS LLM UNTUK PENELITIAN SLR
-	1.5. ATURAN GLOBAL SLR + COWORK (BERLAKU UNTUK SEMUA MODUL 2-9)
-2	Topik Penelitian (PICO)	-> pico_definitions 
-	LANGKAH 1: TENTUKAN TOPIK + KLASIFIKASI TIPE GAP
+## 1 Fondasi Teori + Aturan Global -> (briefing)
+
+    Langkah :
+ 1.1. PENGENALAN SYSTEMATIC LITERATURE REVIEW (Teori Definisi, Tujuan, dan Jenis-jenis Literature Review)
+ 1.2. METODOLOGI SLR(Research Question Formulasi PICO Framework)
+ 1.3. PENGENALAN GENERATIVE AI DALAM PENELITIAN(Etika Penggunaan AI Transparansi, Bias, Limitasi)
+ 1.4. KAPABILITAS LLM UNTUK PENELITIAN SLR
+ 1.5. ATURAN GLOBAL SLR + COWORK (BERLAKU UNTUK SEMUA MODUL 2-9)
+
+## 2 Topik Penelitian (PICO) -> pico_definitions
+
+ LANGKAH 1: TENTUKAN TOPIK + KLASIFIKASI TIPE GAP
     Output: suggested_topics dan SelectedTopic
 
     ```txt
@@ -50,7 +53,7 @@
     6. Tekan "Update", dan jalankan ulang go run ./cmd/app/main.go! Jika approved akan lanjut ke Langkah 2. Jika revisi, akan men-generate ulang 3 saran topik baru.
 	LANGKAH 2: REVIEW OF PRIOR REVIEWS (MATRIKS)
     output: prior_reviews_matrix 
-    
+
     ```txt
     Dengan menyertakan 1 dokumen yang dipilih berupa SelectedTopic dari langkah 1(Name,Gap,Type,TypeREason,Evidence,Importance) diikutkan sebagai RAG(atau menurutmu enaknya sebagai apa)
 
