@@ -55,6 +55,7 @@ func (r *Router) registerRoutes() {
 	r.mux.HandleFunc("PUT /api/sessions/{id}/revise", r.sessionHndlr.ReviseStep)
 	r.mux.HandleFunc("PUT /api/sessions/{id}/reimport", r.sessionHndlr.RequestReimport)
 	r.mux.HandleFunc("POST /api/sessions/{id}/import-data", r.sessionHndlr.ImportData)
+	r.mux.HandleFunc("GET /api/sessions/{id}/disagreements", r.sessionHndlr.GetDisagreements)
 	
 	// WebSocket endpoint untuk logs
 	r.mux.HandleFunc("GET /api/ws/logs/{id}", LogStreamHandler)

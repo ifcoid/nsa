@@ -141,6 +141,21 @@ func (r *MongoRepository) UpdateScreeningPaper(ctx context.Context, id interface
 	return err
 }
 
+// GetDisagreedPapers mengambil paper yang mengalami konflik antar reviewer (Agreement = DISAGREE)
+func (r *MongoRepository) GetDisagreedPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
+	filter := bson.M{
+		"session_id": sessionID,
+		"Agreement":  "DISAGREE",
+	}
+	cursor, err := r.GetScreeningCollection().Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	var results []map[string]interface{}
+	err = cursor.All(ctx, &results)
+	return results, err
+}
+
 // =========================================================================
 // 2. MANAJEMEN ARTIKEL / PAPERS (PRISMA SCREENING Pipeline)
 // =========================================================================

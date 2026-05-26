@@ -390,3 +390,22 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 		"status":  session.Status,
 	})
 }
+
+// GetDisagreements mengembalikan daftar paper yang statusnya DISAGREE
+func (h *SessionHandler) GetDisagreements(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	papers, err := h.mongoRepo.GetDisagreedPapers(r.Context(), id)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to get disagreed papers: "+err.Error())
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"disagreements": papers,
+	})
+}
