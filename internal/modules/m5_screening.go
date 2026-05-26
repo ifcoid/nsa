@@ -65,16 +65,17 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		logger.Log(session.ID, "   [Langkah 5.2] Menjalankan Kalibrasi Dual-Review (20 Sample) dengan API Z-AI GLM & Groq...")
 
 		// Inisialisasi LLM 
-		// (Fallback ke gemini jika z-ai atau groq tidak ada di DB, tapi kita coba panggil ID tersebut)
+		// (WAJIB menggunakan z-ai dan groq untuk dual-review, hentikan proses jika gagal)
 		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "z-ai")
 		if err != nil { 
-			logger.Logf(session.ID, "   [WARNING] LLM z-ai gagal dimuat (%v). Fallback ke gemini.\n", err)
-			llmR1, _ = m.deps.LLMFactory.CreateClient(ctx, "gemini")
+			logger.Logf(session.ID, "   [ERROR] LLM z-ai gagal dimuat (%v). Harap konfigurasi API z-ai terlebih dahulu di halaman Pengaturan!\n", err)
+			return fmt.Errorf("z-ai LLM configuration missing or invalid. Please configure the z-ai API key first")
 		}
+		
 		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
 		if err != nil { 
-			logger.Logf(session.ID, "   [WARNING] LLM groq gagal dimuat (%v). Fallback ke gemini.\n", err)
-			llmR2, _ = m.deps.LLMFactory.CreateClient(ctx, "gemini")
+			logger.Logf(session.ID, "   [ERROR] LLM groq gagal dimuat (%v). Harap konfigurasi API groq terlebih dahulu di halaman Pengaturan!\n", err)
+			return fmt.Errorf("groq LLM configuration missing or invalid. Please configure the groq API key first")
 		}
 
 		scAgent1 := agent.NewScreeningAgent(llmR1)
