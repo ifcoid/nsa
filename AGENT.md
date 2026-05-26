@@ -2,7 +2,7 @@
 
 ## 1 Fondasi Teori + Aturan Global -> (briefing)
 
-    Langkah :
+ Langkah :
 
  1. PENGENALAN SYSTEMATIC LITERATURE REVIEW (Teori Definisi, Tujuan, dan Jenis-jenis Literature Review)
  2. METODOLOGI SLR(Research Question Formulasi PICO Framework)
