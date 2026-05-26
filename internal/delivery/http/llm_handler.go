@@ -59,6 +59,12 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 	}
 	if payload.BaseURL != "" {
 		config.BaseURL = payload.BaseURL
+	} else {
+		if payload.Provider == "groq" {
+			config.BaseURL = "https://api.groq.com/openai/v1"
+		} else if payload.Provider == "zhipu" || payload.Provider == "z-ai" {
+			config.BaseURL = "https://open.bigmodel.cn/api/paas/v4"
+		}
 	}
 	config.UpdatedAt = time.Now()
 
@@ -155,8 +161,14 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 	default: // groq, zhipu (OpenAI compatible)
 		baseURL := payload.BaseURL
 		if baseURL == "" {
-			sendJSONError(w, http.StatusBadRequest, "Base URL is required for this provider")
-			return
+			if provider == "groq" {
+				baseURL = "https://api.groq.com/openai/v1"
+			} else if provider == "zhipu" || provider == "z-ai" {
+				baseURL = "https://open.bigmodel.cn/api/paas/v4"
+			} else {
+				sendJSONError(w, http.StatusBadRequest, "Base URL is required for this provider")
+				return
+			}
 		}
 		
 		// Pastikan tidak berakhiran slash
