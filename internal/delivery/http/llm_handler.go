@@ -195,6 +195,24 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 				models = append(models, m.ID)
 			}
 		}
+
+		// Inject known hidden models for Zhipu
+		if provider == "zhipu" || provider == "z-ai" {
+			missingModels := []string{"glm-4.7-flash", "glm-4.5-flash"}
+			for _, mm := range missingModels {
+				found := false
+				for _, exist := range models {
+					if exist == mm {
+						found = true
+						break
+					}
+				}
+				if !found {
+					// Prepend or append, let's just append
+					models = append(models, mm)
+				}
+			}
+		}
 	}
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
