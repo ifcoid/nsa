@@ -14,46 +14,50 @@
 
 ### LANGKAH 1: TENTUKAN TOPIK + KLASIFIKASI TIPE GAP
 
-    Output: suggested_topics dan SelectedTopic
+Output: suggested_topics dan SelectedTopic
 
-    ```txt
-    Topik penelitian ambil di mongo
+```txt
+Topik penelitian ambil di mongo
 
-    Gunakan web search:
-    1. Cari systematic review terbaru (3 tahun terakhir) di bidang ini
-    2. Identifikasi research gap belum terjawab
-    3. Cek apakah topik saya sudah pernah di-review
+Gunakan web search:
+1. Cari systematic review terbaru (3 tahun terakhir) di bidang ini
+2. Identifikasi research gap belum terjawab
+3. Cek apakah topik saya sudah pernah di-review
 
-    Suggest 3 topik penelitian dengan kriteria:
-    - Gap jelas + terverifikasi dari literatur terbaru
-    - Cocok untuk SLR
-    - Relevan praktik saat ini
+Suggest 3 topik penelitian dengan kriteria:
+- Gap jelas + terverifikasi dari literatur terbaru
+- Cocok untuk SLR
+- Relevan praktik saat ini
 
-    KLASIFIKASI tiap gap ke salah satu tipe (penting untuk argumentasi Intro):
-    - TIPE A — FRAGMENTASI LITERATUR: studi tersebar tanpa sintesis
-    - TIPE B — KONTRADIKSI ANTAR STUDI: temuan primer bertentangan
-    - TIPE C — KETIADAAN INTEGRATIVE FRAMEWORK: konsep belum terikat framework
+KLASIFIKASI tiap gap ke salah satu tipe (penting untuk argumentasi Intro):
+- TIPE A — FRAGMENTASI LITERATUR: studi tersebar tanpa sintesis
+- TIPE B — KONTRADIKSI ANTAR STUDI: temuan primer bertentangan
+- TIPE C — KETIADAAN INTEGRATIVE FRAMEWORK: konsep belum terikat framework
 
-    Update atau insert array  suggested_topics di collection SLRSession yang ada di mongo db dengan berisi informasi:
-    TOPIK 1: [nama]
-    - Gap: [...] | Tipe: A/B/C + alasan | Bukti: [DOI/URL] | Mengapa penting: [...]
-    TOPIK 2-3: format serupa
+Update atau insert array  suggested_topics di collection SLRSession yang ada di mongo db dengan berisi informasi:
+TOPIK 1: [nama]
+- Gap: [...] | Tipe: A/B/C + alasan | Bukti: [DOI/URL] | Mengapa penting: [...]
+TOPIK 2-3: format serupa
 
-    Konfirmasi + tunggu user pilih 1 topik untuk langkah selanjutnya.
-    ```
-    Cara Mengujinya Nanti:
-    1. Jalankan pipeline. Tunggu hingga terminal memunculkan pesan [System] DIJEDA.
-    2. Buka MongoDB Compass Anda.
-    3. Buka collection slr_sessions, cari sesi Anda. Anda akan melihat kolom baru bernama suggested_topics berisi 3 pilihan topik, lengkap beserta Gap, Tipe A/B/C, Alasan, dan DOI buktinya.
-    4. Jika Anda SUKA salah satu topik:
-       a. "Copy (salin) keseluruhan object/document dari 1 topik pilihan Anda."
-       b. "Buat field baru bernama selected_topic (di root document), lalu Paste isinya di sana."
-       c. Terakhir, ubah field status menjadi "M2_STEP1_APPROVED". 
-    5. Jika Anda TIDAK SUKA (Butuh Revisi):
-       a. Ubah field status menjadi "M2_STEP1_NEEDS_REVISION".
-       b. Isi field feedback dengan alasan Anda (misal: "carikan topik yang lebih condong ke algoritma X").
-    6. Tekan "Update", dan jalankan ulang go run ./cmd/app/main.go! Jika approved akan lanjut ke Langkah 2. Jika revisi, akan men-generate ulang 3 saran topik baru.
-	LANGKAH 2: REVIEW OF PRIOR REVIEWS (MATRIKS)
+Konfirmasi + tunggu user pilih 1 topik untuk langkah selanjutnya.
+```
+
+Cara Mengujinya Nanti:
+
+1. Jalankan pipeline. Tunggu hingga terminal memunculkan pesan [System] DIJEDA.
+2. Buka MongoDB Compass Anda.
+3. Buka collection slr_sessions, cari sesi Anda. Anda akan melihat kolom baru bernama suggested_topics berisi 3 pilihan topik, lengkap beserta Gap, Tipe A/B/C, Alasan, dan DOI buktinya.
+4. Jika Anda SUKA salah satu topik:
+   a. "Copy (salin) keseluruhan object/document dari 1 topik pilihan Anda."
+   b. "Buat field baru bernama selected_topic (di root document), lalu Paste isinya di sana."
+   c. Terakhir, ubah field status menjadi "M2_STEP1_APPROVED".
+5. Jika Anda TIDAK SUKA (Butuh Revisi):
+   a. Ubah field status menjadi "M2_STEP1_NEEDS_REVISION".
+   b. Isi field feedback dengan alasan Anda (misal: "carikan topik yang lebih condong ke algoritma X").
+6. Tekan "Update", dan jalankan ulang go run ./cmd/app/main.go! Jika approved akan lanjut ke Langkah 2. Jika revisi, akan men-generate ulang 3 saran topik baru.
+
+### LANGKAH 2: REVIEW OF PRIOR REVIEWS (MATRIKS)
+
     output: prior_reviews_matrix 
 
     ```txt
