@@ -48,12 +48,12 @@ Cara Mengujinya Nanti:
 2. Buka MongoDB Compass Anda.
 3. Buka collection slr_sessions, cari sesi Anda. Anda akan melihat kolom baru bernama suggested_topics berisi 3 pilihan topik, lengkap beserta Gap, Tipe A/B/C, Alasan, dan DOI buktinya.
 4. Jika Anda SUKA salah satu topik:
-   a. "Copy (salin) keseluruhan object/document dari 1 topik pilihan Anda."
-   b. "Buat field baru bernama selected_topic (di root document), lalu Paste isinya di sana."
-   c. Terakhir, ubah field status menjadi "M2_STEP1_APPROVED".
+   * "Copy (salin) keseluruhan object/document dari 1 topik pilihan Anda."
+   * "Buat field baru bernama selected_topic (di root document), lalu Paste isinya di sana."
+   * Terakhir, ubah field status menjadi "M2_STEP1_APPROVED".
 5. Jika Anda TIDAK SUKA (Butuh Revisi):
-   a. Ubah field status menjadi "M2_STEP1_NEEDS_REVISION".
-   b. Isi field feedback dengan alasan Anda (misal: "carikan topik yang lebih condong ke algoritma X").
+   * Ubah field status menjadi "M2_STEP1_NEEDS_REVISION".
+   * Isi field feedback dengan alasan Anda (misal: "carikan topik yang lebih condong ke algoritma X").
 6. Tekan "Update", dan jalankan ulang go run ./cmd/app/main.go! Jika approved akan lanjut ke Langkah 2. Jika revisi, akan men-generate ulang 3 saran topik baru.
 
 ### LANGKAH 2: REVIEW OF PRIOR REVIEWS (MATRIKS)
