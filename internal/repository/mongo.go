@@ -141,6 +141,28 @@ func (r *MongoRepository) UpdateScreeningPaper(ctx context.Context, id interface
 	return err
 }
 
+// ResetCalibrationScreenings membersihkan field keputusan sebelumnya untuk persiapan re-run kalibrasi.
+func (r *MongoRepository) ResetCalibrationScreenings(ctx context.Context, sessionID string) error {
+	filter := bson.M{
+		"session_id": sessionID,
+		"Final_Decision": "", // Hanya reset yang belum di-resolve secara final
+	}
+	update := bson.M{
+		"$set": bson.M{
+			"Screener_1_Decision": "",
+			"Screener_1_Reason_Code": "",
+			"Screener_1_Notes": "",
+			"Screener_2_Decision": "",
+			"Screener_2_Reason_Code": "",
+			"Screener_2_Notes": "",
+			"Agreement": "",
+			"Conflict_Resolution": nil,
+		},
+	}
+	_, err := r.GetScreeningCollection().UpdateMany(ctx, filter, update)
+	return err
+}
+
 // GetDisagreedPapers mengambil paper yang mengalami konflik antar reviewer (Agreement = DISAGREE)
 func (r *MongoRepository) GetDisagreedPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
 	filter := bson.M{

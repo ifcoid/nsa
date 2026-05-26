@@ -63,6 +63,9 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 	case "M5_STEP2_CALIBRATION":
 		logger.Log(session.ID, "   [Langkah 5.2] Menjalankan Kalibrasi Dual-Review (20 Sample) dengan API Z-AI GLM & Groq...")
+		
+		// Reset hasil screening sebelumnya agar tidak menumpuk saat re-run iterasi kalibrasi
+		_ = m.deps.MongoRepo.ResetCalibrationScreenings(ctx, session.ID)
 
 		// Inisialisasi LLM 
 		// (WAJIB menggunakan z-ai dan groq untuk dual-review, hentikan proses jika gagal)
