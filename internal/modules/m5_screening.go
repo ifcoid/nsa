@@ -191,6 +191,29 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		logger.Log(session.ID, "   4. Ubah status kembali ke 'M5_STEP2_CALIBRATION' untuk me-rerun kalibrasi 20 sample baru.")
 		return nil
 
+	case "M5_STEP2_NEEDS_REVISION":
+		logger.Log(session.ID, "   [System] Menerima feedback revisi untuk Screener Briefing. Memproses pembaruan...")
+		
+		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		if err != nil { return err }
+
+		scAgent := agent.NewScreeningAgent(llmBrain)
+		currentBriefing := ""
+		if session.ScreenerBriefing != nil {
+			currentBriefing = session.ScreenerBriefing.BriefingDoc
+		}
+
+		revisedBriefing, err := scAgent.ReviseBriefing(ctx, currentBriefing, session.Feedback)
+		if err != nil {
+			logger.Logf(session.ID, "   [ERROR] Gagal merevisi briefing: %v\n", err)
+			return err
+		}
+
+		session.ScreenerBriefing = revisedBriefing
+		session.Status = "M5_STEP2_CALIBRATION" // Kembalikan ke kalibrasi lagi
+		logger.Log(session.ID, "   [System] Screener Briefing berhasil direvisi. Melanjutkan ulang kalibrasi...")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
 	case "M5_STEP2_APPROVED":
 		logger.Log(session.ID, "   [Langkah 5.2] Kalibrasi disetujui! Lanjut ke Batch Screening Massal...")
 		session.Status = "M5_STEP3_BATCH_SCREENING"
@@ -200,9 +223,16 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		logger.Log(session.ID, "   [Langkah 5.3] Memulai Batch Screening Massal (Max 20 per batch)...")
 
 		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "z-ai")
-		if err != nil { llmR1, _ = m.deps.LLMFactory.CreateClient(ctx, "gemini") }
+		if err != nil { 
+			logger.Logf(session.ID, "   [ERROR] LLM z-ai gagal dimuat (%v). Harap konfigurasi API z-ai terlebih dahulu di halaman Pengaturan!\n", err)
+			return fmt.Errorf("z-ai LLM configuration missing or invalid. Please configure the z-ai API key first")
+		}
+		
 		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
-		if err != nil { llmR2, _ = m.deps.LLMFactory.CreateClient(ctx, "gemini") }
+		if err != nil { 
+			logger.Logf(session.ID, "   [ERROR] LLM groq gagal dimuat (%v). Harap konfigurasi API groq terlebih dahulu di halaman Pengaturan!\n", err)
+			return fmt.Errorf("groq LLM configuration missing or invalid. Please configure the groq API key first")
+		}
 
 		scAgent1 := agent.NewScreeningAgent(llmR1)
 		scAgent2 := agent.NewScreeningAgent(llmR2)

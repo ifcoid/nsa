@@ -75,6 +75,34 @@ Keluarkan HANYA JSON MURNI (tanpa markdown blok):
 	return &result, nil
 }
 
+func (a *ScreeningAgent) ReviseBriefing(ctx context.Context, currentBriefing string, feedback string) (*model.ScreenerBriefing, error) {
+	systemPrompt := `Anda adalah Manajer Sistematic Literature Review.
+Tugas Anda mengeksekusi revisi terhadap SCREENER BRIEFING berdasarkan feedback dari pengguna.
+
+Gunakan feedback untuk memperbaiki instruksi. Keluarkan HANYA JSON MURNI (tanpa markdown blok):
+{
+  "validation_gap": "Update analisis kelengkapan...",
+  "decision": "PROCEED",
+  "recommendation": "Saran revisi diterapkan...",
+  "briefing_doc": "--- SCREENER BRIEFING ..."
+}`
+
+	userPrompt := fmt.Sprintf("=== CURRENT BRIEFING ===\n%s\n\n=== FEEDBACK/REVISION REQUEST ===\n%s", currentBriefing, feedback)
+
+	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("screening_agent gagal memanggil LLM untuk revisi briefing: %w", err)
+	}
+
+	cleanJSON := CleanJSONResponse(rawResponse)
+	var result model.ScreenerBriefing
+	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON ScreenerBriefing revisi (%w). Raw: %s", err, rawResponse)
+	}
+
+	return &result, nil
+}
+
 type ScreeningDecision struct {
 	Decision   string `json:"decision"`
 	ReasonCode string `json:"reason_code"`
