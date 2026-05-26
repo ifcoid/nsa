@@ -12,7 +12,8 @@
 
 ## 2 Topik Penelitian (PICO) -> pico_definitions
 
- LANGKAH 1: TENTUKAN TOPIK + KLASIFIKASI TIPE GAP
+### LANGKAH 1: TENTUKAN TOPIK + KLASIFIKASI TIPE GAP
+
     Output: suggested_topics dan SelectedTopic
 
     ```txt
