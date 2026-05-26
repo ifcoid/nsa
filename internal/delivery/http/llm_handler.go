@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -179,8 +180,17 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 		httpReq.Header.Set("Authorization", "Bearer "+payload.APIKey)
 		
 		resp, err := client.Do(httpReq)
-		if err != nil || resp.StatusCode != 200 {
-			sendJSONError(w, http.StatusInternalServerError, "Failed to fetch from OpenAI-compatible API")
+		if err != nil {
+			sendJSONError(w, http.StatusInternalServerError, "Request failed: "+err.Error())
+			return
+		}
+		if resp.StatusCode != 200 {
+			// Read the body for error message but limit the size
+			buf := make([]byte, 1024)
+			n, _ := resp.Body.Read(buf)
+			resp.Body.Close()
+			errMsg := fmt.Sprintf("API returned status %d: %s", resp.StatusCode, string(buf[:n]))
+			sendJSONError(w, http.StatusInternalServerError, errMsg)
 			return
 		}
 		defer resp.Body.Close()
@@ -208,8 +218,8 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 					}
 				}
 				if !found {
-					// Prepend or append, let's just append
-					models = append(models, mm)
+					// Prepend so it appears at the very top of the dropdown
+					models = append([]string{mm}, models...)
 				}
 			}
 		}
