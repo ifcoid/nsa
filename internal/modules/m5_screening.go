@@ -112,20 +112,28 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			kwd := ""
 			if val, ok := p["Keywords"].(string); ok { kwd = val }
 
-			// R1 Review
-			res1, err1 := scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
-			if res1 == nil { 
-				errMsg := "Gagal mengekstrak keputusan dari AI."
-				if err1 != nil { errMsg = fmt.Sprintf("Error parsing JSON dari R1: %v", err1) }
-				res1 = &agent.ScreeningDecision{Decision: "UNCERTAIN", Notes: errMsg} 
+			// R1 Review (dengan mekanisme Retry 3x)
+			var res1 *agent.ScreeningDecision
+			var err1 error
+			for retry := 0; retry < 3; retry++ {
+				res1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+				if err1 == nil && res1 != nil { break }
+				time.Sleep(2 * time.Second)
+			}
+			if res1 == nil || err1 != nil { 
+				return fmt.Errorf("Kalibrasi dibatalkan: R1 (Zhipu) gagal merespons setelah 3x percobaan: %v", err1)
 			}
 			
-			// R2 Review
-			res2, err2 := scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
-			if res2 == nil { 
-				errMsg := "Gagal mengekstrak keputusan dari AI."
-				if err2 != nil { errMsg = fmt.Sprintf("Error parsing JSON dari R2: %v", err2) }
-				res2 = &agent.ScreeningDecision{Decision: "UNCERTAIN", Notes: errMsg} 
+			// R2 Review (dengan mekanisme Retry 3x)
+			var res2 *agent.ScreeningDecision
+			var err2 error
+			for retry := 0; retry < 3; retry++ {
+				res2, err2 = scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+				if err2 == nil && res2 != nil { break }
+				time.Sleep(2 * time.Second)
+			}
+			if res2 == nil || err2 != nil { 
+				return fmt.Errorf("Kalibrasi dibatalkan: R2 (Groq) gagal merespons setelah 3x percobaan: %v", err2)
 			}
 
 			agreement := "DISAGREE"
@@ -170,7 +178,8 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			kappa = 1.0 // Perfect agreement jika pE = 1 dan pO = 1
 		}
 
-		passed := kappa >= 0.60
+		// Mengatasi fenomena "Kappa Paradox" (di mana Kappa anjlok menjadi 0 jika prevalensi sangat skewed meskipun Agreement sangat tinggi)
+		passed := kappa >= 0.60 || (float64(agreeCount)/float64(total) >= 0.90)
 		iter := len(session.KalibrasiLog) + 1
 		logEntry := model.KalibrasiIteration{
 			Iterasi: iter,
