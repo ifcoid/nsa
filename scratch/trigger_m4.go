@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 import (
@@ -21,9 +23,9 @@ func main() {
 	defer client.Disconnect(ctx)
 
 	coll := client.Database("slr_db").Collection("slr_sessions")
-	
+
 	// Update all M4_STEP2_WAITING_APPROVAL to M4_STEP2_PROCESS
-	res, err := coll.UpdateMany(ctx, 
+	res, err := coll.UpdateMany(ctx,
 		bson.M{"status": "M4_STEP2_WAITING_APPROVAL"},
 		bson.M{"$set": bson.M{"status": "M4_STEP2_PROCESS"}},
 	)
