@@ -118,14 +118,15 @@ Tugas Anda adalah meninjau Title, Abstract, dan Keywords dari paper yang diberik
 "INCLUDE", "EXCLUDE", atau "UNCERTAIN".
 
 ATURAN:
-1. Jika keputusan "EXCLUDE", Anda WAJIB mengisi field "reason_code" dengan salah satu dari REASON CODES di briefing. Jika "INCLUDE" atau "UNCERTAIN", kosongkan atau isi "-".
-2. Dalam field "notes", tuliskan analisis Anda secara komprehensif sebagai VERDICT-AID (termasuk pandangan STRICT dan LIBERAL).
+1. Jika keputusan "EXCLUDE", Anda WAJIB mengisi field "reason_code" dengan salah satu dari REASON CODES di briefing. Jika keputusan "INCLUDE" atau "UNCERTAIN", field "reason_code" harus dikosongkan (isi "-").
+2. Field "notes" WAJIB SELALU DIISI terlepas dari apapun keputusannya. Tuliskan analisis Anda secara komprehensif sebagai VERDICT-AID (termasuk pandangan STRICT dan LIBERAL).
 
-Keluarkan HANYA JSON MURNI tanpa blok markdown:
+CRITICAL INSTRUCTION: You must respond ONLY with a valid JSON object. Do not include any markdown blocks (```json), conversational text, or explanations outside the JSON.
+Gunakan urutan berikut di mana "notes" berada di awal agar Anda dapat berpikir (Chain-of-Thought) sebelum menetapkan "decision":
 {
+  "notes": "Perspektif Strict: ... Perspektif Liberal: ... Verdict-Aid: ...",
   "decision": "EXCLUDE",
-  "reason_code": "STUDY-DESIGN",
-  "notes": "Perspektif Strict: ... Perspektif Liberal: ... Verdict-Aid: ..."
+  "reason_code": "STUDY-DESIGN"
 }`, briefing)
 
 	userPrompt := fmt.Sprintf("Title: %s\nKeywords: %s\nAbstract: %s", title, keywords, abstract)
