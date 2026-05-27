@@ -166,6 +166,8 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 				baseURL = "https://api.groq.com/openai/v1"
 			} else if provider == "zhipu" || provider == "z-ai" {
 				baseURL = "https://open.bigmodel.cn/api/paas/v4"
+			} else if provider == "openrouter" {
+				baseURL = "https://openrouter.ai/api/v1"
 			} else {
 				sendJSONError(w, http.StatusBadRequest, "Base URL is required for this provider")
 				return
