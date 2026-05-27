@@ -42,7 +42,7 @@ func main() {
 
 	sessionID := os.Getenv("SESSION_ID")
 	if sessionID == "" {
-		log.Fatal("❌ ERROR: SESSION_ID tidak ditemukan di file .env. Harap tentukan sesi riset Anda.")
+		log.Println("⚠️  Info: SESSION_ID tidak ditemukan di file .env. Sistem tidak akan membuat sesi default.")
 	}
 
 	// 1. Inisialisasi Repositori MongoDB
@@ -250,19 +250,21 @@ func seedInitialData(ctx context.Context, repo *repository.MongoRepository, sess
 		_ = updateLLMConfigDirectly(ctx, repo, nvidiaConfig)
 	}
 
-	// B. Seed Sesi Riset SLR Baru (Status: INIT)
-	_, err = repo.GetSession(ctx, sessionID)
-	if err != nil {
-		isSeeded = true
-		fmt.Printf("[Seeding] Membuat sesi riset baru (%s) dengan Status: 'INIT'...\n", sessionID)
-		newSession := &model.SLRSession{
-			ID:     sessionID,
-			Topic:  "Penggunaan Active Learning pada Machine Learning untuk klasifikasi data Brain-Computer Interface (BCI)",
-			Status: "INIT",
-		}
-		err = repo.UpdateSession(ctx, newSession)
+	// B. Seed Sesi Riset SLR Baru (Status: INIT) - Hanya jika sessionID tidak kosong
+	if sessionID != "" {
+		_, err = repo.GetSession(ctx, sessionID)
 		if err != nil {
-			log.Printf("Warn: Gagal seeding session awal: %v", err)
+			isSeeded = true
+			fmt.Printf("[Seeding] Membuat sesi riset baru (%s) dengan Status: 'INIT'...\n", sessionID)
+			newSession := &model.SLRSession{
+				ID:     sessionID,
+				Topic:  "Penggunaan Active Learning pada Machine Learning untuk klasifikasi data Brain-Computer Interface (BCI)",
+				Status: "INIT",
+			}
+			err = repo.UpdateSession(ctx, newSession)
+			if err != nil {
+				log.Printf("Warn: Gagal seeding session awal: %v", err)
+			}
 		}
 	}
 
