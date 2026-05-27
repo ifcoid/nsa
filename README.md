@@ -59,3 +59,9 @@ go run cmd/app/main.go
 
 Dan seketika itu pula Anda bisa me-reset dan memulai eksperimen topik SLR Anda melalui `POST http://localhost:8080/api/sessions`.
 
+## Release
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
