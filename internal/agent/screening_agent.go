@@ -112,7 +112,7 @@ type ScreeningDecision struct {
 	Notes      string `json:"-"`
 }
 
-func (a *ScreeningAgent) ReviewPaper(ctx context.Context, briefing, title, abstract, keywords string) (*ScreeningDecision, error) {
+func (a *ScreeningAgent) ReviewPaper(ctx context.Context, briefing, title, abstract, keywords string) (*ScreeningDecision, string, error) {
 	systemPrompt := fmt.Sprintf(`Anda adalah Reviewer Independen untuk Systematic Literature Review.
 Berikut adalah SCREENER BRIEFING yang WAJIB Anda patuhi:
 %s
@@ -138,17 +138,17 @@ Gunakan urutan berikut di mana perspektif berada di awal agar Anda dapat berpiki
 
 	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {
-		return nil, fmt.Errorf("gagal review paper: %w", err)
+		return nil, "", fmt.Errorf("gagal review paper: %w", err)
 	}
 
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result ScreeningDecision
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON ReviewPaper (%w). Raw: %s", err, rawResponse)
+		return nil, "", fmt.Errorf("gagal parsing JSON ReviewPaper (%w). Raw: %s", err, rawResponse)
 	}
 	
 	result.Notes = fmt.Sprintf("<b>Perspektif Strict:</b> %s<br><br><b>Perspektif Liberal:</b> %s<br><br><b>Verdict-Aid:</b> %s", result.Strict, result.Liberal, result.VerdictAid)
-	return &result, nil
+	return &result, rawResponse, nil
 }
 
 func (a *ScreeningAgent) BatchReviewPaper(ctx context.Context, briefing, title, abstract, keywords string) (*model.ScreeningPerspective, error) {

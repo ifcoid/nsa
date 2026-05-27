@@ -112,29 +112,39 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			kwd := ""
 			if val, ok := p["Keywords"].(string); ok { kwd = val }
 
-			// R1 Review (dengan mekanisme Retry 3x)
+			// R1 Review (dengan mekanisme Retry 3x & Exponential Backoff)
 			var res1 *agent.ScreeningDecision
+			var raw1 string
 			var err1 error
-			for retry := 0; retry < 3; retry++ {
-				res1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+			for retry := 0; retry < 4; retry++ {
+				res1, raw1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 				if err1 == nil && res1 != nil { break }
-				time.Sleep(2 * time.Second)
+				backoff := time.Duration((retry+1)*5) * time.Second
+				logger.Logf(session.ID, "      [R1 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
+				time.Sleep(backoff)
 			}
 			if res1 == nil || err1 != nil { 
-				return fmt.Errorf("Kalibrasi dibatalkan: R1 (Zhipu) gagal merespons setelah 3x percobaan: %v", err1)
+				return fmt.Errorf("Kalibrasi dibatalkan: R1 (Zhipu) gagal merespons setelah 4x percobaan: %v", err1)
 			}
+			// Cetak raw LLM ke websocket (XAI/NSA)
+			logger.Logf(session.ID, "      [RAW R1 Zhipu] %s", raw1)
 			
-			// R2 Review (dengan mekanisme Retry 3x)
+			// R2 Review (dengan mekanisme Retry 3x & Exponential Backoff)
 			var res2 *agent.ScreeningDecision
+			var raw2 string
 			var err2 error
-			for retry := 0; retry < 3; retry++ {
-				res2, err2 = scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+			for retry := 0; retry < 4; retry++ {
+				res2, raw2, err2 = scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 				if err2 == nil && res2 != nil { break }
-				time.Sleep(2 * time.Second)
+				backoff := time.Duration((retry+1)*5) * time.Second
+				logger.Logf(session.ID, "      [R2 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
+				time.Sleep(backoff)
 			}
 			if res2 == nil || err2 != nil { 
-				return fmt.Errorf("Kalibrasi dibatalkan: R2 (Groq) gagal merespons setelah 3x percobaan: %v", err2)
+				return fmt.Errorf("Kalibrasi dibatalkan: R2 (Groq) gagal merespons setelah 4x percobaan: %v", err2)
 			}
+			// Cetak raw LLM ke websocket (XAI/NSA)
+			logger.Logf(session.ID, "      [RAW R2 Groq] %s", raw2)
 
 			agreement := "DISAGREE"
 			if res1.Decision == res2.Decision {
@@ -162,6 +172,9 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			if d1 == "INCLUDE" && d2 == "EXCLUDE" { r1IncR2Exc++ }
 			if d1 == "EXCLUDE" && d2 == "INCLUDE" { r1ExcR2Inc++ }
 			total++
+
+			// Jeda (Pacing/Throttling) agar tidak terjadi Rate Limit
+			time.Sleep(2 * time.Second)
 		}
 
 		// Kalkulasi Cohen's Kappa
