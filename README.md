@@ -65,6 +65,15 @@ go run cmd/app/main.go
 
 Dan seketika itu pula Anda bisa me-reset dan memulai eksperimen topik SLR Anda melalui `POST http://localhost:50607/api/sessions`.
 
+## Konfigurasi (Environment Variables)
+
+Aplikasi ini sangat portabel dan mengikuti prinsip *12-Factor App*. Penggunaan file `.env` bersifat **opsional**. Jika Anda menjalankan aplikasi ini di komputer lokal tanpa melakukan konfigurasi apa pun, sistem akan cerdas mengambil nilai bawaan (*default*) berikut:
+
+- `MONGO_URI` = `mongodb://localhost:27017`
+- `DB_NAME` = `slr_agentic_db`
+
+Anda dapat dengan mudah menimpa nilai bawaan ini dengan membuat file `.env` atau mendefinisikannya langsung di variabel sistem operasi (*OS Environment Variables*) saat Anda memindahkan (*deploy*) aplikasi ke server produksi atau layanan Cloud.
+
 ## Release
 
 Proses pembuatan rilis (*release*) dan kompilasi *cross-platform* sekarang sudah diotomatisasi. Anda bisa menggunakan *script* PowerShell berikut:
