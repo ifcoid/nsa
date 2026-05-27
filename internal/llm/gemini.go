@@ -26,7 +26,9 @@ func (g *GeminiClient) Generate(ctx context.Context, systemPrompt, userPrompt st
 	}
 
 	// Mengaktifkan GoogleSearchRetrieval
+	temp := float32(0.1)
 	config := &genai.GenerateContentConfig{
+		Temperature: &temp,
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{{Text: systemPrompt}},
 		},

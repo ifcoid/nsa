@@ -33,8 +33,9 @@ type openAIMessage struct {
 }
 
 type openAIRequest struct {
-	Model    string          `json:"model"`
-	Messages []openAIMessage `json:"messages"`
+	Model       string          `json:"model"`
+	Temperature float32         `json:"temperature"`
+	Messages    []openAIMessage `json:"messages"`
 }
 
 // Struct internal untuk membaca Payload Response dari OpenAI
@@ -52,9 +53,9 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, systemPrompt, use
 	// 1. Susun endpoint lengkap (biasanya diakhiri dengan /chat/completions)
 	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
 
-	// 2. Buat payload JSON
 	payload := openAIRequest{
-		Model: c.Model,
+		Model:       c.Model,
+		Temperature: 0.1, // Set sangat rendah (dingin) untuk menjamin objektivitas & konsistensi format JSON
 		Messages: []openAIMessage{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
