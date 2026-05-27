@@ -134,7 +134,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				// Belum dievaluasi, panggil API!
 				
 				// R1 Review (dengan mekanisme Retry 8x & Ultra-Santuy Backoff + Jitter)
-				backoffDelays := []int{5, 10, 20, 30, 60, 120, 120, 120} // detik
+				backoffDelays := []int{5, 10, 20, 30, 60, 120, 240, 480} // detik
 				for retry := 0; retry < 8; retry++ {
 					res1, raw1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 					if err1 == nil && res1 != nil { break }
