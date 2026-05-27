@@ -9,6 +9,7 @@ import (
 	"nsa/internal/logger"
 	"nsa/internal/model"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 type M5Screening struct { deps *ModuleDeps }
@@ -112,54 +113,66 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			kwd := ""
 			if val, ok := p["Keywords"].(string); ok { kwd = val }
 
-			// R1 Review (dengan mekanisme Retry 4x & True Exponential Backoff + Jitter)
 			var res1 *agent.ScreeningDecision
 			var raw1 string
 			var err1 error
-			for retry := 0; retry < 4; retry++ {
-				res1, raw1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
-				if err1 == nil && res1 != nil { break }
-				
-				// True Exponential: 1s, 2s, 4s, 8s
-				baseDelaySec := float64(uint(1) << retry)
-				// Jitter ±20%
-				jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
-				finalDelaySec := baseDelaySec + jitter
-				backoff := time.Duration(finalDelaySec * float64(time.Second))
-				
-				logger.Logf(session.ID, "      [R1 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
-				time.Sleep(backoff)
-			}
-			if res1 == nil || err1 != nil { 
-				return fmt.Errorf("Kalibrasi dibatalkan: R1 (Zhipu) gagal merespons setelah 4x percobaan: %v", err1)
-			}
-			// Cetak raw LLM ke websocket (XAI/NSA)
-			logger.Logf(session.ID, "      [RAW R1 Zhipu] %s", raw1)
 			
-			// Jeda Antar Agen (Sequential Micro-Throttling) agar tidak burst request
-			time.Sleep(3 * time.Second)
-
-			// R2 Review (dengan mekanisme Retry 4x & True Exponential Backoff + Jitter)
 			var res2 *agent.ScreeningDecision
 			var raw2 string
 			var err2 error
-			for retry := 0; retry < 4; retry++ {
-				res2, raw2, err2 = scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
-				if err2 == nil && res2 != nil { break }
-				
-				baseDelaySec := float64(uint(1) << retry)
-				jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec
-				finalDelaySec := baseDelaySec + jitter
-				backoff := time.Duration(finalDelaySec * float64(time.Second))
 
-				logger.Logf(session.ID, "      [R2 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
-				time.Sleep(backoff)
+			// Cek apakah paper ini SUDAH dievaluasi sebelumnya (Resume logic)
+			d1Str, hasD1 := p["Screener_1_Decision"].(string)
+			d2Str, hasD2 := p["Screener_2_Decision"].(string)
+			
+			if hasD1 && hasD2 && d1Str != "" && d2Str != "" {
+				// Paper sudah dievaluasi, langsung baca keputusannya!
+				logger.Logf(session.ID, "      -> [Resume] Paper ini sudah dievaluasi sebelumnya (R1: %s, R2: %s). Melompati pemanggilan LLM...", d1Str, d2Str)
+				res1 = &agent.ScreeningDecision{Decision: d1Str, ReasonCode: p["Screener_1_Reason_Code"].(string), Notes: p["Screener_1_Notes"].(string)}
+				res2 = &agent.ScreeningDecision{Decision: d2Str, ReasonCode: p["Screener_2_Reason_Code"].(string), Notes: p["Screener_2_Notes"].(string)}
+			} else {
+				// Belum dievaluasi, panggil API!
+				
+				// R1 Review (dengan mekanisme Retry 8x & Ultra-Santuy Backoff + Jitter)
+				backoffDelays := []int{5, 10, 20, 30, 60, 120, 120, 120} // detik
+				for retry := 0; retry < 8; retry++ {
+					res1, raw1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+					if err1 == nil && res1 != nil { break }
+					
+					baseDelaySec := float64(backoffDelays[retry])
+					jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
+					finalDelaySec := baseDelaySec + jitter
+					backoff := time.Duration(finalDelaySec * float64(time.Second))
+					
+					logger.Logf(session.ID, "      [R1 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
+					time.Sleep(backoff)
+				}
+				if res1 == nil || err1 != nil { 
+					return fmt.Errorf("Kalibrasi dibatalkan: R1 (Zhipu) gagal merespons setelah 8x percobaan: %v", err1)
+				}
+				logger.Logf(session.ID, "      [RAW R1 Zhipu] %s", raw1)
+				
+				// Jeda Antar Agen (Sequential Micro-Throttling) agar tidak burst request
+				time.Sleep(3 * time.Second)
+	
+				// R2 Review (dengan mekanisme Retry 8x & Ultra-Santuy Backoff + Jitter)
+				for retry := 0; retry < 8; retry++ {
+					res2, raw2, err2 = scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+					if err2 == nil && res2 != nil { break }
+					
+					baseDelaySec := float64(backoffDelays[retry])
+					jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec
+					finalDelaySec := baseDelaySec + jitter
+					backoff := time.Duration(finalDelaySec * float64(time.Second))
+	
+					logger.Logf(session.ID, "      [R2 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
+					time.Sleep(backoff)
+				}
+				if res2 == nil || err2 != nil { 
+					return fmt.Errorf("Kalibrasi dibatalkan: R2 (Groq) gagal merespons setelah 8x percobaan: %v", err2)
+				}
+				logger.Logf(session.ID, "      [RAW R2 Groq] %s", raw2)
 			}
-			if res2 == nil || err2 != nil { 
-				return fmt.Errorf("Kalibrasi dibatalkan: R2 (Groq) gagal merespons setelah 4x percobaan: %v", err2)
-			}
-			// Cetak raw LLM ke websocket (XAI/NSA)
-			logger.Logf(session.ID, "      [RAW R2 Groq] %s", raw2)
 
 			agreement := "DISAGREE"
 			if res1.Decision == res2.Decision {
@@ -167,17 +180,19 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				agreeCount++
 			}
 
-			// Update dokumen
-			updateDoc := map[string]interface{}{
-				"Screener_1_Decision": res1.Decision,
-				"Screener_1_Reason_Code": res1.ReasonCode,
-				"Screener_1_Notes": res1.Notes,
-				"Screener_2_Decision": res2.Decision,
-				"Screener_2_Reason_Code": res2.ReasonCode,
-				"Screener_2_Notes": res2.Notes,
-				"Agreement": agreement,
+			// Update dokumen jika ini adalah evaluasi baru
+			if !(hasD1 && hasD2 && d1Str != "" && d2Str != "") {
+				updateDoc := map[string]interface{}{
+					"Screener_1_Decision": res1.Decision,
+					"Screener_1_Reason_Code": res1.ReasonCode,
+					"Screener_1_Notes": res1.Notes,
+					"Screener_2_Decision": res2.Decision,
+					"Screener_2_Reason_Code": res2.ReasonCode,
+					"Screener_2_Notes": res2.Notes,
+					"Agreement": agreement,
+				}
+				m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], updateDoc)
 			}
-			m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], updateDoc)
 
 			// Hitung matriks (Abaikan UNCERTAIN untuk perhitungan dasar kappa 2x2 INCLUDE/EXCLUDE)
 			d1 := res1.Decision
@@ -252,6 +267,11 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 	case "M5_STEP2_NEEDS_REVISION":
 		logger.Log(session.ID, "   [System] Menerima feedback revisi untuk Screener Briefing. Memproses pembaruan...")
 		
+		// Hapus flag in_calibration_batch agar iterasi kalibrasi berikutnya mengambil 20 sampel baru!
+		updateFilter := bson.M{"session_id": session.ID, "in_calibration_batch": true}
+		updateDoc := bson.M{"$unset": bson.M{"in_calibration_batch": ""}}
+		m.deps.MongoRepo.GetScreeningCollection().UpdateMany(ctx, updateFilter, updateDoc)
+
 		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
 		if err != nil { return err }
 

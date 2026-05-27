@@ -100,17 +100,45 @@ func (r *MongoRepository) GetScreeningCollection() *mongo.Collection {
 }
 
 func (r *MongoRepository) GetRandomScreeningPapers(ctx context.Context, sessionID string, limit int) ([]map[string]interface{}, error) {
+	// 1. Cek apakah sudah ada batch kalibrasi yang sedang berjalan (Stateful Resume)
+	filterActive := bson.M{"session_id": sessionID, "Final_Decision": "", "in_calibration_batch": true}
+	findOptions := options.Find().SetLimit(int64(limit))
+	cursor, err := r.GetScreeningCollection().Find(ctx, filterActive, findOptions)
+	if err == nil {
+		var activeResults []map[string]interface{}
+		cursor.All(ctx, &activeResults)
+		if len(activeResults) > 0 {
+			return activeResults, nil // Resume batch sebelumnya!
+		}
+	}
+
+	// 2. Jika tidak ada, ambil sample acak baru
 	pipeline := mongo.Pipeline{
-		{{"$match", bson.M{"session_id": sessionID, "Final_Decision": ""}}},
+		{{"$match", bson.M{"session_id": sessionID, "Final_Decision": "", "in_calibration_batch": bson.M{"$ne": true}}}},
 		{{"$sample", bson.M{"size": limit}}},
 	}
-	cursor, err := r.GetScreeningCollection().Aggregate(ctx, pipeline)
+	cursor, err = r.GetScreeningCollection().Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
 	var results []map[string]interface{}
 	err = cursor.All(ctx, &results)
-	return results, err
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Tandai (Lock) sample-sample baru ini ke dalam batch kalibrasi
+	if len(results) > 0 {
+		var ids []interface{}
+		for _, doc := range results {
+			ids = append(ids, doc["_id"])
+		}
+		updateFilter := bson.M{"_id": bson.M{"$in": ids}}
+		updateDoc := bson.M{"$set": bson.M{"in_calibration_batch": true}}
+		r.GetScreeningCollection().UpdateMany(ctx, updateFilter, updateDoc)
+	}
+
+	return results, nil
 }
 
 func (r *MongoRepository) GetUnscreenedPapers(ctx context.Context, sessionID string, limit int) ([]map[string]interface{}, error) {
