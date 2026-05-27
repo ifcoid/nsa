@@ -112,14 +112,21 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			kwd := ""
 			if val, ok := p["Keywords"].(string); ok { kwd = val }
 
-			// R1 Review (dengan mekanisme Retry 3x & Exponential Backoff)
+			// R1 Review (dengan mekanisme Retry 4x & True Exponential Backoff + Jitter)
 			var res1 *agent.ScreeningDecision
 			var raw1 string
 			var err1 error
 			for retry := 0; retry < 4; retry++ {
 				res1, raw1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 				if err1 == nil && res1 != nil { break }
-				backoff := time.Duration((retry+1)*5) * time.Second
+				
+				// True Exponential: 1s, 2s, 4s, 8s
+				baseDelaySec := float64(uint(1) << retry)
+				// Jitter ±20%
+				jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
+				finalDelaySec := baseDelaySec + jitter
+				backoff := time.Duration(finalDelaySec * float64(time.Second))
+				
 				logger.Logf(session.ID, "      [R1 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
 				time.Sleep(backoff)
 			}
@@ -129,14 +136,22 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			// Cetak raw LLM ke websocket (XAI/NSA)
 			logger.Logf(session.ID, "      [RAW R1 Zhipu] %s", raw1)
 			
-			// R2 Review (dengan mekanisme Retry 3x & Exponential Backoff)
+			// Jeda Antar Agen (Sequential Micro-Throttling) agar tidak burst request
+			time.Sleep(3 * time.Second)
+
+			// R2 Review (dengan mekanisme Retry 4x & True Exponential Backoff + Jitter)
 			var res2 *agent.ScreeningDecision
 			var raw2 string
 			var err2 error
 			for retry := 0; retry < 4; retry++ {
 				res2, raw2, err2 = scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 				if err2 == nil && res2 != nil { break }
-				backoff := time.Duration((retry+1)*5) * time.Second
+				
+				baseDelaySec := float64(uint(1) << retry)
+				jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec
+				finalDelaySec := baseDelaySec + jitter
+				backoff := time.Duration(finalDelaySec * float64(time.Second))
+
 				logger.Logf(session.ID, "      [R2 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
 				time.Sleep(backoff)
 			}
@@ -174,7 +189,8 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			total++
 
 			// Jeda (Pacing/Throttling) agar tidak terjadi Rate Limit
-			time.Sleep(2 * time.Second)
+			// Zhipu free tier max 3-10 RPM. 8 detik memastikan ~6 RPM.
+			time.Sleep(8 * time.Second)
 		}
 
 		// Kalkulasi Cohen's Kappa
