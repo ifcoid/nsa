@@ -121,7 +121,7 @@ ATURAN:
 1. Jika keputusan "EXCLUDE", Anda WAJIB mengisi field "reason_code" dengan salah satu dari REASON CODES di briefing. Jika keputusan "INCLUDE" atau "UNCERTAIN", field "reason_code" harus dikosongkan (isi "-").
 2. Field "notes" WAJIB SELALU DIISI terlepas dari apapun keputusannya. Tuliskan analisis Anda secara komprehensif sebagai VERDICT-AID (termasuk pandangan STRICT dan LIBERAL).
 
-CRITICAL INSTRUCTION: You must respond ONLY with a valid JSON object. Do not include any markdown blocks (```json), conversational text, or explanations outside the JSON.
+CRITICAL INSTRUCTION: You must respond ONLY with a valid JSON object. Do not include any markdown blocks (like '''json), conversational text, or explanations outside the JSON.
 Gunakan urutan berikut di mana "notes" berada di awal agar Anda dapat berpikir (Chain-of-Thought) sebelum menetapkan "decision":
 {
   "notes": "Perspektif Strict: ... Perspektif Liberal: ... Verdict-Aid: ...",

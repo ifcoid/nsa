@@ -113,12 +113,20 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			if val, ok := p["Keywords"].(string); ok { kwd = val }
 
 			// R1 Review
-			res1, _ := scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
-			if res1 == nil { res1 = &agent.ScreeningDecision{Decision: "UNCERTAIN"} }
+			res1, err1 := scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+			if res1 == nil { 
+				errMsg := "Gagal mengekstrak keputusan dari AI."
+				if err1 != nil { errMsg = fmt.Sprintf("Error parsing JSON dari R1: %v", err1) }
+				res1 = &agent.ScreeningDecision{Decision: "UNCERTAIN", Notes: errMsg} 
+			}
 			
 			// R2 Review
-			res2, _ := scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
-			if res2 == nil { res2 = &agent.ScreeningDecision{Decision: "UNCERTAIN"} }
+			res2, err2 := scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+			if res2 == nil { 
+				errMsg := "Gagal mengekstrak keputusan dari AI."
+				if err2 != nil { errMsg = fmt.Sprintf("Error parsing JSON dari R2: %v", err2) }
+				res2 = &agent.ScreeningDecision{Decision: "UNCERTAIN", Notes: errMsg} 
+			}
 
 			agreement := "DISAGREE"
 			if res1.Decision == res2.Decision {
