@@ -241,12 +241,21 @@ type ScreenerBriefing struct {
 }
 
 type KalibrasiIteration struct {
-	Iterasi      int     `bson:"iterasi" json:"iterasi"`
-	Tanggal      string  `bson:"tanggal" json:"tanggal"`
-	Kappa        float64 `bson:"kappa" json:"kappa"`
-	Revisi       string  `bson:"revisi" json:"revisi"`
-	Passed       bool    `bson:"passed" json:"passed"`
-	AgreementPct float64 `bson:"agreement_pct" json:"agreement_pct"`
+	Iterasi       int     `bson:"iterasi" json:"iterasi"`
+	Tanggal       string  `bson:"tanggal" json:"tanggal"`
+	TotalSample   int     `bson:"total_sample" json:"total_sample"`
+	AgreeCount    int     `bson:"agree_count" json:"agree_count"`
+	DisagreeCount int     `bson:"disagree_count" json:"disagree_count"`
+	BothInclude   int     `bson:"both_include" json:"both_include"`
+	BothExclude   int     `bson:"both_exclude" json:"both_exclude"`
+	R1IncR2Exc    int     `bson:"r1_inc_r2_exc" json:"r1_inc_r2_exc"`
+	R1ExcR2Inc    int     `bson:"r1_exc_r2_inc" json:"r1_exc_r2_inc"`
+	PO            float64 `bson:"po" json:"po"`
+	PE            float64 `bson:"pe" json:"pe"`
+	Kappa         float64 `bson:"kappa" json:"kappa"`
+	AgreementPct  float64 `bson:"agreement_pct" json:"agreement_pct"`
+	Passed        bool    `bson:"passed" json:"passed"`
+	Revisi        string  `bson:"revisi" json:"revisi"`
 }
 
 type ScreeningPerspective struct {

@@ -182,12 +182,21 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		passed := kappa >= 0.60 || (float64(agreeCount)/float64(total) >= 0.90)
 		iter := len(session.KalibrasiLog) + 1
 		logEntry := model.KalibrasiIteration{
-			Iterasi: iter,
-			Tanggal: time.Now().Format("2006-01-02"),
-			Kappa: kappa,
-			AgreementPct: float64(agreeCount) / float64(total) * 100,
-			Passed: passed,
-			Revisi: "Initial Review",
+			Iterasi:       iter,
+			Tanggal:       time.Now().Format("2006-01-02"),
+			TotalSample:   total,
+			AgreeCount:    agreeCount,
+			DisagreeCount: total - agreeCount,
+			BothInclude:   bothInclude,
+			BothExclude:   bothExclude,
+			R1IncR2Exc:    r1IncR2Exc,
+			R1ExcR2Inc:    r1ExcR2Inc,
+			PO:            pO,
+			PE:            pE,
+			Kappa:         kappa,
+			AgreementPct:  float64(agreeCount) / float64(total) * 100,
+			Passed:        passed,
+			Revisi:        "Initial Review",
 		}
 		session.KalibrasiLog = append(session.KalibrasiLog, logEntry)
 
