@@ -1,6 +1,10 @@
 # Neuro-Symbolic AI dengan Active Learning
 
-Menciptakan sistem AI yang sepenuhnya dapat diaudit (auditable) dan ilmiah untuk jurnal internasional dengan Human in The Loop.
+Sistem AI untuk riset jurnal internasional yang sepenuhnya transparan dan dapat diaudit. Sistem ini memadukan pendekatan:
+
+1. Active Learning / Human-in-the-Loop.
+2. XAI (Explainable AI).
+3. Neuro-Symbolic AI.
 
 ```txt
 slr-agentic/
@@ -15,6 +19,8 @@ slr-agentic/
 │   │   └── neo4j.go            # Ingest Knowledge Graph (Symbolic AI)
 │   ├── llm/
 │   │   └── gemini.go           # Adapter untuk API LLM (Gemini/Claude)
+│   ├── delivery/
+│   │   └── http/               # Endpoint API (router, session_handler, llm_handler)
 │   ├── agent/
 │   │   ├── agent.go            # Base struct / interface Agent
 │   │   ├── pico_agent.go       # Spesialis analisis PICO
@@ -57,11 +63,17 @@ Anda sudah bisa menjalankan servernya melalui terminal dengan perintah:
 go run cmd/app/main.go
 ```
 
-Dan seketika itu pula Anda bisa me-reset dan memulai eksperimen topik SLR Anda melalui `POST http://localhost:8080/api/sessions`.
+Dan seketika itu pula Anda bisa me-reset dan memulai eksperimen topik SLR Anda melalui `POST http://localhost:50607/api/sessions`.
 
 ## Release
 
-```sh
-git tag v1.0.0
-git push origin v1.0.0
+Proses pembuatan rilis (*release*) dan kompilasi *cross-platform* sekarang sudah diotomatisasi. Anda bisa menggunakan *script* PowerShell berikut:
+
+```powershell
+.\build.ps1 -Version "1.0.0"
 ```
+
+Perintah di atas akan:
+1. Membuat Git tag `v1.0.0` dan melakukan `git push` secara otomatis.
+2. Memicu GitHub Actions untuk mengompilasi *binary* untuk Windows, Linux, dan macOS lalu menambahkannya ke tab **Releases** di GitHub.
+3. Membuat *build* lokal untuk Windows (`if-slr.exe`) dan mengompresnya menjadi `aplikasi-slr.zip`.
