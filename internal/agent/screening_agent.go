@@ -106,7 +106,10 @@ Gunakan feedback untuk memperbaiki instruksi. Keluarkan HANYA JSON MURNI (tanpa 
 type ScreeningDecision struct {
 	Decision   string `json:"decision"`
 	ReasonCode string `json:"reason_code"`
-	Notes      string `json:"notes"`
+	Strict     string `json:"strict_perspective"`
+	Liberal    string `json:"liberal_perspective"`
+	VerdictAid string `json:"verdict_aid"`
+	Notes      string `json:"-"`
 }
 
 func (a *ScreeningAgent) ReviewPaper(ctx context.Context, briefing, title, abstract, keywords string) (*ScreeningDecision, error) {
@@ -119,12 +122,14 @@ Tugas Anda adalah meninjau Title, Abstract, dan Keywords dari paper yang diberik
 
 ATURAN:
 1. Jika keputusan "EXCLUDE", Anda WAJIB mengisi field "reason_code" dengan salah satu dari REASON CODES di briefing. Jika keputusan "INCLUDE" atau "UNCERTAIN", field "reason_code" harus dikosongkan (isi "-").
-2. Field "notes" WAJIB SELALU DIISI terlepas dari apapun keputusannya. Tuliskan analisis Anda secara komprehensif sebagai VERDICT-AID (termasuk pandangan STRICT dan LIBERAL).
+2. Field "strict_perspective", "liberal_perspective", dan "verdict_aid" WAJIB SELALU DIISI terlepas dari apapun keputusannya.
 
 CRITICAL INSTRUCTION: You must respond ONLY with a valid JSON object. Do not include any markdown blocks (like '''json), conversational text, or explanations outside the JSON.
-Gunakan urutan berikut di mana "notes" berada di awal agar Anda dapat berpikir (Chain-of-Thought) sebelum menetapkan "decision":
+Gunakan urutan berikut di mana perspektif berada di awal agar Anda dapat berpikir (Chain-of-Thought) sebelum menetapkan "decision":
 {
-  "notes": "Perspektif Strict: ... Perspektif Liberal: ... Verdict-Aid: ...",
+  "strict_perspective": "Tuliskan analisis jika Anda bersikap sangat kaku/ketat...",
+  "liberal_perspective": "Tuliskan analisis jika Anda bersikap longgar/suportif...",
+  "verdict_aid": "Kesimpulan penengah dari kedua perspektif di atas...",
   "decision": "EXCLUDE",
   "reason_code": "STUDY-DESIGN"
 }`, briefing)
@@ -141,6 +146,8 @@ Gunakan urutan berikut di mana "notes" berada di awal agar Anda dapat berpikir (
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
 		return nil, fmt.Errorf("gagal parsing JSON ReviewPaper (%w). Raw: %s", err, rawResponse)
 	}
+	
+	result.Notes = fmt.Sprintf("<b>Perspektif Strict:</b> %s<br><br><b>Perspektif Liberal:</b> %s<br><br><b>Verdict-Aid:</b> %s", result.Strict, result.Liberal, result.VerdictAid)
 	return &result, nil
 }
 
