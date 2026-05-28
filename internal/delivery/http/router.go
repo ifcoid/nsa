@@ -31,12 +31,27 @@ func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLR
 }
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// CORS middleware can be added here
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Daftar origin yang diizinkan (CORS Whitelist)
+	origin := req.Header.Get("Origin")
+	allowedOrigins := map[string]bool{
+		"https://www.if.co.id": true,
+		"https://if.co.id":     true,
+		"http://localhost:5173": true, // Untuk dev
+		"http://localhost:3000": true, // Untuk dev
+	}
+
+	if allowedOrigins[origin] {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+	} else if origin == "" {
+		// Bolehkan request langsung tanpa origin (misal dari curl/backend lain)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
+
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 
 	if req.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
