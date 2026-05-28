@@ -132,9 +132,9 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			} else {
 				// Belum dievaluasi, panggil API!
 				
-				// R1 Review (dengan mekanisme Retry 8x & Ultra-Santuy Backoff + Jitter)
-				backoffDelays := []int{5, 10, 20, 30, 60, 120, 240, 480} // menit
-				for retry := 0; retry < 8; retry++ {
+				// R1 Review (dengan mekanisme Retry 6x & Backoff wajar)
+				backoffDelays := []int{1, 3, 5, 10, 15, 30} // menit
+				for retry := 0; retry < 6; retry++ {
 					res1, raw1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 					if err1 == nil && res1 != nil { break }
 					
@@ -147,15 +147,15 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					time.Sleep(backoff)
 				}
 				if res1 == nil || err1 != nil { 
-					return fmt.Errorf("Kalibrasi dibatalkan: R1 (Zhipu) gagal merespons setelah 8x percobaan: %v", err1)
+					return fmt.Errorf("Kalibrasi dibatalkan: R1 (Zhipu) gagal merespons setelah 6x percobaan: %v", err1)
 				}
 				logger.Logf(session.ID, "      [RAW R1 Zhipu] %s", raw1)
 				
 				// Jeda Antar Agen (Sequential Micro-Throttling) agar tidak burst request
 				time.Sleep(3 * time.Second)
 	
-				// R2 Review (dengan mekanisme Retry 8x & Ultra-Santuy Backoff + Jitter)
-				for retry := 0; retry < 8; retry++ {
+				// R2 Review (dengan mekanisme Retry 6x & Backoff wajar)
+				for retry := 0; retry < 6; retry++ {
 					res2, raw2, err2 = scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 					if err2 == nil && res2 != nil { break }
 					
@@ -168,7 +168,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					time.Sleep(backoff)
 				}
 				if res2 == nil || err2 != nil { 
-					return fmt.Errorf("Kalibrasi dibatalkan: R2 (Groq) gagal merespons setelah 8x percobaan: %v", err2)
+					return fmt.Errorf("Kalibrasi dibatalkan: R2 (Groq) gagal merespons setelah 6x percobaan: %v", err2)
 				}
 				logger.Logf(session.ID, "      [RAW R2 Groq] %s", raw2)
 			}
