@@ -144,7 +144,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					finalDelaySec := baseDelaySec + jitter
 					backoff := time.Duration(finalDelaySec * float64(time.Second))
 					
-					logger.Logf(session.ID, "      [R1 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
+					logger.Logf(session.ID, "      [R1 Retry %d] Error LLM: %v. Menunggu %v sebelum mencoba lagi...", retry+1, err1, backoff)
 					time.Sleep(backoff)
 				}
 				if res1 == nil || err1 != nil { 
@@ -165,7 +165,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					finalDelaySec := baseDelaySec + jitter
 					backoff := time.Duration(finalDelaySec * float64(time.Second))
 	
-					logger.Logf(session.ID, "      [R2 Retry %d] Gagal merespons (429/Timeout). Menunggu %v sebelum mencoba lagi...", retry+1, backoff)
+					logger.Logf(session.ID, "      [R2 Retry %d] Error LLM: %v. Menunggu %v sebelum mencoba lagi...", retry+1, err2, backoff)
 					time.Sleep(backoff)
 				}
 				if res2 == nil || err2 != nil { 
