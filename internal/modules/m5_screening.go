@@ -133,7 +133,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				// Belum dievaluasi, panggil API!
 				
 				// R1 Review (dengan mekanisme Retry 8x & Ultra-Santuy Backoff + Jitter)
-				backoffDelays := []int{5, 10, 20, 30, 60, 120, 240, 480} // detik
+				backoffDelays := []int{5, 10, 20, 30, 60, 120, 240, 480} // menit
 				for retry := 0; retry < 8; retry++ {
 					res1, raw1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 					if err1 == nil && res1 != nil { break }
@@ -141,7 +141,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					baseDelaySec := float64(backoffDelays[retry])
 					jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
 					finalDelaySec := baseDelaySec + jitter
-					backoff := time.Duration(finalDelaySec * float64(time.Second))
+					backoff := time.Duration(finalDelaySec * float64(time.Minute))
 					
 					logger.Logf(session.ID, "      [R1 Retry %d] Error LLM: %v. Menunggu %v sebelum mencoba lagi...", retry+1, err1, backoff)
 					time.Sleep(backoff)
@@ -162,7 +162,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					baseDelaySec := float64(backoffDelays[retry])
 					jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec
 					finalDelaySec := baseDelaySec + jitter
-					backoff := time.Duration(finalDelaySec * float64(time.Second))
+					backoff := time.Duration(finalDelaySec * float64(time.Minute))
 	
 					logger.Logf(session.ID, "      [R2 Retry %d] Error LLM: %v. Menunggu %v sebelum mencoba lagi...", retry+1, err2, backoff)
 					time.Sleep(backoff)
