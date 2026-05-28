@@ -263,6 +263,11 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		logger.Log(session.ID, "   4. Ubah status kembali ke 'M5_STEP2_CALIBRATION' untuk me-rerun kalibrasi 20 sample baru.")
 		return nil
 
+	case "M5_STEP2_CALIBRATION_ERROR":
+		logger.Log(session.ID, "   [System] Agen sedang ditangguhkan akibat error LLM.")
+		logger.Log(session.ID, "   [System] Menunggu instruksi 'Retry' (Coba Lagi) dari Anda melalui layar UI...")
+		return nil
+
 	case "M5_STEP2_NEEDS_REVISION":
 		logger.Log(session.ID, "   [System] Menerima feedback revisi untuk Screener Briefing. Memproses pembaruan...")
 		

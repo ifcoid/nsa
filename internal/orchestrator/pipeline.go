@@ -138,9 +138,10 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 				break
 			}
 
-			// Berhenti looping jika butuh interaksi manusia atau sudah selesai
+			// Berhenti looping jika butuh interaksi manusia, sedang error, atau sudah selesai
 			if strings.Contains(session.Status, "WAITING") || 
 			   strings.Contains(session.Status, "NEEDS_REVISION") || 
+			   strings.Contains(session.Status, "ERROR") || 
 			   session.Status == "COMPLETED" {
 				break
 			}
