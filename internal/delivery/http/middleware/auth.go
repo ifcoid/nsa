@@ -53,7 +53,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 
 		parser := paseto.NewParser()
 		parser.AddRule(paseto.ForAudience("")) // We didn't set audience
-		parser.AddRule(paseto.IdentifiedBy("agentic-slr"))
+		parser.AddRule(paseto.IssuedBy("agentic-slr"))
 
 		// Verifikasi Token
 		token, err := parser.ParseV4Public(publicKey, tokenString, nil)

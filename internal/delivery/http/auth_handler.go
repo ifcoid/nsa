@@ -11,6 +11,7 @@ import (
 	"nsa/internal/repository"
 
 	"aidanwoods.dev/go-paseto"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -66,6 +67,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, req *http.Request) {
 	}
 
 	user := &model.User{
+		ID:       primitive.NewObjectID(),
 		Username: payload.Username,
 		Password: string(hashedPassword),
 		Role:     "admin", // default role
@@ -124,7 +126,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, req *http.Request) {
 	// Buat Token PASETO v4
 	token := paseto.NewToken()
 	token.SetIssuer("agentic-slr")
-	token.SetSubject(user.ID)
+	token.SetSubject(user.ID.Hex())
 	token.SetString("username", user.Username)
 	token.SetString("role", user.Role)
 	token.SetIssuedAt(time.Now())
@@ -135,7 +137,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, req *http.Request) {
 
 	// Jangan kirim password kembali!
 	userData := map[string]string{
-		"id":       user.ID,
+		"id":       user.ID.Hex(),
 		"username": user.Username,
 		"role":     user.Role,
 	}
