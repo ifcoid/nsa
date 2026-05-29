@@ -384,8 +384,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				time.Sleep(backoff)
 			}
 			if res1 == nil || err1 != nil { 
-				logger.Logf(session.ID, "      ❌ API R1 gagal merespons setelah 6 percobaan. Batch dihentikan lebih awal.\n")
-				break
+				return fmt.Errorf("API R1 gagal merespons setelah 6x percobaan (%v). Batch terhenti, %d paper berhasil disimpan.", err1, total)
 			}
 			res1.PaperID = paperID
 			res1.Title = title
@@ -407,8 +406,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				time.Sleep(backoff)
 			}
 			if res2 == nil || err2 != nil { 
-				logger.Logf(session.ID, "      ❌ API R2 gagal merespons setelah 6 percobaan. Batch dihentikan lebih awal.\n")
-				break
+				return fmt.Errorf("API R2 gagal merespons setelah 6x percobaan (%v). Batch terhenti, %d paper berhasil disimpan.", err2, total)
 			}
 			res2.PaperID = paperID
 			res2.Title = title
@@ -470,10 +468,6 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			if d1 == "INCLUDE" && d2 == "EXCLUDE" { r1IncR2Exc++ }
 			if d1 == "EXCLUDE" && d2 == "INCLUDE" { r1ExcR2Inc++ }
 			total++
-		}
-
-		if total == 0 {
-			return fmt.Errorf("Batch dibatalkan: API LLM gagal di paper pertama setelah retry maksimal.")
 		}
 
 		kappa := 0.0
