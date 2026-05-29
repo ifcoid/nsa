@@ -141,6 +141,30 @@ func (r *MongoRepository) GetRandomScreeningPapers(ctx context.Context, sessionI
 	return results, nil
 }
 
+// =========================================================================
+// 5. MANAJEMEN USER (AUTENTIKASI PASETO)
+// =========================================================================
+
+// CreateUser menyimpan pengguna baru ke dalam koleksi 'users'
+func (r *MongoRepository) CreateUser(ctx context.Context, user *model.User) error {
+	collection := r.client.Database(r.dbName).Collection("users")
+	user.CreatedAt = time.Now()
+	_, err := collection.InsertOne(ctx, user)
+	return err
+}
+
+// GetUserByUsername mencari pengguna berdasarkan username
+func (r *MongoRepository) GetUserByUsername(ctx context.Context, username string) (*model.User, error) {
+	collection := r.client.Database(r.dbName).Collection("users")
+	var user model.User
+	filter := bson.M{"username": username}
+	err := collection.FindOne(ctx, filter).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (r *MongoRepository) GetUnscreenedPapers(ctx context.Context, sessionID string, limit int) ([]map[string]interface{}, error) {
 	filter := bson.M{"session_id": sessionID, "Screener_1_Decision": ""}
 	findOptions := options.Find().SetLimit(int64(limit))

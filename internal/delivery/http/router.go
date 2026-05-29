@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"nsa/internal/delivery/http/middleware"
 	"nsa/internal/orchestrator"
 	"nsa/internal/repository"
 )
@@ -12,6 +13,7 @@ type Router struct {
 	mux          *http.ServeMux
 	sessionHndlr *SessionHandler
 	llmHndlr     *LLMHandler
+	authHndlr    *AuthHandler
 }
 
 func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLRPipeline) *Router {
@@ -20,10 +22,13 @@ func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLR
 	sessionHandler := NewSessionHandler(mongoRepo, pipeline)
 	llmHandler := NewLLMHandler(mongoRepo)
 
+	authHandler := NewAuthHandler(mongoRepo)
+
 	r := &Router{
 		mux:          mux,
 		sessionHndlr: sessionHandler,
 		llmHndlr:     llmHandler,
+		authHndlr:    authHandler,
 	}
 
 	r.registerRoutes()
@@ -61,23 +66,35 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func (r *Router) registerRoutes() {
 	// API Endpoints using Go 1.22+ routing syntax
 	
-	// Session endpoints
-	r.mux.HandleFunc("POST /api/sessions", r.sessionHndlr.CreateSession)
-	r.mux.HandleFunc("POST /api/sessions/{id}/resume", r.sessionHndlr.ResumeSession)
-	r.mux.HandleFunc("GET /api/sessions/{id}", r.sessionHndlr.GetSession)
-	r.mux.HandleFunc("PUT /api/sessions/{id}", r.sessionHndlr.UpdateSession)
-	r.mux.HandleFunc("PUT /api/sessions/{id}/approve", r.sessionHndlr.ApproveStep)
-	r.mux.HandleFunc("PUT /api/sessions/{id}/revise", r.sessionHndlr.ReviseStep)
-	r.mux.HandleFunc("PUT /api/sessions/{id}/reimport", r.sessionHndlr.RequestReimport)
-	r.mux.HandleFunc("POST /api/sessions/{id}/import-data", r.sessionHndlr.ImportData)
-	r.mux.HandleFunc("GET /api/sessions/{id}/disagreements", r.sessionHndlr.GetDisagreements)
+	// Auth endpoints (Public)
+	r.mux.HandleFunc("POST /api/auth/login", r.authHndlr.Login)
+	r.mux.HandleFunc("POST /api/auth/register", r.authHndlr.Register)
 	
-	// WebSocket endpoint untuk logs
-	r.mux.HandleFunc("GET /api/ws/logs/{id}", LogStreamHandler)
+	// Protected endpoints
+	protected := http.NewServeMux()
+	
+	// Session endpoints
+	protected.HandleFunc("POST /api/sessions", r.sessionHndlr.CreateSession)
+	protected.HandleFunc("POST /api/sessions/{id}/resume", r.sessionHndlr.ResumeSession)
+	protected.HandleFunc("GET /api/sessions/{id}", r.sessionHndlr.GetSession)
+	protected.HandleFunc("PUT /api/sessions/{id}", r.sessionHndlr.UpdateSession)
+	protected.HandleFunc("PUT /api/sessions/{id}/approve", r.sessionHndlr.ApproveStep)
+	protected.HandleFunc("PUT /api/sessions/{id}/revise", r.sessionHndlr.ReviseStep)
+	protected.HandleFunc("PUT /api/sessions/{id}/reimport", r.sessionHndlr.RequestReimport)
+	protected.HandleFunc("POST /api/sessions/{id}/import-data", r.sessionHndlr.ImportData)
+	protected.HandleFunc("GET /api/sessions/{id}/disagreements", r.sessionHndlr.GetDisagreements)
 	
 	// LLM config endpoints
-	r.mux.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
-	r.mux.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
+	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
+	protected.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
+	
+	// Apply Auth Middleware to all protected routes
+	r.mux.Handle("/api/sessions", middleware.AuthMiddleware(protected))
+	r.mux.Handle("/api/sessions/", middleware.AuthMiddleware(protected))
+	r.mux.Handle("/api/llm/", middleware.AuthMiddleware(protected))
+	
+	// WebSocket endpoint untuk logs (Tidak diproteksi ketat karena via URL /ws/, jika butuh auth bisa pasang token di query)
+	r.mux.HandleFunc("GET /api/ws/logs/{id}", LogStreamHandler)
 }
 
 // Utility function to send JSON response
