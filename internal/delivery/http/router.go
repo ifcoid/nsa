@@ -83,6 +83,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("PUT /api/sessions/{id}/reimport", r.sessionHndlr.RequestReimport)
 	protected.HandleFunc("POST /api/sessions/{id}/import-data", r.sessionHndlr.ImportData)
 	protected.HandleFunc("GET /api/sessions/{id}/disagreements", r.sessionHndlr.GetDisagreements)
+	protected.HandleFunc("POST /api/sessions/{id}/resolve-conflicts", r.sessionHndlr.ResolveConflicts)
 	
 	// LLM config endpoints
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)

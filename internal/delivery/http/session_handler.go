@@ -416,3 +416,55 @@ func (h *SessionHandler) GetDisagreements(w http.ResponseWriter, r *http.Request
 		"disagreements": papers,
 	})
 }
+
+// ResolveConflicts memproses resolusi konflik secara massal dari UI
+func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	var payload struct {
+		Resolutions []struct {
+			PaperID           string `json:"paper_id"`
+			FinalDecision     string `json:"final_decision"`
+			ConflictResolution string `json:"conflict_resolution"`
+		} `json:"resolutions"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	for _, res := range payload.Resolutions {
+		if res.PaperID != "" && res.FinalDecision != "" {
+			err := h.mongoRepo.UpdateScreeningPaperResolution(ctx, id, res.PaperID, res.FinalDecision, res.ConflictResolution)
+			if err != nil {
+				sendJSONError(w, http.StatusInternalServerError, "Gagal mengupdate resolusi: "+err.Error())
+				return
+			}
+		}
+	}
+
+	session.Status = "M5_STEP3_BATCH_SCREENING"
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mengupdate status sesi: "+err.Error())
+		return
+	}
+
+	// Setelah semua konflik diresolusi, trigger pipeline untuk mengecek kelanjutannya
+	h.pipeline.ExecuteAsync(ctx, session.ID)
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": "Resolusi konflik berhasil disimpan",
+	})
+}

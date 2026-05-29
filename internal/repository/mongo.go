@@ -235,6 +235,20 @@ func (r *MongoRepository) UpdateScreeningPaper(ctx context.Context, id interface
 	return err
 }
 
+func (r *MongoRepository) UpdateScreeningPaperResolution(ctx context.Context, sessionID, paperIDHex, finalDecision, notes string) error {
+	objID, err := primitive.ObjectIDFromHex(paperIDHex)
+	if err != nil {
+		return err
+	}
+	filter := bson.M{"_id": objID, "session_id": sessionID}
+	update := bson.M{"$set": bson.M{
+		"Final_Decision": finalDecision,
+		"Conflict_Resolution": notes,
+	}}
+	_, err = r.GetScreeningCollection().UpdateOne(ctx, filter, update)
+	return err
+}
+
 // ResetCalibrationScreenings membersihkan field keputusan sebelumnya untuk persiapan re-run kalibrasi.
 func (r *MongoRepository) ResetCalibrationScreenings(ctx context.Context, sessionID string) error {
 	filter := bson.M{
