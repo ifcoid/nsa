@@ -396,15 +396,25 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			return fmt.Errorf("groq LLM configuration missing or invalid. Please configure the groq API key first")
 		}
 
+		var scAgentSupervisor *agent.ScreeningAgent
+		var primarySupervisorName string
+
 		llmSupervisor, err := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
-		if err != nil { 
-			logger.Logf(session.ID, "   [ERROR] LLM xiaomi gagal dimuat (%v). Harap konfigurasi API Xiaomi terlebih dahulu di halaman Pengaturan!\n", err)
-			return fmt.Errorf("xiaomi LLM configuration missing or invalid. Please configure the Xiaomi API key first")
+		if err == nil { 
+			scAgentSupervisor = agent.NewScreeningAgent(llmSupervisor)
+			primarySupervisorName = "Xiaomi MiMo"
+		} else {
+			logger.Logf(session.ID, "   [INFO] Xiaomi MiMo gagal dimuat (%v). Fallback awal ke OpenRouter...\n", err)
+			llmSupervisor, err = m.deps.LLMFactory.CreateClient(ctx, "openrouter")
+			if err != nil {
+				return fmt.Errorf("AI Supervisor (Xiaomi maupun OpenRouter) gagal dimuat. Harap konfigurasi API di Pengaturan")
+			}
+			scAgentSupervisor = agent.NewScreeningAgent(llmSupervisor)
+			primarySupervisorName = "OpenRouter"
 		}
 
 		scAgent1 := agent.NewScreeningAgent(llmR1)
 		scAgent2 := agent.NewScreeningAgent(llmR2)
-		scAgentSupervisor := agent.NewScreeningAgent(llmSupervisor)
 
 		briefingDoc := ""
 		if session.ScreenerBriefing != nil {
@@ -497,7 +507,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 			conflictRes := ""
 			if agreement == "DISAGREE" || res1.Recommend == "UNCERTAIN" || res2.Recommend == "UNCERTAIN" {
-				logger.Logf(session.ID, "      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor (Xiaomi MiMo)...\n")
+				logger.Logf(session.ID, "      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor (%s)...\n", primarySupervisorName)
 				
 				var advice *agent.ResolutionAdvice
 				var errAdv error
@@ -513,11 +523,36 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					time.Sleep(backoff)
 				}
 				
+				// Fallback on-the-fly jika provider utama adalah Xiaomi dan dia gagal (token habis/error)
+				if (errAdv != nil || advice == nil) && primarySupervisorName == "Xiaomi MiMo" {
+					logger.Logf(session.ID, "      [!] %s gagal memberikan saran setelah 4 percobaan. Melakukan Fallback on-the-fly ke OpenRouter...\n", primarySupervisorName)
+					llmFallback, errFb := m.deps.LLMFactory.CreateClient(ctx, "openrouter")
+					if errFb == nil {
+						fallbackAgent := agent.NewScreeningAgent(llmFallback)
+						for retry := 0; retry < 3; retry++ {
+							advice, errAdv = fallbackAgent.AnalyzeDisagreement(ctx, briefingDoc, title, abs, notes1, notes2)
+							if errAdv == nil && advice != nil { 
+								logger.Logf(session.ID, "      [V] Fallback OpenRouter berhasil memberikan saran resolusi.\n")
+								break 
+							}
+							
+							baseDelaySec := float64(backoffDelays[retry])
+							jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
+							finalDelaySec := baseDelaySec + jitter
+							backoff := time.Duration(finalDelaySec * float64(time.Minute))
+							logger.Logf(session.ID, "      [Fallback Retry %d] Error LLM OpenRouter: %v. Menunggu %v...", retry+1, errAdv, backoff)
+							time.Sleep(backoff)
+						}
+					} else {
+						logger.Logf(session.ID, "      [!] Gagal memuat OpenRouter untuk fallback: %v\n", errFb)
+					}
+				}
+				
 				if errAdv == nil && advice != nil {
 					conflictRes = fmt.Sprintf("[AI_SUGGESTION: %s] %s", advice.Advice, advice.Analysis)
 				} else {
-					logger.Logf(session.ID, "      [!] Supervisor gagal memberikan saran setelah 4 percobaan: %v\n", errAdv)
-					conflictRes = "[AI_SUGGESTION: ERROR] Supervisor gagal merespons akibat error koneksi."
+					logger.Logf(session.ID, "      [!] Supervisor gagal memberikan saran resolusi (baik Utama maupun Fallback).\n")
+					conflictRes = "[AI_SUGGESTION: ERROR] Supervisor gagal merespons akibat error koneksi pada provider."
 				}
 			}
 
