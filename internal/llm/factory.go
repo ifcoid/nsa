@@ -41,6 +41,9 @@ func (f *LLMFactory) CreateClient(ctx context.Context, providerID string) (LLMCl
 	case "claude":
 		return NewClaudeClient(config.APIKey, config.DefaultModel), nil
 
+	case "cohere":
+		return NewCohereClient(config.APIKey, config.DefaultModel), nil
+
 	// Sisanya masuk ke jalur universal (OpenAI Compatible)
 	default:
 		return NewOpenAICompatibleClient(config.APIKey, config.BaseURL, config.DefaultModel), nil

@@ -159,6 +159,41 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
+	case "cohere":
+		url := "https://api.cohere.com/v1/models"
+		httpReq, _ := http.NewRequest("GET", url, nil)
+		httpReq.Header.Set("Authorization", "Bearer "+payload.APIKey)
+		httpReq.Header.Set("Accept", "application/json")
+		
+		resp, err := client.Do(httpReq)
+		if err != nil || resp.StatusCode != 200 {
+			sendJSONError(w, http.StatusInternalServerError, "Failed to fetch from Cohere API")
+			return
+		}
+		defer resp.Body.Close()
+
+		var res struct {
+			Models []struct {
+				Name      string   `json:"name"`
+				Endpoints []string `json:"endpoints"`
+			} `json:"models"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
+			for _, m := range res.Models {
+				// Hanya tampilkan model yang mendukung chat endpoint
+				isChat := false
+				for _, ep := range m.Endpoints {
+					if strings.Contains(ep, "chat") {
+						isChat = true
+						break
+					}
+				}
+				if isChat {
+					models = append(models, m.Name)
+				}
+			}
+		}
+
 	default: // groq, zhipu (OpenAI compatible)
 		baseURL := payload.BaseURL
 		if baseURL == "" {
