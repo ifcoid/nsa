@@ -44,7 +44,21 @@ func (f *LLMFactory) CreateClient(ctx context.Context, providerID string) (LLMCl
 	case "cohere":
 		return NewCohereClient(config.APIKey, config.DefaultModel), nil
 
-	// Sisanya masuk ke jalur universal (OpenAI Compatible)
+	case "xiaomi_openai":
+		baseURL := config.BaseURL
+		if baseURL == "" {
+			baseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
+		}
+		return NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel), nil
+
+	case "xiaomi_anthropic":
+		baseURL := config.BaseURL
+		if baseURL == "" {
+			baseURL = "https://token-plan-sgp.xiaomimimo.com/anthropic"
+		}
+		// Gunakan OpenAICompatibleClient karena banyak proxy menerjemahkan format OpenAI -> Anthropic di sisi server.
+		return NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel), nil
+
 	default:
 		return NewOpenAICompatibleClient(config.APIKey, config.BaseURL, config.DefaultModel), nil
 	}

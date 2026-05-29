@@ -65,6 +65,10 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 			config.BaseURL = "https://api.groq.com/openai/v1"
 		} else if payload.Provider == "zhipu" || payload.Provider == "z-ai" {
 			config.BaseURL = "https://open.bigmodel.cn/api/paas/v4"
+		} else if payload.Provider == "xiaomi_openai" {
+			config.BaseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
+		} else if payload.Provider == "xiaomi_anthropic" {
+			config.BaseURL = "https://token-plan-sgp.xiaomimimo.com/anthropic"
 		}
 	}
 	config.UpdatedAt = time.Now()
@@ -203,6 +207,10 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 				baseURL = "https://open.bigmodel.cn/api/paas/v4"
 			} else if provider == "openrouter" {
 				baseURL = "https://openrouter.ai/api/v1"
+			} else if provider == "xiaomi_openai" {
+				baseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
+			} else if provider == "xiaomi_anthropic" {
+				baseURL = "https://token-plan-sgp.xiaomimimo.com/anthropic"
 			} else {
 				sendJSONError(w, http.StatusBadRequest, "Base URL is required for this provider")
 				return
