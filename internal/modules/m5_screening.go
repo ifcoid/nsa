@@ -396,10 +396,10 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			return fmt.Errorf("groq LLM configuration missing or invalid. Please configure the groq API key first")
 		}
 
-		llmSupervisor, err := m.deps.LLMFactory.CreateClient(ctx, "openrouter")
+		llmSupervisor, err := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
 		if err != nil { 
-			logger.Logf(session.ID, "   [ERROR] LLM openrouter gagal dimuat (%v). Harap konfigurasi API openrouter terlebih dahulu di halaman Pengaturan!\n", err)
-			return fmt.Errorf("openrouter LLM configuration missing or invalid. Please configure the OpenRouter API key first")
+			logger.Logf(session.ID, "   [ERROR] LLM xiaomi gagal dimuat (%v). Harap konfigurasi API Xiaomi terlebih dahulu di halaman Pengaturan!\n", err)
+			return fmt.Errorf("xiaomi LLM configuration missing or invalid. Please configure the Xiaomi API key first")
 		}
 
 		scAgent1 := agent.NewScreeningAgent(llmR1)
@@ -497,7 +497,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 			conflictRes := ""
 			if agreement == "DISAGREE" || res1.Recommend == "UNCERTAIN" || res2.Recommend == "UNCERTAIN" {
-				logger.Logf(session.ID, "      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor (OpenRouter)...\n")
+				logger.Logf(session.ID, "      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor (Xiaomi MiMo)...\n")
 				
 				var advice *agent.ResolutionAdvice
 				var errAdv error
