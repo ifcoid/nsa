@@ -368,8 +368,8 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				paperID = oid.Hex()
 			}
 
-			// R1 Review (dengan mekanisme Retry 6x & Backoff)
-			backoffDelays := []int{1, 3, 5, 10, 15, 30} // menit
+			// R1 Review
+			backoffDelays := []int{1, 3, 5, 10, 15, 30}
 			var res1 *model.ScreeningPerspective
 			var err1 error
 			for retry := 0; retry < 6; retry++ {
@@ -384,14 +384,15 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				time.Sleep(backoff)
 			}
 			if res1 == nil || err1 != nil { 
-				return fmt.Errorf("Batch dibatalkan: R1 gagal merespons setelah 6x percobaan: %v", err1)
+				logger.Logf(session.ID, "      ❌ API R1 gagal merespons setelah 6 percobaan. Batch dihentikan lebih awal.\n")
+				break
 			}
 			res1.PaperID = paperID
 			res1.Title = title
 
 			time.Sleep(3 * time.Second)
 
-			// R2 Review (dengan mekanisme Retry 6x & Backoff)
+			// R2 Review
 			var res2 *model.ScreeningPerspective
 			var err2 error
 			for retry := 0; retry < 6; retry++ {
@@ -406,7 +407,8 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				time.Sleep(backoff)
 			}
 			if res2 == nil || err2 != nil { 
-				return fmt.Errorf("Batch dibatalkan: R2 gagal merespons setelah 6x percobaan: %v", err2)
+				logger.Logf(session.ID, "      ❌ API R2 gagal merespons setelah 6 percobaan. Batch dihentikan lebih awal.\n")
+				break
 			}
 			res2.PaperID = paperID
 			res2.Title = title
@@ -468,6 +470,10 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			if d1 == "INCLUDE" && d2 == "EXCLUDE" { r1IncR2Exc++ }
 			if d1 == "EXCLUDE" && d2 == "INCLUDE" { r1ExcR2Inc++ }
 			total++
+		}
+
+		if total == 0 {
+			return fmt.Errorf("Batch dibatalkan: API LLM gagal di paper pertama setelah retry maksimal.")
 		}
 
 		kappa := 0.0
