@@ -115,7 +115,11 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 		for {
 			err := p.Execute(asyncCtx, sessionID)
 			if err != nil {
-				logger.Logf(sessionID, "❌ [ExecuteAsync] Pipeline error untuk session %s: %v\n", sessionID, err)
+				totalP, screenedP, _ := p.mongoRepo.GetScreeningProgress(asyncCtx, sessionID)
+				logger.Logf(sessionID, "❌ [ExecuteAsync] Pipeline terhenti untuk session %s: %v\n", sessionID, err)
+				if totalP > 0 {
+					logger.Logf(sessionID, "   ℹ️ [Info] Meskipun terhenti, progres Anda tersimpan aman: %d dari %d papers telah berhasil discreening.\n", screenedP, totalP)
+				}
 				
 				// Set status ke ERROR agar UI frontend berhenti loading dan memunculkan tombol revisi/retry
 				session, getErr := p.mongoRepo.GetSession(asyncCtx, sessionID)

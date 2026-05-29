@@ -177,6 +177,22 @@ func (r *MongoRepository) GetUnscreenedPapers(ctx context.Context, sessionID str
 	return results, err
 }
 
+func (r *MongoRepository) GetScreeningProgress(ctx context.Context, sessionID string) (total int64, screened int64, err error) {
+	coll := r.GetScreeningCollection()
+	
+	total, err = coll.CountDocuments(ctx, bson.M{"session_id": sessionID})
+	if err != nil {
+		return 0, 0, err
+	}
+	
+	screened, err = coll.CountDocuments(ctx, bson.M{
+		"session_id": sessionID,
+		"Screener_1_Decision": bson.M{"$ne": ""},
+	})
+	
+	return total, screened, err
+}
+
 func (r *MongoRepository) GetAllScreeningPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
 	cursor, err := r.GetScreeningCollection().Find(ctx, bson.M{"session_id": sessionID})
 	if err != nil {

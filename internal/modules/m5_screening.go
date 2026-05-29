@@ -344,8 +344,13 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			return m.deps.MongoRepo.UpdateSession(ctx, session)
 		}
 
-		logger.Logf(session.ID, "   [System] Memproses %d papers untuk batch ini...\n", len(papers))
-
+		totalPapers, screenedPapers, _ := m.deps.MongoRepo.GetScreeningProgress(ctx, session.ID)
+		progressPercent := 0.0
+		if totalPapers > 0 {
+			progressPercent = float64(screenedPapers) / float64(totalPapers) * 100
+		}
+		logger.Logf(session.ID, "   📊 [Progress] %d dari %d papers telah discreening (%.1f%%).\n", screenedPapers, totalPapers, progressPercent)
+		logger.Logf(session.ID, "   [System] Memproses %d papers tersisa (untuk batch ini)...\n", len(papers))
 		var agreeCount, bothInclude, bothExclude, r1IncR2Exc, r1ExcR2Inc, total int
 
 		for i, p := range papers {
