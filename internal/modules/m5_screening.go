@@ -356,13 +356,46 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				paperID = oid.Hex()
 			}
 
-			res1, _ := scAgent1.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
-			if res1 == nil { res1 = &model.ScreeningPerspective{Recommend: "UNCERTAIN"} }
+			// R1 Review (dengan mekanisme Retry 6x & Backoff)
+			backoffDelays := []int{1, 3, 5, 10, 15, 30} // menit
+			var res1 *model.ScreeningPerspective
+			var err1 error
+			for retry := 0; retry < 6; retry++ {
+				res1, err1 = scAgent1.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
+				if err1 == nil && res1 != nil { break }
+				
+				baseDelaySec := float64(backoffDelays[retry])
+				jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
+				finalDelaySec := baseDelaySec + jitter
+				backoff := time.Duration(finalDelaySec * float64(time.Minute))
+				logger.Logf(session.ID, "      [R1 Batch Retry %d] Error LLM: %v. Menunggu %v...", retry+1, err1, backoff)
+				time.Sleep(backoff)
+			}
+			if res1 == nil || err1 != nil { 
+				return fmt.Errorf("Batch dibatalkan: R1 gagal merespons setelah 6x percobaan: %v", err1)
+			}
 			res1.PaperID = paperID
 			res1.Title = title
 
-			res2, _ := scAgent2.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
-			if res2 == nil { res2 = &model.ScreeningPerspective{Recommend: "UNCERTAIN"} }
+			time.Sleep(3 * time.Second)
+
+			// R2 Review (dengan mekanisme Retry 6x & Backoff)
+			var res2 *model.ScreeningPerspective
+			var err2 error
+			for retry := 0; retry < 6; retry++ {
+				res2, err2 = scAgent2.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
+				if err2 == nil && res2 != nil { break }
+				
+				baseDelaySec := float64(backoffDelays[retry])
+				jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
+				finalDelaySec := baseDelaySec + jitter
+				backoff := time.Duration(finalDelaySec * float64(time.Minute))
+				logger.Logf(session.ID, "      [R2 Batch Retry %d] Error LLM: %v. Menunggu %v...", retry+1, err2, backoff)
+				time.Sleep(backoff)
+			}
+			if res2 == nil || err2 != nil { 
+				return fmt.Errorf("Batch dibatalkan: R2 gagal merespons setelah 6x percobaan: %v", err2)
+			}
 			res2.PaperID = paperID
 			res2.Title = title
 
