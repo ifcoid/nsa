@@ -27,8 +27,9 @@ func NewAuthHandler(mongoRepo *repository.MongoRepository) *AuthHandler {
 // Register creates a new user
 func (h *AuthHandler) Register(w http.ResponseWriter, req *http.Request) {
 	var payload struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username   string `json:"username"`
+		Password   string `json:"password"`
+		InviteCode string `json:"invite_code,omitempty"`
 	}
 
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
@@ -38,6 +39,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, req *http.Request) {
 
 	if payload.Username == "" || payload.Password == "" {
 		sendJSONError(w, http.StatusBadRequest, "Username and password are required")
+		return
+	}
+
+	// Verify invite code if env var is set
+	expectedInviteCode := os.Getenv("REGISTER_INVITE_CODE")
+	if expectedInviteCode != "" && payload.InviteCode != expectedInviteCode {
+		sendJSONError(w, http.StatusForbidden, "Invalid invite code")
 		return
 	}
 
