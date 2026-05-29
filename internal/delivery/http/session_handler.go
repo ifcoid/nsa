@@ -249,6 +249,13 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 	// Determine NEEDS_REVISION status
 	if payload.TargetStatus != "" {
 		session.Status = payload.TargetStatus
+		// Special handling for retrying a failed batch
+		if payload.TargetStatus == "M5_STEP3_BATCH_SCREENING" {
+			h.mongoRepo.ResetCalibrationScreenings(ctx, session.ID)
+			if len(session.ScreeningResultsLog) > 0 {
+				session.ScreeningResultsLog = session.ScreeningResultsLog[:len(session.ScreeningResultsLog)-1]
+			}
+		}
 	} else if session.Status == "M2_STEP1_WAITING_APPROVAL" {
 		session.Status = "M2_STEP1_NEEDS_REVISION"
 	} else {
