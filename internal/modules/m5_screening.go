@@ -421,10 +421,26 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			conflictRes := ""
 			if agreement == "DISAGREE" || res1.Recommend == "UNCERTAIN" || res2.Recommend == "UNCERTAIN" {
 				logger.Logf(session.ID, "      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor (OpenRouter)...\n")
-				// Gunakan OpenRouter sebagai Supervisor
-				advice, err := scAgentSupervisor.AnalyzeDisagreement(ctx, briefingDoc, title, abs, notes1, notes2)
-				if err == nil && advice != nil {
+				
+				var advice *agent.ResolutionAdvice
+				var errAdv error
+				for retry := 0; retry < 4; retry++ {
+					advice, errAdv = scAgentSupervisor.AnalyzeDisagreement(ctx, briefingDoc, title, abs, notes1, notes2)
+					if errAdv == nil && advice != nil { break }
+					
+					baseDelaySec := float64(backoffDelays[retry])
+					jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
+					finalDelaySec := baseDelaySec + jitter
+					backoff := time.Duration(finalDelaySec * float64(time.Minute))
+					logger.Logf(session.ID, "      [Supervisor Retry %d] Error LLM: %v. Menunggu %v...", retry+1, errAdv, backoff)
+					time.Sleep(backoff)
+				}
+				
+				if errAdv == nil && advice != nil {
 					conflictRes = fmt.Sprintf("[AI_SUGGESTION: %s] %s", advice.Advice, advice.Analysis)
+				} else {
+					logger.Logf(session.ID, "      [!] Supervisor gagal memberikan saran setelah 4 percobaan: %v\n", errAdv)
+					conflictRes = "[AI_SUGGESTION: ERROR] Supervisor gagal merespons akibat error koneksi."
 				}
 			}
 
