@@ -177,6 +177,31 @@ func (r *MongoRepository) GetUnscreenedPapers(ctx context.Context, sessionID str
 	return results, err
 }
 
+func (r *MongoRepository) GetUnevaluatedPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
+	filter := bson.M{
+		"session_id": sessionID,
+		"Screener_1_Decision": bson.M{"$ne": ""},
+		"Batch_Evaluated": bson.M{"$ne": true},
+	}
+	cursor, err := r.GetScreeningCollection().Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	var results []map[string]interface{}
+	err = cursor.All(ctx, &results)
+	return results, err
+}
+
+func (r *MongoRepository) MarkPapersAsEvaluated(ctx context.Context, sessionID string, paperIDs []primitive.ObjectID) error {
+	if len(paperIDs) == 0 {
+		return nil
+	}
+	filter := bson.M{"session_id": sessionID, "_id": bson.M{"$in": paperIDs}}
+	update := bson.M{"$set": bson.M{"Batch_Evaluated": true}}
+	_, err := r.GetScreeningCollection().UpdateMany(ctx, filter, update)
+	return err
+}
+
 func (r *MongoRepository) GetScreeningProgress(ctx context.Context, sessionID string) (total int64, screened int64, err error) {
 	coll := r.GetScreeningCollection()
 	
