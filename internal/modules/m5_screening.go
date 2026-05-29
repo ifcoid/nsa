@@ -319,8 +319,15 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			return fmt.Errorf("groq LLM configuration missing or invalid. Please configure the groq API key first")
 		}
 
+		llmSupervisor, err := m.deps.LLMFactory.CreateClient(ctx, "openrouter")
+		if err != nil { 
+			logger.Logf(session.ID, "   [ERROR] LLM openrouter gagal dimuat (%v). Harap konfigurasi API openrouter terlebih dahulu di halaman Pengaturan!\n", err)
+			return fmt.Errorf("openrouter LLM configuration missing or invalid. Please configure the OpenRouter API key first")
+		}
+
 		scAgent1 := agent.NewScreeningAgent(llmR1)
 		scAgent2 := agent.NewScreeningAgent(llmR2)
+		scAgentSupervisor := agent.NewScreeningAgent(llmSupervisor)
 
 		briefingDoc := ""
 		if session.ScreenerBriefing != nil {
@@ -413,9 +420,9 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 			conflictRes := ""
 			if agreement == "DISAGREE" || res1.Recommend == "UNCERTAIN" || res2.Recommend == "UNCERTAIN" {
-				logger.Logf(session.ID, "      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor...\n")
-				// Kita pinjam scAgent1 (z-ai/gemini) sebagai supervisor
-				advice, err := scAgent1.AnalyzeDisagreement(ctx, briefingDoc, title, abs, notes1, notes2)
+				logger.Logf(session.ID, "      [*] Disagreement terdeteksi! Mengambil saran resolusi dari AI Supervisor (OpenRouter)...\n")
+				// Gunakan OpenRouter sebagai Supervisor
+				advice, err := scAgentSupervisor.AnalyzeDisagreement(ctx, briefingDoc, title, abs, notes1, notes2)
 				if err == nil && advice != nil {
 					conflictRes = fmt.Sprintf("[AI_SUGGESTION: %s] %s", advice.Advice, advice.Analysis)
 				}
