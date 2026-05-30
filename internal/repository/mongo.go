@@ -276,6 +276,7 @@ func (r *MongoRepository) GetDisagreedPapers(ctx context.Context, sessionID stri
 	filter := bson.M{
 		"session_id": sessionID,
 		"Agreement":  "DISAGREE",
+		"Final_Decision": "",
 	}
 	cursor, err := r.GetScreeningCollection().Find(ctx, filter)
 	if err != nil {
