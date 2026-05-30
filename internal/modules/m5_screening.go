@@ -157,7 +157,19 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 						logger.Logf(session.ID, "      [!] Gagal memuat Xiaomi MiMo untuk fallback R1: %v", errF)
 					} else {
 						scAgent1Fallback := agent.NewScreeningAgent(llmR1Fallback)
-						res1, raw1, err1 = scAgent1Fallback.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+						fallbackBackoff := []int{1, 3, 5} // menit
+						for retryFb := 0; retryFb < 3; retryFb++ {
+							res1, raw1, err1 = scAgent1Fallback.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+							if err1 == nil && res1 != nil { break }
+							
+							baseDelaySec := float64(fallbackBackoff[retryFb])
+							jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
+							finalDelaySec := baseDelaySec + jitter
+							backoff := time.Duration(finalDelaySec * float64(time.Minute))
+							
+							logger.Logf(session.ID, "      [R1 Fallback Retry %d] Error LLM: %v. Menunggu %v...", retryFb+1, err1, backoff)
+							time.Sleep(backoff)
+						}
 						if err1 != nil {
 							logger.Logf(session.ID, "      [!] R1 Fallback (Xiaomi) juga gagal: %v", err1)
 						}
@@ -495,7 +507,18 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					logger.Logf(session.ID, "      [!] Gagal memuat Xiaomi MiMo untuk fallback R1: %v", errF)
 				} else {
 					scAgent1Fallback := agent.NewScreeningAgent(llmR1Fallback)
-					res1, err1 = scAgent1Fallback.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
+					fallbackBackoff := []int{1, 3, 5} // menit
+					for retryFb := 0; retryFb < 3; retryFb++ {
+						res1, err1 = scAgent1Fallback.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
+						if err1 == nil && res1 != nil { break }
+						
+						baseDelaySec := float64(fallbackBackoff[retryFb])
+						jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
+						finalDelaySec := baseDelaySec + jitter
+						backoff := time.Duration(finalDelaySec * float64(time.Minute))
+						logger.Logf(session.ID, "      [R1 Fallback Retry %d] Error LLM: %v. Menunggu %v...", retryFb+1, err1, backoff)
+						time.Sleep(backoff)
+					}
 					if err1 != nil {
 						logger.Logf(session.ID, "      [!] R1 Fallback (Xiaomi) juga gagal: %v", err1)
 					}
