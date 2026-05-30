@@ -69,10 +69,10 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		
 		// Inisialisasi LLM 
 		// (WAJIB menggunakan z-ai dan groq untuk dual-review, hentikan proses jika gagal)
-		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
+		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
 		if err != nil { 
-			logger.Logf(session.ID, "   [ERROR] LLM zhipu gagal dimuat (%v). Harap konfigurasi API Zhipu terlebih dahulu di halaman Pengaturan!\n", err)
-			return fmt.Errorf("zhipu LLM configuration missing or invalid. Please configure the Zhipu API key first")
+			logger.Logf(session.ID, "   [ERROR] LLM xiaomi gagal dimuat (%v). Harap konfigurasi API Xiaomi terlebih dahulu di halaman Pengaturan!\n", err)
+			return fmt.Errorf("xiaomi LLM configuration missing or invalid. Please configure the Xiaomi API key first")
 		}
 		
 		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
@@ -384,10 +384,10 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		}
 
 		// 2. Persiapan LLM untuk proses screening sisa kuota
-		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
+		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
 		if err != nil { 
-			logger.Logf(session.ID, "   [ERROR] LLM zhipu gagal dimuat (%v). Harap konfigurasi API Zhipu terlebih dahulu di halaman Pengaturan!\n", err)
-			return fmt.Errorf("zhipu LLM configuration missing or invalid. Please configure the Zhipu API key first")
+			logger.Logf(session.ID, "   [ERROR] LLM xiaomi gagal dimuat (%v). Harap konfigurasi API Xiaomi terlebih dahulu di halaman Pengaturan!\n", err)
+			return fmt.Errorf("xiaomi LLM configuration missing or invalid. Please configure the Xiaomi API key first")
 		}
 		
 		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
@@ -661,7 +661,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			iter1Kappa, len(session.KalibrasiLog), finalKappa, batchKappa, kappaClass, resolvedDiscussCount, deferredCount)
 
 		// Initialize Agent
-		llm, _ := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
+		llm, _ := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
 		scAgent := agent.NewScreeningAgent(llm)
 
 		// 4. PICO AUDIT (10% Random INCLUDE)
