@@ -69,10 +69,13 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		
 		// Inisialisasi LLM 
 		// (WAJIB menggunakan z-ai dan groq untuk dual-review, hentikan proses jika gagal)
-		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
 		if err != nil { 
-			logger.Logf(session.ID, "   [ERROR] LLM xiaomi gagal dimuat (%v). Harap konfigurasi API Xiaomi terlebih dahulu di halaman Pengaturan!\n", err)
-			return fmt.Errorf("xiaomi LLM configuration missing or invalid. Please configure the Xiaomi API key first")
+			logger.Logf(session.ID, "   [INFO] Zhipu gagal dimuat (%v). Fallback awal ke Xiaomi MiMo...\n", err)
+			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+			if err != nil {
+				return fmt.Errorf("Reviewer 1 (Zhipu maupun Xiaomi) gagal dimuat. Harap konfigurasi API di Pengaturan")
+			}
 		}
 		
 		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
@@ -132,22 +135,37 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			} else {
 				// Belum dievaluasi, panggil API!
 				
-				// R1 Review (dengan mekanisme Retry 6x & Backoff wajar)
-				backoffDelays := []int{1, 3, 5, 10, 15, 30} // menit
-				for retry := 0; retry < 6; retry++ {
+				// R1 Review (dengan mekanisme Retry 4x & Backoff cepat karena Zhipu)
+				backoffDelays := []int{10, 30, 60, 120} // detik
+				for retry := 0; retry < 4; retry++ {
 					res1, raw1, err1 = scAgent1.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 					if err1 == nil && res1 != nil { break }
 					
 					baseDelaySec := float64(backoffDelays[retry])
 					jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
 					finalDelaySec := baseDelaySec + jitter
-					backoff := time.Duration(finalDelaySec * float64(time.Minute))
+					backoff := time.Duration(finalDelaySec * float64(time.Second))
 					
 					logger.Logf(session.ID, "      [R1 Retry %d] Error LLM: %v. Menunggu %v sebelum mencoba lagi...", retry+1, err1, backoff)
 					time.Sleep(backoff)
 				}
+				
 				if res1 == nil || err1 != nil { 
-					return fmt.Errorf("Kalibrasi dibatalkan: R1 (Zhipu) gagal merespons setelah 6x percobaan: %v", err1)
+					logger.Log(session.ID, "      [!] R1 Utama (Zhipu) gagal merespons. Melakukan Fallback on-the-fly ke Xiaomi MiMo...")
+					llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+					if errF != nil {
+						logger.Logf(session.ID, "      [!] Gagal memuat Xiaomi MiMo untuk fallback R1: %v", errF)
+					} else {
+						scAgent1Fallback := agent.NewScreeningAgent(llmR1Fallback)
+						res1, raw1, err1 = scAgent1Fallback.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
+						if err1 != nil {
+							logger.Logf(session.ID, "      [!] R1 Fallback (Xiaomi) juga gagal: %v", err1)
+						}
+					}
+				}
+
+				if res1 == nil || err1 != nil { 
+					return fmt.Errorf("Kalibrasi dibatalkan: R1 gagal merespons setelah fallback: %v", err1)
 				}
 				logger.Logf(session.ID, "      [RAW R1 Zhipu] %s", raw1)
 				
@@ -384,10 +402,13 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		}
 
 		// 2. Persiapan LLM untuk proses screening sisa kuota
-		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
 		if err != nil { 
-			logger.Logf(session.ID, "   [ERROR] LLM xiaomi gagal dimuat (%v). Harap konfigurasi API Xiaomi terlebih dahulu di halaman Pengaturan!\n", err)
-			return fmt.Errorf("xiaomi LLM configuration missing or invalid. Please configure the Xiaomi API key first")
+			logger.Logf(session.ID, "   [INFO] Zhipu gagal dimuat (%v). Fallback awal ke Xiaomi MiMo...\n", err)
+			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+			if err != nil {
+				return fmt.Errorf("Reviewer 1 (Zhipu maupun Xiaomi) gagal dimuat. Harap konfigurasi API di Pengaturan")
+			}
 		}
 		
 		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
@@ -452,22 +473,37 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			}
 
 			// R1 Review
-			backoffDelays := []int{1, 3, 5, 10, 15, 30}
+			backoffDelays := []int{10, 30, 60, 120} // detik, karena Zhipu jarang 429 parah
 			var res1 *model.ScreeningPerspective
 			var err1 error
-			for retry := 0; retry < 6; retry++ {
+			for retry := 0; retry < 4; retry++ {
 				res1, err1 = scAgent1.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
 				if err1 == nil && res1 != nil { break }
 				
 				baseDelaySec := float64(backoffDelays[retry])
 				jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
 				finalDelaySec := baseDelaySec + jitter
-				backoff := time.Duration(finalDelaySec * float64(time.Minute))
+				backoff := time.Duration(finalDelaySec * float64(time.Second))
 				logger.Logf(session.ID, "      [R1 Batch Retry %d] Error LLM: %v. Menunggu %v...", retry+1, err1, backoff)
 				time.Sleep(backoff)
 			}
+
 			if res1 == nil || err1 != nil { 
-				return fmt.Errorf("API R1 gagal merespons setelah 6x percobaan (%v). Batch terhenti, %d paper berhasil disimpan.", err1, total)
+				logger.Log(session.ID, "      [!] R1 Utama (Zhipu) gagal memberikan evaluasi. Melakukan Fallback on-the-fly ke Xiaomi MiMo...")
+				llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+				if errF != nil {
+					logger.Logf(session.ID, "      [!] Gagal memuat Xiaomi MiMo untuk fallback R1: %v", errF)
+				} else {
+					scAgent1Fallback := agent.NewScreeningAgent(llmR1Fallback)
+					res1, err1 = scAgent1Fallback.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
+					if err1 != nil {
+						logger.Logf(session.ID, "      [!] R1 Fallback (Xiaomi) juga gagal: %v", err1)
+					}
+				}
+			}
+
+			if res1 == nil || err1 != nil { 
+				return fmt.Errorf("API R1 gagal merespons setelah fallback (%v). Batch terhenti, %d paper berhasil disimpan.", err1, total)
 			}
 			res1.PaperID = paperID
 			res1.Title = title
