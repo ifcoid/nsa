@@ -1,8 +1,11 @@
 package agent
 
 import (
+	"regexp"
 	"strings"
 )
+
+var thinkRegex = regexp.MustCompile(`(?s)<(?:think|thought)>.*?(?:</(?:think|thought)>|$)`)
 
 // Info: File ini menampung utilitas bersama yang digunakan oleh seluruh agen cerdas (Pico, Criteria, Screener, dll)
 
@@ -10,6 +13,10 @@ import (
 // bungkusan markdown (triple backticks) yang sering ikut keluar dari output LLM.
 // Fungsi ini diekspor (huruf kapital di awal) agar bisa dipakai oleh semua file di package agent.
 func CleanJSONResponse(rawResponse string) string {
+	rawResponse = strings.TrimSpace(rawResponse)
+
+	// Hapus tag <think>...</think> secara utuh (mendukung unclosed tag akibat token limit)
+	rawResponse = thinkRegex.ReplaceAllString(rawResponse, "")
 	rawResponse = strings.TrimSpace(rawResponse)
 
 	// 0. Hapus blok referensi grounding jika ada, agar tidak mengacaukan parser
