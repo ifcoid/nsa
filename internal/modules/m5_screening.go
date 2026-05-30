@@ -185,11 +185,12 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				time.Sleep(3 * time.Second)
 	
 				// R2 Review (dengan mekanisme Retry 6x & Backoff wajar)
+				backoffDelaysR2 := []int{1, 3, 5, 10, 15, 30}
 				for retry := 0; retry < 6; retry++ {
 					res2, raw2, err2 = scAgent2.ReviewPaper(ctx, briefingDoc, title, abs, kwd)
 					if err2 == nil && res2 != nil { break }
 					
-					baseDelaySec := float64(backoffDelays[retry])
+					baseDelaySec := float64(backoffDelaysR2[retry])
 					jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec
 					finalDelaySec := baseDelaySec + jitter
 					backoff := time.Duration(finalDelaySec * float64(time.Minute))
@@ -534,13 +535,14 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			time.Sleep(3 * time.Second)
 
 			// R2 Review
+			backoffDelaysR2 := []int{1, 3, 5, 10, 15, 30}
 			var res2 *model.ScreeningPerspective
 			var err2 error
 			for retry := 0; retry < 6; retry++ {
 				res2, err2 = scAgent2.BatchReviewPaper(ctx, briefingDoc, title, abs, kwd)
 				if err2 == nil && res2 != nil { break }
 				
-				baseDelaySec := float64(backoffDelays[retry])
+				baseDelaySec := float64(backoffDelaysR2[retry])
 				jitter := (rand.Float64()*0.4 - 0.2) * baseDelaySec 
 				finalDelaySec := baseDelaySec + jitter
 				backoff := time.Duration(finalDelaySec * float64(time.Minute))
