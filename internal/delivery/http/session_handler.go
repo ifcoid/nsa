@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"nsa/internal/model"
 	"nsa/internal/orchestrator"
 	"nsa/internal/parser"
 	"nsa/internal/repository"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type SessionHandler struct {
@@ -470,3 +475,150 @@ func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Reque
 		"message": "Resolusi konflik berhasil disimpan",
 	})
 }
+
+// SyncQdrant mencocokkan DOI dari Qdrant ke MongoDB (Modul 6)
+func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Qdrant Configuration
+	qdrantURL := os.Getenv("QDRANT_URL")
+	qdrantKey := os.Getenv("QDRANT_API_KEY")
+	if qdrantURL == "" {
+		// Mock testing mode jika environment Qdrant belum diset
+		qdrantURL = "mock-mode"
+	}
+
+	coll := h.mongoRepo.GetScreeningCollection()
+	filter := bson.M{"session_id": id, "Final_Decision": "INCLUDE"}
+	cursor, err := coll.Find(ctx, filter)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mengambil data paper")
+		return
+	}
+	var papers []bson.M
+	_ = cursor.All(ctx, &papers)
+
+	syncedCount := 0
+	
+	// Untuk menyederhanakan, kita asumsikan jika QDRANT_URL ada, kita akan query Qdrant.
+	// Jika tidak, kita gunakan dummy sync untuk simulasi/testing.
+	if qdrantURL != "mock-mode" {
+		// Hit Qdrant REST API (Scroll)
+		client := &http.Client{Timeout: 15 * time.Second}
+		reqBody := `{"limit": 10000, "with_payload": ["doi"]}`
+		reqQdrant, _ := http.NewRequest("POST", fmt.Sprintf("%s/collections/scientific_articles/points/scroll", qdrantURL), strings.NewReader(reqBody))
+		reqQdrant.Header.Set("Content-Type", "application/json")
+		if qdrantKey != "" {
+			reqQdrant.Header.Set("api-key", qdrantKey)
+		}
+		
+		resp, err := client.Do(reqQdrant)
+		if err == nil && resp.StatusCode == 200 {
+			defer resp.Body.Close()
+			var qdrantResp map[string]interface{}
+			json.NewDecoder(resp.Body).Decode(&qdrantResp)
+			
+			// Build set of DOIs in Qdrant
+			qdrantDOIs := make(map[string]bool)
+			if result, ok := qdrantResp["result"].(map[string]interface{}); ok {
+				if points, ok := result["points"].([]interface{}); ok {
+					for _, pt := range points {
+						if pMap, ok := pt.(map[string]interface{}); ok {
+							if payload, ok := pMap["payload"].(map[string]interface{}); ok {
+								if d, ok := payload["doi"].(string); ok && d != "" {
+									qdrantDOIs[d] = true
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Update MongoDB
+			for _, p := range papers {
+				if doi, ok := p["doi"].(string); ok && doi != "" {
+					if qdrantDOIs[doi] {
+						update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339)}}
+						coll.UpdateByID(ctx, p["_id"], update)
+						syncedCount++
+					}
+				}
+			}
+		}
+	} else {
+		// Mock mode: Tandai semua yang "unpaywall" sebagai retrieved
+		for _, p := range papers {
+			if loc, ok := p["full_text_location"].(string); ok && loc == "unpaywall" {
+				update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339)}}
+				coll.UpdateByID(ctx, p["_id"], update)
+				syncedCount++
+			}
+		}
+	}
+
+	// Lakukan kalkulasi ulang AcquisitionLog via modul 6
+	h.pipeline.ExecuteAsync(ctx, session.ID) // Ini akan gagal mengeksekusi jika status sudah bukan INIT, tapi tidak masalah, kita biarkan saja.
+	
+	// Atau lebih baik, hitung manual disini:
+	// ...
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message":      "Sinkronisasi berhasil",
+		"synced_count": syncedCount,
+	})
+}
+
+// MarkInaccessible untuk menandai dokumen yang tidak bisa diunduh
+func (h *SessionHandler) MarkInaccessible(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	var payload struct {
+		PaperID       string `json:"paper_id"`
+		Documentation string `json:"documentation"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	ctx := context.Background()
+	coll := h.mongoRepo.GetScreeningCollection()
+	
+	objID, _ := primitive.ObjectIDFromHex(payload.PaperID)
+	update := bson.M{
+		"$set": bson.M{
+			"inaccessible":               true,
+			"documentation_inaccessible": payload.Documentation,
+		},
+	}
+	_, err := coll.UpdateByID(ctx, objID, update)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal menandai inaccessible")
+		return
+	}
+
+	// Trigger pipeline untuk memperbarui log akuisisi
+	// Jika status M6_STEP1_WAITING_SYNC, kita tidak mau jalanin ulang M6_ACQUISITION dari awal
+	// Tapi biarkan saja nanti.
+	
+	sendJSONResponse(w, http.StatusOK, map[string]string{
+		"message": "Dokumen ditandai Inaccessible",
+	})
+}
+

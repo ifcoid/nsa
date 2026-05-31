@@ -863,14 +863,12 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		return nil
 
 	case "M5_STEP4_APPROVED":
-		session.Status = "M5_DONE"
-		logger.Log(session.ID, "   [System] Modul 5 SELESAI. Anda siap melangkah ke Modul 6 (Full-Text Acquisition).")
+		session.Status = "M6_INIT"
+		logger.Log(session.ID, "   [System] Modul 5 SELESAI. Memulai Modul 6 (Full-Text Acquisition).")
 
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
-	case "M5_DONE":
-		logger.Log(session.ID, "   [System] Modul 5 telah selesai dengan sukses.")
-		return nil
+	// M5_DONE is replaced by M6_INIT transition
 
 	default:
 		logger.Logf(session.ID, "[Modul 5] Sub-status %s tidak dikenali atau belum diimplementasikan.", session.Status)

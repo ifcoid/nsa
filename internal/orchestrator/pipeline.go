@@ -34,7 +34,7 @@ func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory) 
 		"M3_":  modules.NewM3Search(deps),
 		"M4_":  modules.NewM4Mining(deps),
 		"M5_":  modules.NewM5Screening(deps),
-		"M6_":  modules.NewM6Fulltext(deps),
+		"M6_":  modules.NewM6Acquisition(deps),
 		"M7_":  modules.NewM7Extraction(deps),
 		"M8_":  modules.NewM8Synthesis(deps),
 		"M8B_": modules.NewM8bBibliometric(deps),

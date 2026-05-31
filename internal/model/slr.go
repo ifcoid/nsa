@@ -325,6 +325,7 @@ type SLRSession struct {
 	ScreeningResultsLog   []ScreeningResultsLog  `bson:"screening_results_log,omitempty" json:"screening_results_log,omitempty"`
 	ExclusionTable        *ExclusionTable        `bson:"exclusion_table,omitempty" json:"exclusion_table,omitempty"`
 	Modul5Summary         *Modul5Summary         `bson:"modul5_summary,omitempty" json:"modul5_summary,omitempty"`
+	AcquisitionLog        *AcquisitionLog        `bson:"acquisition_log,omitempty" json:"acquisition_log,omitempty"`
 	InclusionCriteria     []string               `bson:"inclusion_criteria" json:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria" json:"exclusion_criteria"`
 	Status            string            `bson:"status" json:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
@@ -345,4 +346,22 @@ type Paper struct {
 	DocumentType string `bson:"document_type" json:"document_type"`
 	Status       string `bson:"status" json:"status"` // "PENDING", "ACCEPT", "REJECT"
 	Reason       string `bson:"reason" json:"reason"`
+
+	// Modul 6: Full-text Acquisition Tracking
+	FullTextLocation         string `bson:"full_text_location" json:"full_text_location"`                   // "unpaywall", "arxiv", "hitl download"
+	DownloadURL              string `bson:"download_url" json:"download_url"`                               // URL to download PDF
+	FullTextRetrieved        bool   `bson:"full_text_retrieved" json:"full_text_retrieved"`                 // Verified in Qdrant
+	AcquisitionDate          string `bson:"acquisition_date" json:"acquisition_date"`                       // Date of retrieval
+	Inaccessible             bool   `bson:"inaccessible" json:"inaccessible"`                               // User marked as inaccessible
+	DocumentationInaccessible string `bson:"documentation_inaccessible" json:"documentation_inaccessible"` // Reason for failure
+}
+
+type AcquisitionLog struct {
+	TotalInclude       int     `bson:"total_include" json:"total_include"`
+	HighRetrieved      int     `bson:"high_retrieved" json:"high_retrieved"` // from unpaywall/arxiv OA
+	MediumRetrieved    int     `bson:"medium_retrieved" json:"medium_retrieved"` // from hitl download
+	LowRetrieved       int     `bson:"low_retrieved" json:"low_retrieved"` // if we want to differentiate
+	InaccessibleCount  int     `bson:"inaccessible_count" json:"inaccessible_count"`
+	InaccessiblePct    float64 `bson:"inaccessible_pct" json:"inaccessible_pct"`
+	VectorizedCount    int     `bson:"vectorized_count" json:"vectorized_count"` // found in qdrant
 }

@@ -84,6 +84,10 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("POST /api/sessions/{id}/import-data", r.sessionHndlr.ImportData)
 	protected.HandleFunc("GET /api/sessions/{id}/disagreements", r.sessionHndlr.GetDisagreements)
 	protected.HandleFunc("POST /api/sessions/{id}/resolve-conflicts", r.sessionHndlr.ResolveConflicts)
+
+	// Modul 6 (Full-Text Acquisition)
+	protected.HandleFunc("POST /api/sessions/{id}/m6/sync-qdrant", r.sessionHndlr.SyncQdrant)
+	protected.HandleFunc("POST /api/sessions/{id}/m6/mark-inaccessible", r.sessionHndlr.MarkInaccessible)
 	
 	// LLM config endpoints
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
