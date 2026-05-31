@@ -318,7 +318,8 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 			year := getStringField(p, "Year", "year")
 			authors := getStringField(p, "Authors", "authors", "Author")
 			keywords := getStringField(p, "Author Keywords", "Index Keywords", "keywords")
-			journal := getStringField(p, "Source title", "journal")
+			journal := getStringField(p, "Source title", "journal", "Conference", "Publication Title")
+			articleType := getStringField(p, "Document Type", "Article Type", "Type", "Item Type")
 			db := getStringField(p, "Database", "source_db", "Source")
 			
 			doc := map[string]interface{}{
@@ -331,6 +332,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 				"Keywords": keywords,
 				"DOI": doi,
 				"Journal": journal,
+				"Article_Type": articleType,
 				
 				// Dual reviewer columns
 				"Screener_1_Decision": "",

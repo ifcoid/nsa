@@ -650,20 +650,25 @@ func (h *SessionHandler) ExportM6Links(w http.ResponseWriter, req *http.Request)
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment;filename=m6_acquisition_links_%s.csv", id))
 
-	fmt.Fprintf(w, "Title,DOI,Location,Download_URL,Retrieved,Inaccessible\n")
+	fmt.Fprintf(w, "Title,DOI,Journal,Article_Type,Location,Download_URL,Retrieved,Inaccessible\n")
 	for _, p := range papers {
 		title, _ := p["Title"].(string)
 		doi, _ := p["DOI"].(string)
+		journal, _ := p["Journal"].(string)
+		articleType, _ := p["Article_Type"].(string)
 		loc, _ := p["full_text_location"].(string)
 		url, _ := p["download_url"].(string)
 		retrieved, _ := p["full_text_retrieved"].(bool)
 		inacc, _ := p["inaccessible"].(bool)
 		
 		title = strings.ReplaceAll(title, "\"", "\"\"")
+		journal = strings.ReplaceAll(journal, "\"", "\"\"")
+		articleType = strings.ReplaceAll(articleType, "\"", "\"\"")
+		
 		if doi != "" && !strings.HasPrefix(doi, "http") {
 			doi = "https://doi.org/" + doi
 		}
-		fmt.Fprintf(w, "\"%s\",\"%s\",\"%s\",\"%s\",%t,%t\n", title, doi, loc, url, retrieved, inacc)
+		fmt.Fprintf(w, "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%t,%t\n", title, doi, journal, articleType, loc, url, retrieved, inacc)
 	}
 }
 
@@ -735,6 +740,8 @@ func (h *SessionHandler) GetM6Papers(w http.ResponseWriter, req *http.Request) {
 	for _, p := range papers {
 		title, _ := p["Title"].(string)
 		doi, _ := p["DOI"].(string)
+		journal, _ := p["Journal"].(string)
+		articleType, _ := p["Article_Type"].(string)
 		loc, _ := p["full_text_location"].(string)
 		url, _ := p["download_url"].(string)
 		retrieved, _ := p["full_text_retrieved"].(bool)
@@ -759,6 +766,8 @@ func (h *SessionHandler) GetM6Papers(w http.ResponseWriter, req *http.Request) {
 			"id": paperID,
 			"title": title,
 			"doi": doi,
+			"journal": journal,
+			"article_type": articleType,
 			"location": loc,
 			"download_url": url,
 			"retrieved": retrieved,
