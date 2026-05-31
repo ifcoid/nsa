@@ -996,6 +996,32 @@ Panduan Cara Mengujinya:
 
 ### LANGKAH 1: ACQUISITION STRATEGY + AUTO-DOWNLOAD + PRIORITY TRACKING
 
+collection slr_screening adalah data list paper screening yang dihasilkan dari modul 5, di mongoDB.
+
+output :  acquisition_log
+
+Tahapan Langkahnya:
+1. Cek Open Access via Unpaywall API (https://api.unpaywall.org/v2/[DOI]) dari slr_screening yang memiliki status untuk dilakukan Full-text Acquisition.
+2. Jika Open Acess dan bisa diambil dari unpaywall update Full_Text_Location diisi dengan unpaywall dan download dari URL yang dikembalikan berikan kepada user(melalui frontend, download browser) untuk menyimpannya.
+3. Jika tidak OA → cek arXiv/SSRN/OSF preprint via DOI, Jika ditemukan update Full_Text_Location diisi dengan arXiv dan download dari URL yang dikembalikan berikan kepada user untuk menyimpannya.
+4. Jika tidak ditemukan juga, update Full_Text_Location diisi dengan 'hitl download', berikan ke user per batch (user download via Hitl)
+5. Semua pdf yang berhasil di download dimasukkan ke dalam folder pdfs.
+6. User mengunggah semua pdf yang sudah di download ke google drive
+7. User membuka google colab dan melakukan mounting ke folder di google drive yang berisi pdfs yang akan di proses.
+8. Di Colab git clone aplikasi PEDE kemudian menjalankannya untuk mengubah pdf ke markdowntext, melakukan chunk berdasarkan strategi Markdown Header Text Splitter, dan merubahnya menjadi vector dengan model vector embedding BGE-M3 (dari BAAI). kemudian menyimpan nya di database qdrant(Saat membuat collection baru di Qdrant dari Colab, pastikan dimensinya dikunci pada 1024 (sesuai spesifikasi dense vector BGE-M3) dengan cara akses dari secret google collab yang di set yaitu QDRANT_API_KEY dan QDRANT_ENDPOINT,Saat memasukkan (upsert) vektor ke Qdrant, bawa struktur data payload yang memuat field "doi", "title", dan metadata penting lainnya. Ini krusial untuk memetakan vektor kembali ke dokumen aslinya di MongoDB.)
+9. aplikasi backend tinggal cek vector db qdrant(ambil di os environtment QDRANT_API_KEY dan QDRANT_ENDPOINT) berdasarkan field doi, jika ada maka set kolom Full_Text_Retrieved menjadi true dan kolom Acquisition_Date set tanggal hari ini.
+10. Pengecekan apakah butuh tombol cek di frontend atau otomatis ? saya butuh saran untuk alur pengecekannya di qdrant.
+11. Cek folder aplikasi PEDE di ./if/PEDE apakah alurnya sudah sesuai brief ini atau belum? jika belum tolong sesuaikan.
+12. Apakah perlu dibuat file .ipynb di aplikasi PEDE untuk membantu proses yang user lakukan di colab(UX friendly)? jika perlu tolong dibuatkan, jika tidak perlu tolong jelaskan mengapa.
+13. Jika sudah dari 3 channel gagal mendapatkan paper tersebut, kemudian untuk jurnal-jurnal yang tidak ada. Lakukan confirmasi statusnya INACCESSIBLE dari frontend, lalu set kolom INACCESSIBLE menjadi true di document jurnal di collection slr_screening,wajib masukan dokumentasinya di kolom Documentation_inaccessible.
+14. INACCESSIBLE PROTOCOL, jika jumlah dokumen inaccessible:
+    - <5%: dokumentasi standar, low impact
+    - 5-15%: detail + analisis bias (skewed ke region/tahun?)
+    - >15%: REVISI strategi (tambah channel, konsultasi supervisor)
+15. Append progress + breakdown HIGH/MEDIUM/LOW retrieved ke acquisition_log
+16. Target: ≥80% MEDIUM retrieved, semua HIGH retrieved, jalur jelas LOW.
+
+
 ### LANGKAH 2: FULL-TEXT SCREENING (DUAL-REVIEWER + AI-ASSIST)
 
 ### LANGKAH 3: RESOLVE CONFLICTS + AUDIT + EXTRACTION PREP + HASIL AKHIR
