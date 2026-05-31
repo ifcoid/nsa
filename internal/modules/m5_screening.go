@@ -641,10 +641,10 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 	case "M5_STEP3_WAITING_RESOLUTION":
 		logger.Log(session.ID, "   [System] Sesi dijeda untuk evaluasi batch (HitL).")
-		logger.Log(session.ID, "   1. Buka Compass -> 'slr_screening'. Filter 'Agreement: DISAGREE' atau 'UNCERTAIN'.")
-		logger.Log(session.ID, "   2. Lakukan diskusi dan perbarui 'Conflict_Resolution' serta 'Final_Decision' di record terkait.")
-		logger.Log(session.ID, "   3. Jika ingin lanjut batch berikutnya, set status ke 'M5_STEP3_BATCH_SCREENING'.")
-		logger.Log(session.ID, "   4. Jika sudah habis, set status ke 'M5_STEP4_REVIEW_HASIL'.")
+		logger.Log(session.ID, "   1. Periksa bagian 'Tindakan Anda' di UI web.")
+		logger.Log(session.ID, "   2. Jika ada konflik (Disagreements), baca rekomendasi AI Arbitrator.")
+		logger.Log(session.ID, "   3. Tentukan keputusan akhir (INCLUDE/EXCLUDE) dan klik 'Simpan Keputusan & Lanjutkan'.")
+		logger.Log(session.ID, "   4. Jika tidak ada konflik, sistem memunculkan tombol 'Lanjut Batch Berikutnya / Selesai'.")
 		return nil
 
 	case "M5_STEP4_REVIEW_HASIL":

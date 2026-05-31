@@ -193,6 +193,8 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 		// Default simple approve
 		if strings.HasSuffix(session.Status, "_WAITING_APPROVAL") {
 			session.Status = session.Status[:len(session.Status)-17] + "_APPROVED"
+		} else if session.Status == "M5_STEP3_WAITING_RESOLUTION" {
+			session.Status = "M5_STEP3_BATCH_SCREENING"
 		}
 		
 		// Custom data handling untuk M2_STEP1
