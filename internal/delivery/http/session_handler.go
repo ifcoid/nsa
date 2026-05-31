@@ -646,8 +646,8 @@ func (h *SessionHandler) ExportM6Links(w http.ResponseWriter, req *http.Request)
 
 	fmt.Fprintf(w, "Title,DOI,Location,Download_URL,Retrieved,Inaccessible\n")
 	for _, p := range papers {
-		title, _ := p["title"].(string)
-		doi, _ := p["doi"].(string)
+		title, _ := p["Title"].(string)
+		doi, _ := p["DOI"].(string)
 		loc, _ := p["full_text_location"].(string)
 		url, _ := p["download_url"].(string)
 		retrieved, _ := p["full_text_retrieved"].(bool)
