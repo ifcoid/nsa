@@ -654,6 +654,9 @@ func (h *SessionHandler) ExportM6Links(w http.ResponseWriter, req *http.Request)
 		inacc, _ := p["inaccessible"].(bool)
 		
 		title = strings.ReplaceAll(title, "\"", "\"\"")
+		if doi != "" && !strings.HasPrefix(doi, "http") {
+			doi = "https://doi.org/" + doi
+		}
 		fmt.Fprintf(w, "\"%s\",\"%s\",\"%s\",\"%s\",%t,%t\n", title, doi, loc, url, retrieved, inacc)
 	}
 }
