@@ -632,7 +632,13 @@ func (h *SessionHandler) ExportM6Links(w http.ResponseWriter, req *http.Request)
 
 	ctx := context.Background()
 	coll := h.mongoRepo.GetScreeningCollection()
-	filter := bson.M{"session_id": id, "Final_Decision": "INCLUDE"}
+	filter := bson.M{
+		"session_id": id,
+		"$or": []bson.M{
+			{"Final_Decision": "INCLUDE"},
+			{"Final_Decision": "", "Screener_1_Decision": "INCLUDE"},
+		},
+	}
 	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
 		http.Error(w, "Gagal mengambil data", http.StatusInternalServerError)

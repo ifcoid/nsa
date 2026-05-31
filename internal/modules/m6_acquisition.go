@@ -67,10 +67,13 @@ func (m *M6Acquisition) processAcquisition(ctx context.Context, session *model.S
 
 	coll := m.deps.MongoRepo.GetScreeningCollection()
 
-	// Ambil semua paper yang INCLUDE
+	// Ambil semua paper yang INCLUDE (baik eksplisit dari resolusi, maupun implisit dari agreement R1)
 	filter := bson.M{
-		"session_id":     session.ID,
-		"Final_Decision": "INCLUDE",
+		"session_id": session.ID,
+		"$or": []bson.M{
+			{"Final_Decision": "INCLUDE"},
+			{"Final_Decision": "", "Screener_1_Decision": "INCLUDE"},
+		},
 	}
 
 	cursor, err := coll.Find(ctx, filter)
@@ -134,7 +137,13 @@ func (m *M6Acquisition) updatePaperAcquisition(ctx context.Context, coll *mongo.
 }
 
 func (m *M6Acquisition) updateAcquisitionLog(ctx context.Context, session *model.SLRSession, coll *mongo.Collection) error {
-	filter := bson.M{"session_id": session.ID, "Final_Decision": "INCLUDE"}
+	filter := bson.M{
+		"session_id": session.ID,
+		"$or": []bson.M{
+			{"Final_Decision": "INCLUDE"},
+			{"Final_Decision": "", "Screener_1_Decision": "INCLUDE"},
+		},
+	}
 	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
 		return err
