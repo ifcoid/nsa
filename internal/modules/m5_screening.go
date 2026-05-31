@@ -791,8 +791,12 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
+	case "M5_DONE":
+		logger.Log(session.ID, "   [System] Modul 5 telah selesai dengan sukses.")
+		return nil
+
 	default:
-		logger.Logf(session.ID, "   [Modul 5] Sub-status %s tidak dikenali atau belum diimplementasikan.\n", session.Status)
+		logger.Logf(session.ID, "[Modul 5] Sub-status %s tidak dikenali atau belum diimplementasikan.", session.Status)
+		return nil
 	}
-	return nil
 }
