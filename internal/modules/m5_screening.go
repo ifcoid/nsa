@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 	"nsa/internal/agent"
 	"nsa/internal/logger"
@@ -699,7 +700,34 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		for code, count := range reasonCounts {
 			pct := 0.0
 			if len(excluded) > 0 { pct = float64(count) / float64(len(excluded)) * 100 }
-			exclusionReasons += fmt.Sprintf("| %s | %d | %.1f%% | - |\n", code, count, pct)
+			
+			desc := "Tidak memenuhi kriteria"
+			codeUpper := strings.ToUpper(code)
+			if strings.Contains(codeUpper, "P-NOMATCH") {
+				desc = "Populasi/Subjek tidak sesuai kriteria"
+			} else if strings.Contains(codeUpper, "I-NOMATCH") {
+				desc = "Intervensi/Teknologi tidak sesuai kriteria"
+			} else if strings.Contains(codeUpper, "C-NOMATCH") {
+				desc = "Pembanding (Comparator) tidak sesuai"
+			} else if strings.Contains(codeUpper, "O-NOMATCH") {
+				desc = "Luaran (Outcome) tidak relevan"
+			} else if strings.Contains(codeUpper, "S-NOMATCH") {
+				desc = "Tipe/Desain Studi tidak sesuai kriteria"
+			} else if strings.Contains(codeUpper, "DATE-NOMATCH") {
+				desc = "Tahun publikasi di luar rentang"
+			} else if strings.Contains(codeUpper, "LANG-NOMATCH") {
+				desc = "Bahasa publikasi tidak didukung"
+			} else if strings.Contains(codeUpper, "OTHER") {
+				desc = "Alasan lainnya"
+			}
+			
+			if idx := strings.Index(code, "("); idx != -1 {
+				if endIdx := strings.Index(code, ")"); endIdx != -1 && endIdx > idx {
+					desc += ": " + code[idx+1:endIdx]
+				}
+			}
+
+			exclusionReasons += fmt.Sprintf("| %s | %d | %.1f%% | %s |\n", code, count, pct, desc)
 		}
 
 		// 3. KAPPA REPORT
