@@ -91,7 +91,11 @@ func (m *M6Acquisition) processAcquisition(ctx context.Context, session *model.S
 	client := &http.Client{Timeout: 15 * time.Second}
 	email := "admin@example.com" // Unpaywall requires email
 
-	for _, p := range papers {
+	for i, p := range papers {
+		if i > 0 && i%10 == 0 {
+			logger.Logf(session.ID, "   [M6] Memproses paper %d/%d...", i, len(papers))
+		}
+
 		// Jika sudah pernah diproses, skip (bisa untuk retry resume)
 		if p["full_text_location"] != nil && p["full_text_location"] != "" {
 			continue
