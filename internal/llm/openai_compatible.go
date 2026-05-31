@@ -67,44 +67,74 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, systemPrompt, use
 		return "", fmt.Errorf("gagal me-marshal request: %w", err)
 	}
 
-	// 3. Siapkan HTTP Request dengan Context (supaya bisa di-timeout/cancel)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return "", fmt.Errorf("gagal membuat http request: %w", err)
-	}
-
-	// 4. Injeksi Headers wajib
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
-	}
-
-	// 5. Eksekusi HTTP Request
+	// 3. Eksekusi HTTP Request dengan Exponential Backoff (Khusus 429 & 50x)
 	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("gagal mengeksekusi request ke provider: %w", err)
-	}
-	defer resp.Body.Close()
+	var resp *http.Response
+	var body []byte
+	var lastErr error
 
-	// 6. Baca body response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("gagal membaca body response: %w", err)
+	maxRetries := 5
+	baseDelay := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonPayload))
+		if err != nil {
+			return "", fmt.Errorf("gagal membuat http request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if c.APIKey != "" {
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+		}
+
+		resp, lastErr = client.Do(req)
+		if lastErr == nil {
+			body, _ = io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if resp.StatusCode == http.StatusOK {
+				lastErr = nil // Clear error on success
+				break
+			}
+
+			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+				// Retry untuk 429 atau Server Error
+				var openAIResp openAIResponse
+				_ = json.Unmarshal(body, &openAIResp)
+				errMsg := string(body)
+				if openAIResp.Error != nil {
+					errMsg = openAIResp.Error.Message
+				}
+				lastErr = fmt.Errorf("error dari provider (HTTP %d): %s", resp.StatusCode, errMsg)
+			} else {
+				// Jangan retry untuk 400 Bad Request, 401 Unauthorized, dll
+				var openAIResp openAIResponse
+				_ = json.Unmarshal(body, &openAIResp)
+				errMsg := string(body)
+				if openAIResp.Error != nil {
+					errMsg = openAIResp.Error.Message
+				}
+				return "", fmt.Errorf("fatal error dari provider (HTTP %d): %s", resp.StatusCode, errMsg)
+			}
+		}
+
+		if i < maxRetries-1 {
+			delay := baseDelay * time.Duration(1<<i) // 2s, 4s, 8s, 16s
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		}
+	}
+
+	if lastErr != nil {
+		return "", fmt.Errorf("gagal setelah %d retries: %w", maxRetries, lastErr)
 	}
 
 	// 7. Parse JSON Response
 	var openAIResp openAIResponse
 	if err := json.Unmarshal(body, &openAIResp); err != nil {
 		return "", fmt.Errorf("gagal unmarshal response JSON: %w. Body: %s", err, string(body))
-	}
-
-	// 8. Validasi jika ada error dari provider
-	if resp.StatusCode != http.StatusOK {
-		if openAIResp.Error != nil {
-			return "", fmt.Errorf("error dari provider (HTTP %d): %s", resp.StatusCode, openAIResp.Error.Message)
-		}
-		return "", fmt.Errorf("error dari provider (HTTP %d): %s", resp.StatusCode, string(body))
 	}
 
 	// 9. Ambil hasil teks jawaban LLM
