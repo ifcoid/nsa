@@ -88,6 +88,7 @@ func (r *Router) registerRoutes() {
 	// Modul 6 (Full-Text Acquisition)
 	protected.HandleFunc("POST /api/sessions/{id}/m6/sync-qdrant", r.sessionHndlr.SyncQdrant)
 	protected.HandleFunc("POST /api/sessions/{id}/m6/mark-inaccessible", r.sessionHndlr.MarkInaccessible)
+	protected.HandleFunc("GET /api/sessions/{id}/m6/export-links", r.sessionHndlr.ExportM6Links)
 	
 	// LLM config endpoints
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)

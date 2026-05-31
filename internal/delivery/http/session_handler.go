@@ -622,3 +622,39 @@ func (h *SessionHandler) MarkInaccessible(w http.ResponseWriter, req *http.Reque
 	})
 }
 
+// ExportM6Links menghasilkan CSV daftar tautan unduhan
+func (h *SessionHandler) ExportM6Links(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		http.Error(w, "Session ID is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := context.Background()
+	coll := h.mongoRepo.GetScreeningCollection()
+	filter := bson.M{"session_id": id, "Final_Decision": "INCLUDE"}
+	cursor, err := coll.Find(ctx, filter)
+	if err != nil {
+		http.Error(w, "Gagal mengambil data", http.StatusInternalServerError)
+		return
+	}
+	var papers []bson.M
+	_ = cursor.All(ctx, &papers)
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment;filename=m6_acquisition_links_%s.csv", id))
+
+	fmt.Fprintf(w, "Title,DOI,Location,Download_URL,Retrieved,Inaccessible\n")
+	for _, p := range papers {
+		title, _ := p["title"].(string)
+		doi, _ := p["doi"].(string)
+		loc, _ := p["full_text_location"].(string)
+		url, _ := p["download_url"].(string)
+		retrieved, _ := p["full_text_retrieved"].(bool)
+		inacc, _ := p["inaccessible"].(bool)
+		
+		title = strings.ReplaceAll(title, "\"", "\"\"")
+		fmt.Fprintf(w, "\"%s\",\"%s\",\"%s\",\"%s\",%t,%t\n", title, doi, loc, url, retrieved, inacc)
+	}
+}
+
