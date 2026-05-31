@@ -868,6 +868,12 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
+	case "M5_DONE":
+		// Ini berfungsi sebagai migration jika user sempat mengeksekusi kode lama
+		session.Status = "M6_INIT"
+		logger.Log(session.ID, "   [System] Mengubah status usang M5_DONE menjadi M6_INIT.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
 	// M5_DONE is replaced by M6_INIT transition
 
 	default:
