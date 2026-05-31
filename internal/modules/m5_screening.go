@@ -814,11 +814,12 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			"KALIBRASI:\n- Sample 20 records, %d iterasi\n- Kappa iter 1 -> final: %.3f -> %.3f\n\n"+
 			"BATCH SCREENING:\n- Total screened: %d\n- R1 + R2 complete: ✓\n- Final kappa: %.3f\n\n"+
 			"DECISIONS:\n- INCLUDE for full-text: %d\n- EXCLUDE: %d\n- UNCERTAIN deferred: %d\n\n"+
+			"EXCLUSION TABLE:\n%s\n\n"+
 			"DISAGREEMENT RESOLUTION:\n- Total resolved/discussed: %d\n\n"+
 			"PICO-CONSISTENCY AUDIT:\n%s\n\n"+
 			"FULL-TEXT PREP:\n%s", 
 			len(session.KalibrasiLog), iter1Kappa, finalKappa, recordsScreened, batchKappa, 
-			len(included), len(excluded), deferredCount, resolvedDiscussCount, picoAuditText, fullTextPrep)
+			len(included), len(excluded), deferredCount, exclusionReasons, resolvedDiscussCount, picoAuditText, fullTextPrep)
 
 		session.Modul5Summary = &model.Modul5Summary{Markdown: summaryMd}
 
