@@ -745,6 +745,15 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			}
 
 			auditRes, err := scAgent.AuditPICO(ctx, picoDef, string(sampleData))
+			if err != nil {
+				logger.Log(session.ID, "      [!] Gagal Audit PICO dgn Xiaomi. Mencoba Fallback ke Zhipu...")
+				llmFallback, errFb := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
+				if errFb == nil {
+					scAgentFallback := agent.NewScreeningAgent(llmFallback)
+					auditRes, err = scAgentFallback.AuditPICO(ctx, picoDef, string(sampleData))
+				}
+			}
+
 			if err == nil && auditRes != nil {
 				picoAuditText = fmt.Sprintf("Slipped-through: %d\nAction: %s\nAnalysis: %s", auditRes.SlippedThroughCount, auditRes.Action, auditRes.Analysis)
 			} else {
@@ -761,6 +770,14 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			if limit > 50 { limit = 50 }
 			sampleData, _ := json.Marshal(included[:limit])
 			res, err := scAgent.PrioritizeFullText(ctx, string(sampleData))
+			if err != nil {
+				logger.Log(session.ID, "      [!] Gagal Prioritize dgn Xiaomi. Mencoba Fallback ke Zhipu...")
+				llmFallback, errFb := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
+				if errFb == nil {
+					scAgentFallback := agent.NewScreeningAgent(llmFallback)
+					res, err = scAgentFallback.PrioritizeFullText(ctx, string(sampleData))
+				}
+			}
 			if err == nil { fullTextPrep = res }
 		}
 
