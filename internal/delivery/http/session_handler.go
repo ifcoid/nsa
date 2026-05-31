@@ -370,6 +370,7 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 				Year:         doc.Year,
 				Authors:      doc.Authors,
 				Database:     doc.Database,
+				Journal:      doc.Journal,
 				DocumentType: doc.DocumentType,
 				Status:       "PENDING", // Initial state
 			}

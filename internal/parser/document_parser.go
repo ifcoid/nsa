@@ -16,6 +16,7 @@ type ParsedDocument struct {
 	Year         string
 	Authors      string
 	Database     string
+	Journal      string
 	DocumentType string
 }
 
@@ -79,7 +80,8 @@ func parseCSV(content []byte) ([]ParsedDocument, error) {
 	yearIdx := getIdx(headerMap, "year", "publication year", "pub_year")
 	authIdx := getIdx(headerMap, "authors", "author", "author(s)")
 	dbIdx := getIdx(headerMap, "database", "source", "publisher")
-	typeIdx := getIdx(headerMap, "document type", "type", "item type")
+	typeIdx := getIdx(headerMap, "document type", "type", "item type", "document identifier")
+	journalIdx := getIdx(headerMap, "source title", "journal", "publication title", "conference")
 
 	var docs []ParsedDocument
 	for _, row := range records[1:] {
@@ -91,6 +93,7 @@ func parseCSV(content []byte) ([]ParsedDocument, error) {
 		if authIdx != -1 && authIdx < len(row) { doc.Authors = row[authIdx] }
 		if dbIdx != -1 && dbIdx < len(row) { doc.Database = row[dbIdx] }
 		if typeIdx != -1 && typeIdx < len(row) { doc.DocumentType = row[typeIdx] }
+		if journalIdx != -1 && journalIdx < len(row) { doc.Journal = row[journalIdx] }
 		
 		// Heuristic to guess Database if empty
 		if doc.Database == "" {

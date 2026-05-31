@@ -343,6 +343,7 @@ type Paper struct {
 	Year         string `bson:"year" json:"year"`
 	Authors      string `bson:"authors" json:"authors"`
 	Database     string `bson:"database" json:"database"` // e.g. "Scopus", "IEEE", "PubMed"
+	Journal      string `bson:"journal" json:"journal"`
 	DocumentType string `bson:"document_type" json:"document_type"`
 	Status       string `bson:"status" json:"status"` // "PENDING", "ACCEPT", "REJECT"
 	Reason       string `bson:"reason" json:"reason"`
