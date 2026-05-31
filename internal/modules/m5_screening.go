@@ -802,8 +802,18 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 		session.Modul5Summary = &model.Modul5Summary{Markdown: summaryMd}
 
-		session.Status = "M5_DONE"
+		session.Status = "M5_STEP4_WAITING_APPROVAL"
 		logger.Log(session.ID, "   [System] Exclusion Table & Modul 5 Summary berhasil di-generate!")
+		logger.Log(session.ID, "   [System] Menunggu Persetujuan Anda (HITL) sebelum Modul 5 ditutup sepenuhnya.")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M5_STEP4_WAITING_APPROVAL":
+		logger.Log(session.ID, "   [System] Sesi dijeda. Menunggu persetujuan Anda atas hasil akhir (Modul 5 Summary).")
+		logger.Log(session.ID, "   Tekan 'Approve & Selesai' di UI untuk mengakhiri Modul 5.")
+		return nil
+
+	case "M5_STEP4_APPROVED":
+		session.Status = "M5_DONE"
 		logger.Log(session.ID, "   [System] Modul 5 SELESAI. Anda siap melangkah ke Modul 6 (Full-Text Acquisition).")
 
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
