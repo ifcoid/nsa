@@ -667,3 +667,108 @@ func (h *SessionHandler) ExportM6Links(w http.ResponseWriter, req *http.Request)
 	}
 }
 
+// getPublisherFromDOI attempts to infer the publisher from the DOI prefix
+func getPublisherFromDOI(doi string) string {
+	if doi == "" {
+		return "Unknown"
+	}
+	// Extract prefix if it's a full URL
+	prefix := doi
+	if strings.Contains(doi, "10.") {
+		parts := strings.SplitN(doi, "10.", 2)
+		if len(parts) == 2 {
+			prefix = "10." + parts[1]
+		}
+	}
+	
+	if strings.HasPrefix(prefix, "10.1109") {
+		return "IEEE"
+	} else if strings.HasPrefix(prefix, "10.1016") {
+		return "Elsevier"
+	} else if strings.HasPrefix(prefix, "10.1007") {
+		return "Springer"
+	} else if strings.HasPrefix(prefix, "10.1145") {
+		return "ACM"
+	} else if strings.HasPrefix(prefix, "10.1049") {
+		return "IET"
+	} else if strings.HasPrefix(prefix, "10.1038") {
+		return "Nature"
+	} else if strings.HasPrefix(prefix, "10.3389") {
+		return "Frontiers"
+	} else if strings.HasPrefix(prefix, "10.3390") {
+		return "MDPI"
+	} else if strings.HasPrefix(prefix, "10.1101") {
+		return "bioRxiv/medRxiv"
+	} else if strings.HasPrefix(prefix, "10.48550") || strings.Contains(strings.ToLower(doi), "arxiv") {
+		return "arXiv"
+	}
+	
+	return "Other"
+}
+
+// GetM6Papers mengembalikan data paper Modul 6 dalam format JSON untuk Web Viewer
+func (h *SessionHandler) GetM6Papers(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	ctx := context.Background()
+	coll := h.mongoRepo.GetScreeningCollection()
+	filter := bson.M{
+		"session_id": id,
+		"$or": []bson.M{
+			{"Final_Decision": "INCLUDE"},
+			{"Final_Decision": "", "Screener_1_Decision": "INCLUDE"},
+		},
+	}
+	cursor, err := coll.Find(ctx, filter)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mengambil data")
+		return
+	}
+	var papers []bson.M
+	_ = cursor.All(ctx, &papers)
+
+	var result []map[string]interface{}
+	for _, p := range papers {
+		title, _ := p["Title"].(string)
+		doi, _ := p["DOI"].(string)
+		loc, _ := p["full_text_location"].(string)
+		url, _ := p["download_url"].(string)
+		retrieved, _ := p["full_text_retrieved"].(bool)
+		inacc, _ := p["inaccessible"].(bool)
+		
+		if doi != "" && !strings.HasPrefix(doi, "http") {
+			doi = "https://doi.org/" + doi
+		}
+		
+		publisher := getPublisherFromDOI(doi)
+		if loc == "arxiv" {
+			publisher = "arXiv"
+		}
+		
+		// Map `_id` to string safely
+		paperID := ""
+		if oid, ok := p["_id"].(primitive.ObjectID); ok {
+			paperID = oid.Hex()
+		}
+
+		result = append(result, map[string]interface{}{
+			"id": paperID,
+			"title": title,
+			"doi": doi,
+			"location": loc,
+			"download_url": url,
+			"retrieved": retrieved,
+			"inaccessible": inacc,
+			"publisher": publisher,
+		})
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"papers": result,
+		"total": len(result),
+	})
+}
