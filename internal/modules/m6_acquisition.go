@@ -94,7 +94,7 @@ func (m *M6Acquisition) processAcquisition(ctx context.Context, session *model.S
 			continue
 		}
 
-		doi, ok := p["doi"].(string)
+		doi, ok := p["DOI"].(string)
 		if !ok || doi == "" {
 			// Jika tidak ada DOI, langsung hitl download
 			m.updatePaperAcquisition(ctx, coll, p["_id"], "hitl download", "")
