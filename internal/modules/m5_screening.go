@@ -752,6 +752,16 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					scAgentFallback := agent.NewScreeningAgent(llmFallback)
 					auditRes, err = scAgentFallback.AuditPICO(ctx, picoDef, string(sampleData))
 				}
+				
+				// Secondary fallback to groq if Zhipu also fails
+				if err != nil {
+					logger.Log(session.ID, "      [!] Gagal Audit PICO dgn Zhipu. Mencoba Fallback ke Groq...")
+					llmFallback2, errFb2 := m.deps.LLMFactory.CreateClient(ctx, "groq")
+					if errFb2 == nil {
+						scAgentFallback2 := agent.NewScreeningAgent(llmFallback2)
+						auditRes, err = scAgentFallback2.AuditPICO(ctx, picoDef, string(sampleData))
+					}
+				}
 			}
 
 			if err == nil && auditRes != nil {
@@ -776,6 +786,16 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				if errFb == nil {
 					scAgentFallback := agent.NewScreeningAgent(llmFallback)
 					res, err = scAgentFallback.PrioritizeFullText(ctx, string(sampleData))
+				}
+				
+				// Secondary fallback to groq if Zhipu also fails
+				if err != nil {
+					logger.Log(session.ID, "      [!] Gagal Prioritize dgn Zhipu. Mencoba Fallback ke Groq...")
+					llmFallback2, errFb2 := m.deps.LLMFactory.CreateClient(ctx, "groq")
+					if errFb2 == nil {
+						scAgentFallback2 := agent.NewScreeningAgent(llmFallback2)
+						res, err = scAgentFallback2.PrioritizeFullText(ctx, string(sampleData))
+					}
 				}
 			}
 			if err == nil { fullTextPrep = res }
