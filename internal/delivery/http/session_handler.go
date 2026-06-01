@@ -517,51 +517,66 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	syncedCount := 0
 	
 	if qdrantURL != "mock-mode" {
-		// Hit Qdrant REST API (Scroll)
-		client := &http.Client{Timeout: 15 * time.Second}
-		reqBody := `{"limit": 10000, "with_payload": ["doi"]}`
-		reqQdrant, err := http.NewRequest("POST", fmt.Sprintf("%s/collections/scientific_articles/points/scroll", qdrantURL), strings.NewReader(reqBody))
-		if err != nil {
-			sendJSONError(w, http.StatusInternalServerError, "Gagal membuat request ke Qdrant: " + err.Error())
-			return
-		}
-		reqQdrant.Header.Set("Content-Type", "application/json")
-		if qdrantKey != "" {
-			reqQdrant.Header.Set("api-key", qdrantKey)
-		}
-		
-		resp, err := client.Do(reqQdrant)
-		if err != nil {
-			sendJSONError(w, http.StatusInternalServerError, "Gagal terhubung ke Qdrant: " + err.Error())
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			errMsg := fmt.Sprintf("Qdrant mengembalikan status %d: %s", resp.StatusCode, string(bodyBytes))
-			sendJSONError(w, http.StatusInternalServerError, errMsg)
-			return
-		}
-
-		var qdrantResp map[string]interface{}
-		json.NewDecoder(resp.Body).Decode(&qdrantResp)
-			
-		// Build set of DOIs in Qdrant
+		client := &http.Client{Timeout: 30 * time.Second}
 		qdrantDOIs := make(map[string]bool)
-		if result, ok := qdrantResp["result"].(map[string]interface{}); ok {
-			if points, ok := result["points"].([]interface{}); ok {
-				for _, pt := range points {
-					if pMap, ok := pt.(map[string]interface{}); ok {
-						if payload, ok := pMap["payload"].(map[string]interface{}); ok {
-							if d, ok := payload["doi"].(string); ok && d != "" {
-								d = strings.TrimPrefix(d, "https://doi.org/")
-								d = strings.TrimPrefix(d, "http://doi.org/")
-								qdrantDOIs[d] = true
+
+		var nextOffset string
+		for {
+			reqBody := `{"limit": 5000, "with_payload": ["doi"]}`
+			if nextOffset != "" {
+				reqBody = fmt.Sprintf(`{"limit": 5000, "with_payload": ["doi"], "offset": "%s"}`, nextOffset)
+			}
+			
+			reqQdrant, err := http.NewRequest("POST", fmt.Sprintf("%s/collections/scientific_articles/points/scroll", qdrantURL), strings.NewReader(reqBody))
+			if err != nil {
+				sendJSONError(w, http.StatusInternalServerError, "Gagal membuat request ke Qdrant: " + err.Error())
+				return
+			}
+			reqQdrant.Header.Set("Content-Type", "application/json")
+			if qdrantKey != "" {
+				reqQdrant.Header.Set("api-key", qdrantKey)
+			}
+			
+			resp, err := client.Do(reqQdrant)
+			if err != nil {
+				sendJSONError(w, http.StatusInternalServerError, "Gagal terhubung ke Qdrant: " + err.Error())
+				return
+			}
+
+			if resp.StatusCode != 200 {
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				errMsg := fmt.Sprintf("Qdrant mengembalikan status %d: %s", resp.StatusCode, string(bodyBytes))
+				sendJSONError(w, http.StatusInternalServerError, errMsg)
+				return
+			}
+
+			var qdrantResp map[string]interface{}
+			json.NewDecoder(resp.Body).Decode(&qdrantResp)
+			resp.Body.Close()
+				
+			if result, ok := qdrantResp["result"].(map[string]interface{}); ok {
+				if points, ok := result["points"].([]interface{}); ok {
+					for _, pt := range points {
+						if pMap, ok := pt.(map[string]interface{}); ok {
+							if payload, ok := pMap["payload"].(map[string]interface{}); ok {
+								if d, ok := payload["doi"].(string); ok && d != "" {
+									d = strings.TrimPrefix(d, "https://doi.org/")
+									d = strings.TrimPrefix(d, "http://doi.org/")
+									qdrantDOIs[d] = true
+								}
 							}
 						}
 					}
 				}
+				
+				if offsetVal, hasOffset := result["next_page_offset"]; hasOffset && offsetVal != nil {
+					nextOffset = offsetVal.(string)
+				} else {
+					break // Selesai semua page
+				}
+			} else {
+				break
 			}
 		}
 
