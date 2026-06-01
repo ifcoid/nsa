@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -521,17 +522,33 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 		// Hit Qdrant REST API (Scroll)
 		client := &http.Client{Timeout: 15 * time.Second}
 		reqBody := `{"limit": 10000, "with_payload": ["doi"]}`
-		reqQdrant, _ := http.NewRequest("POST", fmt.Sprintf("%s/collections/scientific_articles/points/scroll", qdrantURL), strings.NewReader(reqBody))
+		reqQdrant, err := http.NewRequest("POST", fmt.Sprintf("%s/collections/scientific_articles/points/scroll", qdrantURL), strings.NewReader(reqBody))
+		if err != nil {
+			sendJSONError(w, http.StatusInternalServerError, "Gagal membuat request ke Qdrant: " + err.Error())
+			return
+		}
 		reqQdrant.Header.Set("Content-Type", "application/json")
 		if qdrantKey != "" {
 			reqQdrant.Header.Set("api-key", qdrantKey)
 		}
 		
 		resp, err := client.Do(reqQdrant)
-		if err == nil && resp.StatusCode == 200 {
-			defer resp.Body.Close()
-			var qdrantResp map[string]interface{}
-			json.NewDecoder(resp.Body).Decode(&qdrantResp)
+		if err != nil {
+			sendJSONError(w, http.StatusInternalServerError, "Gagal terhubung ke Qdrant: " + err.Error())
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			// Baca body error dari qdrant
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			errMsg := fmt.Sprintf("Qdrant mengembalikan status %d: %s", resp.StatusCode, string(bodyBytes))
+			sendJSONError(w, http.StatusInternalServerError, errMsg)
+			return
+		}
+
+		var qdrantResp map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&qdrantResp)
 			
 			// Build set of DOIs in Qdrant
 			qdrantDOIs := make(map[string]bool)
@@ -559,8 +576,10 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 					}
 				}
 			}
+		} else {
+			sendJSONError(w, http.StatusInternalServerError, "URL Qdrant tidak diset di Environment (qdrantURL kosong).")
+			return
 		}
-	} else {
 		// Mock mode: Tandai semua yang "unpaywall" sebagai retrieved
 		for _, p := range papers {
 			if loc, ok := p["full_text_location"].(string); ok && loc == "unpaywall" {
