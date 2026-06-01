@@ -494,6 +494,9 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 
 	// Qdrant Configuration
 	qdrantURL := os.Getenv("QDRANT_URL")
+	if qdrantURL == "" {
+		qdrantURL = os.Getenv("QDRANT_ENDPOINT")
+	}
 	qdrantKey := os.Getenv("QDRANT_API_KEY")
 	if qdrantURL == "" {
 		// Mock testing mode jika environment Qdrant belum diset
