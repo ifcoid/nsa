@@ -515,10 +515,10 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	_ = cursor.All(ctx, &papers)
 
 	syncedCount := 0
+	qdrantDOIs := make(map[string]bool)
 	
 	if qdrantURL != "mock-mode" {
 		client := &http.Client{Timeout: 30 * time.Second}
-		qdrantDOIs := make(map[string]bool)
 
 		var nextOffset string
 		for {
@@ -609,13 +609,15 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 	}
-
 	// Lakukan kalkulasi ulang AcquisitionLog via modul 6
 	h.pipeline.ExecuteAsync(ctx, session.ID)
 	
-	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"message":      "Sinkronisasi berhasil",
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":      "success",
 		"synced_count": syncedCount,
+		"debug_qdrant_unique": len(qdrantDOIs),
+		"version": "v3",
 	})
 }
 
