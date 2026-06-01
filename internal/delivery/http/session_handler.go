@@ -555,6 +555,8 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 					if pMap, ok := pt.(map[string]interface{}); ok {
 						if payload, ok := pMap["payload"].(map[string]interface{}); ok {
 							if d, ok := payload["doi"].(string); ok && d != "" {
+								d = strings.TrimPrefix(d, "https://doi.org/")
+								d = strings.TrimPrefix(d, "http://doi.org/")
 								qdrantDOIs[d] = true
 							}
 						}
@@ -565,7 +567,16 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 
 		// Update MongoDB
 		for _, p := range papers {
-			if doi, ok := p["doi"].(string); ok && doi != "" {
+			var doi string
+			if val, ok := p["doi"].(string); ok && val != "" {
+				doi = val
+			} else if val, ok := p["DOI"].(string); ok && val != "" {
+				doi = val
+			}
+
+			if doi != "" {
+				doi = strings.TrimPrefix(doi, "https://doi.org/")
+				doi = strings.TrimPrefix(doi, "http://doi.org/")
 				if qdrantDOIs[doi] {
 					update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339)}}
 					coll.UpdateByID(ctx, p["_id"], update)
