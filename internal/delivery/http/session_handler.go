@@ -612,12 +612,39 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	// Lakukan kalkulasi ulang AcquisitionLog via modul 6
 	h.pipeline.ExecuteAsync(ctx, session.ID)
 	
+	// Collect debug info
+	qDOIs := []string{}
+	for k := range qdrantDOIs {
+		if len(qDOIs) < 5 {
+			qDOIs = append(qDOIs, k)
+		}
+	}
+	mDOIs := []string{}
+	for _, p := range papers {
+		var doi string
+		if val, ok := p["doi"].(string); ok && val != "" {
+			doi = val
+		} else if val, ok := p["DOI"].(string); ok && val != "" {
+			doi = val
+		}
+		if doi != "" {
+			doi = strings.TrimPrefix(doi, "https://doi.org/")
+			doi = strings.TrimPrefix(doi, "http://doi.org/")
+			if len(mDOIs) < 5 {
+				mDOIs = append(mDOIs, doi)
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message":      "success",
 		"synced_count": syncedCount,
 		"debug_qdrant_unique": len(qdrantDOIs),
-		"version": "v3",
+		"debug_mongo_papers": len(papers),
+		"debug_qdrant_sample": qDOIs,
+		"debug_mongo_sample": mDOIs,
+		"version": "v4",
 	})
 }
 
