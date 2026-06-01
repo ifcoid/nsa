@@ -516,8 +516,6 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 
 	syncedCount := 0
 	
-	// Untuk menyederhanakan, kita asumsikan jika QDRANT_URL ada, kita akan query Qdrant.
-	// Jika tidak, kita gunakan dummy sync untuk simulasi/testing.
 	if qdrantURL != "mock-mode" {
 		// Hit Qdrant REST API (Scroll)
 		client := &http.Client{Timeout: 15 * time.Second}
@@ -540,7 +538,6 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 		defer resp.Body.Close()
 
 		if resp.StatusCode != 200 {
-			// Baca body error dari qdrant
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			errMsg := fmt.Sprintf("Qdrant mengembalikan status %d: %s", resp.StatusCode, string(bodyBytes))
 			sendJSONError(w, http.StatusInternalServerError, errMsg)
@@ -550,36 +547,33 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 		var qdrantResp map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&qdrantResp)
 			
-			// Build set of DOIs in Qdrant
-			qdrantDOIs := make(map[string]bool)
-			if result, ok := qdrantResp["result"].(map[string]interface{}); ok {
-				if points, ok := result["points"].([]interface{}); ok {
-					for _, pt := range points {
-						if pMap, ok := pt.(map[string]interface{}); ok {
-							if payload, ok := pMap["payload"].(map[string]interface{}); ok {
-								if d, ok := payload["doi"].(string); ok && d != "" {
-									qdrantDOIs[d] = true
-								}
+		// Build set of DOIs in Qdrant
+		qdrantDOIs := make(map[string]bool)
+		if result, ok := qdrantResp["result"].(map[string]interface{}); ok {
+			if points, ok := result["points"].([]interface{}); ok {
+				for _, pt := range points {
+					if pMap, ok := pt.(map[string]interface{}); ok {
+						if payload, ok := pMap["payload"].(map[string]interface{}); ok {
+							if d, ok := payload["doi"].(string); ok && d != "" {
+								qdrantDOIs[d] = true
 							}
 						}
 					}
 				}
 			}
+		}
 
-			// Update MongoDB
-			for _, p := range papers {
-				if doi, ok := p["doi"].(string); ok && doi != "" {
-					if qdrantDOIs[doi] {
-						update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339)}}
-						coll.UpdateByID(ctx, p["_id"], update)
-						syncedCount++
-					}
+		// Update MongoDB
+		for _, p := range papers {
+			if doi, ok := p["doi"].(string); ok && doi != "" {
+				if qdrantDOIs[doi] {
+					update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339)}}
+					coll.UpdateByID(ctx, p["_id"], update)
+					syncedCount++
 				}
 			}
-		} else {
-			sendJSONError(w, http.StatusInternalServerError, "URL Qdrant tidak diset di Environment (qdrantURL kosong).")
-			return
 		}
+	} else {
 		// Mock mode: Tandai semua yang "unpaywall" sebagai retrieved
 		for _, p := range papers {
 			if loc, ok := p["full_text_location"].(string); ok && loc == "unpaywall" {
@@ -591,11 +585,8 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Lakukan kalkulasi ulang AcquisitionLog via modul 6
-	h.pipeline.ExecuteAsync(ctx, session.ID) // Ini akan gagal mengeksekusi jika status sudah bukan INIT, tapi tidak masalah, kita biarkan saja.
+	h.pipeline.ExecuteAsync(ctx, session.ID)
 	
-	// Atau lebih baik, hitung manual disini:
-	// ...
-
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"message":      "Sinkronisasi berhasil",
 		"synced_count": syncedCount,
