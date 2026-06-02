@@ -569,6 +569,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 								if d, ok := payload["doi"].(string); ok && d != "" {
 									d = strings.TrimPrefix(d, "https://doi.org/")
 									d = strings.TrimPrefix(d, "http://doi.org/")
+									d = strings.ToLower(strings.TrimSpace(d))
 									qdrantDOIs[d] = true
 								}
 							}
@@ -598,6 +599,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 			if doi != "" {
 				doi = strings.TrimPrefix(doi, "https://doi.org/")
 				doi = strings.TrimPrefix(doi, "http://doi.org/")
+				doi = strings.ToLower(strings.TrimSpace(doi))
 				if qdrantDOIs[doi] {
 					update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339)}}
 					coll.UpdateByID(ctx, p["_id"], update)
