@@ -570,6 +570,13 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 									d = strings.TrimPrefix(d, "https://doi.org/")
 									d = strings.TrimPrefix(d, "http://doi.org/")
 									d = strings.ToLower(strings.TrimSpace(d))
+									d = strings.ReplaceAll(d, "\ufb00", "ff")
+									d = strings.ReplaceAll(d, "\ufb01", "fi")
+									d = strings.ReplaceAll(d, "\ufb02", "fl")
+									d = strings.ReplaceAll(d, "\ufb03", "ffi")
+									d = strings.ReplaceAll(d, "\ufb04", "ffl")
+									d = strings.ReplaceAll(d, "\ufb05", "ft")
+									d = strings.ReplaceAll(d, "\ufb06", "st")
 									qdrantDOIs[d] = true
 								}
 							}
@@ -600,6 +607,13 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 				doi = strings.TrimPrefix(doi, "https://doi.org/")
 				doi = strings.TrimPrefix(doi, "http://doi.org/")
 				doi = strings.ToLower(strings.TrimSpace(doi))
+				doi = strings.ReplaceAll(doi, "\ufb00", "ff")
+				doi = strings.ReplaceAll(doi, "\ufb01", "fi")
+				doi = strings.ReplaceAll(doi, "\ufb02", "fl")
+				doi = strings.ReplaceAll(doi, "\ufb03", "ffi")
+				doi = strings.ReplaceAll(doi, "\ufb04", "ffl")
+				doi = strings.ReplaceAll(doi, "\ufb05", "ft")
+				doi = strings.ReplaceAll(doi, "\ufb06", "st")
 				if qdrantDOIs[doi] {
 					update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339)}}
 					coll.UpdateByID(ctx, p["_id"], update)
