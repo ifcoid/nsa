@@ -616,43 +616,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	// Lakukan kalkulasi ulang AcquisitionLog secara sinkron agar UI langsung ter-update
-	filter = bson.M{
-		"session_id": session.ID,
-		"$or": []bson.M{
-			{"Final_Decision": "INCLUDE"},
-			{"Final_Decision": "", "Screener_1_Decision": "INCLUDE"},
-		},
-	}
-	cursor, _ = coll.Find(ctx, filter)
-	var finalPapers []bson.M
-	_ = cursor.All(ctx, &finalPapers)
-
-	var log model.AcquisitionLog
-	log.TotalInclude = len(finalPapers)
-
-	for _, p := range finalPapers {
-		loc, _ := p["full_text_location"].(string)
-		if loc == "unpaywall" || loc == "arxiv" {
-			log.HighRetrieved++
-		} else if loc == "hitl download" {
-			log.MediumRetrieved++
-		}
-
-		retrieved, _ := p["full_text_retrieved"].(bool)
-		if retrieved {
-			log.VectorizedCount++
-		}
-
-		inaccessible, _ := p["inaccessible"].(bool)
-		if inaccessible {
-			log.InaccessibleCount++
-		}
-	}
-	if log.TotalInclude > 0 {
-		log.InaccessiblePct = float64(log.InaccessibleCount) / float64(log.TotalInclude) * 100
-	}
-	session.AcquisitionLog = &log
-	_ = h.mongoRepo.UpdateSession(ctx, session)
+	h.recalculateAcquisitionLogSync(ctx, session)
 	
 	// Collect debug info
 	qDOIs := []string{}
@@ -724,9 +688,11 @@ func (h *SessionHandler) MarkInaccessible(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	// Trigger pipeline untuk memperbarui log akuisisi
-	// Jika status M6_STEP1_WAITING_SYNC, kita tidak mau jalanin ulang M6_ACQUISITION dari awal
-	// Tapi biarkan saja nanti.
+	// Trigger kalkulasi sinkron
+	session, errSession := h.mongoRepo.GetSession(ctx, id)
+	if errSession == nil {
+		h.recalculateAcquisitionLogSync(ctx, session)
+	}
 	
 	sendJSONResponse(w, http.StatusOK, map[string]string{
 		"message": "Dokumen ditandai Inaccessible",
@@ -761,25 +727,39 @@ func (h *SessionHandler) ExportM6Links(w http.ResponseWriter, req *http.Request)
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment;filename=m6_acquisition_links_%s.csv", id))
 
-	fmt.Fprintf(w, "Title,DOI,Journal,Article_Type,Location,Download_URL,Retrieved,Inaccessible\n")
+	fmt.Fprintf(w, "Title,Authors,DOI,Publisher,Journal,Article_Type,Location,Download_URL,Retrieved,Inaccessible\n")
 	for _, p := range papers {
-		title, _ := p["Title"].(string)
-		doi, _ := p["DOI"].(string)
-		journal, _ := p["Journal"].(string)
-		articleType, _ := p["Article_Type"].(string)
+		title, _ := p["title"].(string)
+		if title == "" { title, _ = p["Title"].(string) }
+		
+		authors, _ := p["authors"].(string)
+		if authors == "" { authors, _ = p["Authors"].(string) }
+
+		doi, _ := p["doi"].(string)
+		if doi == "" { doi, _ = p["DOI"].(string) }
+		
+		journal, _ := p["journal"].(string)
+		if journal == "" { journal, _ = p["Journal"].(string) }
+		
+		articleType, _ := p["document_type"].(string)
+		if articleType == "" { articleType, _ = p["Article_Type"].(string) }
+		
 		loc, _ := p["full_text_location"].(string)
 		url, _ := p["download_url"].(string)
 		retrieved, _ := p["full_text_retrieved"].(bool)
 		inacc, _ := p["inaccessible"].(bool)
 		
+		publisher := getPublisherFromDOI(doi)
+		
 		title = strings.ReplaceAll(title, "\"", "\"\"")
+		authors = strings.ReplaceAll(authors, "\"", "\"\"")
 		journal = strings.ReplaceAll(journal, "\"", "\"\"")
 		articleType = strings.ReplaceAll(articleType, "\"", "\"\"")
 		
 		if doi != "" && !strings.HasPrefix(doi, "http") {
 			doi = "https://doi.org/" + doi
 		}
-		fmt.Fprintf(w, "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%t,%t\n", title, doi, journal, articleType, loc, url, retrieved, inacc)
+		fmt.Fprintf(w, "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%t,%t\n", title, authors, doi, publisher, journal, articleType, loc, url, retrieved, inacc)
 	}
 }
 
@@ -891,4 +871,45 @@ func (h *SessionHandler) GetM6Papers(w http.ResponseWriter, req *http.Request) {
 		"papers": result,
 		"total": len(result),
 	})
+}
+
+func (h *SessionHandler) recalculateAcquisitionLogSync(ctx context.Context, session *model.SLRSession) {
+	coll := h.mongoRepo.GetScreeningCollection()
+	filter := bson.M{
+		"session_id": session.ID,
+		"$or": []bson.M{
+			{"Final_Decision": "INCLUDE"},
+			{"Final_Decision": "", "Screener_1_Decision": "INCLUDE"},
+		},
+	}
+	cursor, _ := coll.Find(ctx, filter)
+	var finalPapers []bson.M
+	_ = cursor.All(ctx, &finalPapers)
+
+	var log model.AcquisitionLog
+	log.TotalInclude = len(finalPapers)
+
+	for _, p := range finalPapers {
+		loc, _ := p["full_text_location"].(string)
+		if loc == "unpaywall" || loc == "arxiv" {
+			log.HighRetrieved++
+		} else if loc == "hitl download" {
+			log.MediumRetrieved++
+		}
+
+		retrieved, _ := p["full_text_retrieved"].(bool)
+		if retrieved {
+			log.VectorizedCount++
+		}
+
+		inaccessible, _ := p["inaccessible"].(bool)
+		if inaccessible {
+			log.InaccessibleCount++
+		}
+	}
+	if log.TotalInclude > 0 {
+		log.InaccessiblePct = float64(log.InaccessibleCount) / float64(log.TotalInclude) * 100
+	}
+	session.AcquisitionLog = &log
+	_ = h.mongoRepo.UpdateSession(ctx, session)
 }
