@@ -615,8 +615,44 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 	}
-	// Lakukan kalkulasi ulang AcquisitionLog via modul 6
-	h.pipeline.ExecuteAsync(ctx, session.ID)
+	// Lakukan kalkulasi ulang AcquisitionLog secara sinkron agar UI langsung ter-update
+	filter := bson.M{
+		"session_id": session.ID,
+		"$or": []bson.M{
+			{"Final_Decision": "INCLUDE"},
+			{"Final_Decision": "", "Screener_1_Decision": "INCLUDE"},
+		},
+	}
+	cursor, _ := coll.Find(ctx, filter)
+	var finalPapers []bson.M
+	_ = cursor.All(ctx, &finalPapers)
+
+	var log model.AcquisitionLog
+	log.TotalInclude = len(finalPapers)
+
+	for _, p := range finalPapers {
+		loc, _ := p["full_text_location"].(string)
+		if loc == "unpaywall" || loc == "arxiv" {
+			log.HighRetrieved++
+		} else if loc == "hitl download" {
+			log.MediumRetrieved++
+		}
+
+		retrieved, _ := p["full_text_retrieved"].(bool)
+		if retrieved {
+			log.VectorizedCount++
+		}
+
+		inaccessible, _ := p["inaccessible"].(bool)
+		if inaccessible {
+			log.InaccessibleCount++
+		}
+	}
+	if log.TotalInclude > 0 {
+		log.InaccessiblePct = float64(log.InaccessibleCount) / float64(log.TotalInclude) * 100
+	}
+	session.AcquisitionLog = &log
+	_ = h.mongoRepo.UpdateSession(ctx, session)
 	
 	// Collect debug info
 	qDOIs := []string{}
