@@ -616,14 +616,14 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	// Lakukan kalkulasi ulang AcquisitionLog secara sinkron agar UI langsung ter-update
-	filter := bson.M{
+	filter = bson.M{
 		"session_id": session.ID,
 		"$or": []bson.M{
 			{"Final_Decision": "INCLUDE"},
 			{"Final_Decision": "", "Screener_1_Decision": "INCLUDE"},
 		},
 	}
-	cursor, _ := coll.Find(ctx, filter)
+	cursor, _ = coll.Find(ctx, filter)
 	var finalPapers []bson.M
 	_ = cursor.All(ctx, &finalPapers)
 
