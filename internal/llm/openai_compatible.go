@@ -1,32 +1,30 @@
 package llm
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// OpenAICompatibleClient adalah adapter universal untuk API berbasis standar OpenAI
+// OpenAICompatibleClient adalah adapter universal untuk API berbasis standar OpenAI.
+// Memakai STREAMING (SSE) agar koneksi tetap hidup pada generasi panjang — penting untuk
+// backend di balik proxy dengan edge-timeout (mis. Cloudflare 524 pada rprompt/Claude headless).
 type OpenAICompatibleClient struct {
 	APIKey  string
 	BaseURL string
 	Model   string
 }
 
-// NewOpenAICompatibleClient adalah constructor untuk membuat client baru
 func NewOpenAICompatibleClient(apiKey, baseURL, model string) *OpenAICompatibleClient {
-	return &OpenAICompatibleClient{
-		APIKey:  apiKey,
-		BaseURL: baseURL,
-		Model:   model,
-	}
+	return &OpenAICompatibleClient{APIKey: apiKey, BaseURL: baseURL, Model: model}
 }
 
-// Struct internal untuk menyusun Payload Request sesuai standar OpenAI
 type openAIMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
@@ -35,91 +33,92 @@ type openAIMessage struct {
 type openAIRequest struct {
 	Model       string          `json:"model"`
 	Temperature float32         `json:"temperature"`
+	Stream      bool            `json:"stream"`
 	Messages    []openAIMessage `json:"messages"`
 }
 
-// Struct internal untuk membaca Payload Response dari OpenAI
-type openAIResponse struct {
+// streamChunk: satu event SSE OpenAI-style.
+type streamChunk struct {
 	Choices []struct {
-		Message openAIMessage `json:"message"`
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
 	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
 }
 
-// Generate adalah implementasi dari interface LLMClient
 func (c *OpenAICompatibleClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
-	// 1. Susun endpoint lengkap (biasanya diakhiri dengan /chat/completions)
 	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
-
 	payload := openAIRequest{
 		Model:       c.Model,
-		Temperature: 0.1, // Set sangat rendah (dingin) untuk menjamin objektivitas & konsistensi format JSON
+		Temperature: 0.1,
+		Stream:      true,
 		Messages: []openAIMessage{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
 		},
 	}
-
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("gagal me-marshal request: %w", err)
 	}
 
-	// 3. Eksekusi HTTP Request dengan Exponential Backoff (Khusus 429 & 50x)
-	// Timeout longgar: backend bridge berbasis Claude Code headless (mis. rprompt) bisa 30-90s+.
-	client := &http.Client{Timeout: 180 * time.Second}
-	var resp *http.Response
-	var body []byte
+	// Tanpa Timeout di Client (streaming bisa lama); pakai ctx per-attempt sebagai batas.
+	client := &http.Client{}
+	maxRetries := 3
+	baseDelay := 2 * time.Second
 	var lastErr error
 
-	maxRetries := 5
-	baseDelay := 2 * time.Second
-
 	for i := 0; i < maxRetries; i++ {
-		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonPayload))
+		reqCtx, cancel := context.WithTimeout(ctx, 9*time.Minute)
+		req, err := http.NewRequestWithContext(reqCtx, "POST", url, bytes.NewBuffer(jsonPayload))
 		if err != nil {
+			cancel()
 			return "", fmt.Errorf("gagal membuat http request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "text/event-stream")
 		if c.APIKey != "" {
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+			req.Header.Set("Authorization", "Bearer "+c.APIKey)
 		}
 
-		resp, lastErr = client.Do(req)
-		if lastErr == nil {
-			body, _ = io.ReadAll(resp.Body)
+		resp, doErr := client.Do(req)
+		if doErr != nil {
+			cancel()
+			lastErr = doErr
+		} else if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-
-			if resp.StatusCode == http.StatusOK {
-				lastErr = nil // Clear error on success
-				break
+			cancel()
+			errMsg := string(body)
+			var er struct {
+				Error *struct {
+					Message string `json:"message"`
+				} `json:"error"`
 			}
-
+			if json.Unmarshal(body, &er) == nil && er.Error != nil {
+				errMsg = er.Error.Message
+			}
 			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-				// Retry untuk 429 atau Server Error
-				var openAIResp openAIResponse
-				_ = json.Unmarshal(body, &openAIResp)
-				errMsg := string(body)
-				if openAIResp.Error != nil {
-					errMsg = openAIResp.Error.Message
-				}
 				lastErr = fmt.Errorf("error dari provider (HTTP %d): %s", resp.StatusCode, errMsg)
 			} else {
-				// Jangan retry untuk 400 Bad Request, 401 Unauthorized, dll
-				var openAIResp openAIResponse
-				_ = json.Unmarshal(body, &openAIResp)
-				errMsg := string(body)
-				if openAIResp.Error != nil {
-					errMsg = openAIResp.Error.Message
-				}
 				return "", fmt.Errorf("fatal error dari provider (HTTP %d): %s", resp.StatusCode, errMsg)
+			}
+		} else {
+			content, perr := readSSE(resp.Body)
+			resp.Body.Close()
+			cancel()
+			if perr == nil && strings.TrimSpace(content) != "" {
+				return content, nil
+			}
+			if perr != nil {
+				lastErr = fmt.Errorf("gagal membaca stream: %w", perr)
+			} else {
+				lastErr = fmt.Errorf("stream kosong dari provider")
 			}
 		}
 
 		if i < maxRetries-1 {
-			delay := baseDelay * time.Duration(1<<i) // 2s, 4s, 8s, 16s
+			delay := baseDelay * time.Duration(1<<i) // 2s, 4s
 			select {
 			case <-time.After(delay):
 			case <-ctx.Done():
@@ -127,21 +126,33 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, systemPrompt, use
 			}
 		}
 	}
+	return "", fmt.Errorf("gagal setelah %d retries: %w", maxRetries, lastErr)
+}
 
-	if lastErr != nil {
-		return "", fmt.Errorf("gagal setelah %d retries: %w", maxRetries, lastErr)
+// readSSE membaca event-stream OpenAI dan menggabungkan delta.content.
+func readSSE(body io.Reader) (string, error) {
+	var sb strings.Builder
+	sc := bufio.NewScanner(body)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024) // toleransi baris besar
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "[DONE]" {
+			break
+		}
+		var chunk streamChunk
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue // lewati keepalive/komentar non-JSON
+		}
+		for _, ch := range chunk.Choices {
+			sb.WriteString(ch.Delta.Content)
+		}
 	}
-
-	// 7. Parse JSON Response
-	var openAIResp openAIResponse
-	if err := json.Unmarshal(body, &openAIResp); err != nil {
-		return "", fmt.Errorf("gagal unmarshal response JSON: %w. Body: %s", err, string(body))
+	if err := sc.Err(); err != nil {
+		return sb.String(), err
 	}
-
-	// 9. Ambil hasil teks jawaban LLM
-	if len(openAIResp.Choices) > 0 {
-		return openAIResp.Choices[0].Message.Content, nil
-	}
-
-	return "", fmt.Errorf("response sukses tapi tidak ada pilihan jawaban (choices kosong)")
+	return sb.String(), nil
 }
