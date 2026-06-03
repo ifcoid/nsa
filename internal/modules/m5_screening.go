@@ -31,7 +31,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
 		reasonCodesBytes, _ := json.MarshalIndent(session.ScreeningSetup.ReasonCodes, "", "  ")
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		scAgent := agent.NewScreeningAgent(llmBrain)
@@ -311,7 +311,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		// Reset hasil screening sebelumnya karena briefing diubah (menghindari hasil evaluasi usang/stale)
 		_ = m.deps.MongoRepo.ResetCalibrationScreenings(ctx, session.ID)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		scAgent := agent.NewScreeningAgent(llmBrain)

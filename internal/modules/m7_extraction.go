@@ -110,7 +110,7 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [Langkah 7.1] Rekomendasi framework + template ekstraksi...")
 
-	brain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
 		return fmt.Errorf("gemini (brain M7) gagal dimuat: %w", err)
 	}

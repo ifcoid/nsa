@@ -25,7 +25,7 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 	// Fase 1+2: tool selection + threshold 3-lapis (sekali).
 	if session.QAThreshold == nil {
 		logger.Log(session.ID, "   [Langkah 7.3] Tool selection + threshold justification...")
-		brain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		brain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil {
 			return fmt.Errorf("gemini (brain QA) gagal: %w", err)
 		}
@@ -211,7 +211,7 @@ func (m *M7Extraction) runSynthesisL4(ctx context.Context, session *model.SLRSes
 	}
 	sumJSON, _ := json.Marshal(summary)
 
-	brain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
 		return fmt.Errorf("gemini (brain synthesis) gagal: %w", err)
 	}

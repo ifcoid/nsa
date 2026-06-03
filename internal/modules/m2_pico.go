@@ -31,7 +31,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// =========================================================================
 	case "M2_STEP1_TOPIC_GAP":
 		logger.Log(session.ID, "   [Langkah 2.1] Menganalisis Topik Mentah & Mengklasifikasi tipe GAP...")
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		gapAgent := agent.NewGapAgent(llmBrain)
@@ -50,7 +50,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 
 	case "M2_STEP1_NEEDS_REVISION":
 		logger.Logf(session.ID, "   [Revisi 2.1] Mencari ulang saran Topik berdasarkan feedback: '%s'\n", session.Feedback)
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		gapAgent := agent.NewGapAgent(llmBrain)
@@ -93,7 +93,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		topicContext := fmt.Sprintf("Judul: %s\nKesenjangan (Gap): %s\nTipe: %s (%s)\nBukti: %s\nAlasannya Mengapa Penting: %s", 
 			session.SelectedTopic.Name, session.SelectedTopic.Gap, session.SelectedTopic.Type, session.SelectedTopic.TypeReason, session.SelectedTopic.Evidence, session.SelectedTopic.Importance)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		priorAgent := agent.NewPriorReviewAgent(llmBrain)
@@ -124,7 +124,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		topicContext := fmt.Sprintf("Judul: %s\nKesenjangan (Gap): %s\nTipe: %s (%s)\nBukti: %s\nAlasannya Mengapa Penting: %s\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s\nTolong cari ulang literatur review yang lebih tepat / perbaiki matriks sebelumnya sesuai dengan keluhan di atas.", 
 			session.SelectedTopic.Name, session.SelectedTopic.Gap, session.SelectedTopic.Type, session.SelectedTopic.TypeReason, session.SelectedTopic.Evidence, session.SelectedTopic.Importance, session.Feedback)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		priorAgent := agent.NewPriorReviewAgent(llmBrain)
@@ -148,7 +148,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// =========================================================================
 	case "M2_STEP3_PICO":
 		logger.Log(session.ID, "   [Langkah 2.3] Menyusun PICO Framework 3-Lapis...")
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		// RAG Context: Selected Topic
@@ -199,7 +199,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 			priorMatrixContext = string(matrixBytes)
 		}
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		picoAgent := agent.NewPicoAgent(llmBrain)
@@ -262,7 +262,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// =========================================================================
 	case "M2_STEP4_SCOPE":
 		logger.Log(session.ID, "   [Langkah 2.4] Merumuskan Justifikasi Batasan Scope 3-Lapis...")
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
@@ -297,7 +297,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		// Tambahkan feedback ke input
 		filtersContext := string(filtersBytes) + fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s\nTolong perbaiki justifikasi sebelumnya sesuai instruksi revisi ini.", session.Feedback)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		scopeAgent := agent.NewScopeAgent(llmBrain)
@@ -323,7 +323,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// =========================================================================
 	case "M2_STEP5_RQ":
 		logger.Log(session.ID, "   [Langkah 2.5] Memformulasikan Research Questions (RQ)...")
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		// RAG Context Gathering
@@ -411,7 +411,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		// Tambahkan feedback
 		scopeContext += fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s\nTolong perbaiki Research Questions sebelumnya agar terhindar dari orphan dan selaras dengan keluhan di atas.", session.Feedback)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		logger.Log(session.ID, "   [API] Memanggil Gemini (gemini-pro-latest) dengan Google Search Grounding...")
@@ -438,7 +438,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// =========================================================================
 	case "M2_STEP6_FINER_CHECK":
 		logger.Log(session.ID, "   [Langkah 2.6] Melakukan validasi akhir FINER, Novelty & Internal Coherence...")
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		rqsBytes, _ := json.MarshalIndent(session.ResearchQuestions, "", "  ")
@@ -479,7 +479,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		
 		scopeContext := string(scopeBytes) + fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI UNTUK EVALUASI FINER]:\n%s\nPerbaiki evaluasi FINER atau ringkasan Modul 2 sesuai dengan arahan ini.", session.Feedback)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		finerAgent := agent.NewFinerAgent(llmBrain)

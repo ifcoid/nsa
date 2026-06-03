@@ -67,7 +67,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 			return m.deps.MongoRepo.UpdateSession(ctx, session)
 		}
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		sampleBytes, _ := json.MarshalIndent(session.DataMiningLog.InitialSample, "", "  ")
@@ -234,7 +234,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 			}
 		} else {
 			logger.Logf(session.ID, "   [Info] Deduplikasi selesai: %d unik, %d duplikat. Menjalankan LLM PICO Preview...\n", dedup.TotalUnique, dedup.TotalDuplicates)
-			llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+			llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 			if err != nil { return err }
 
 			sampleBytes, _ := json.Marshal(sampleToPreview)
@@ -376,7 +376,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		}
 
 		// LLM Summary
-		llmBrain, _ := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, _ := m.deps.LLMFactory.BrainClient(ctx)
 		sessionDataBytes, _ := json.MarshalIndent(session.DataMiningLog, "", "  ")
 		
 		dmAgent := agent.NewDataMiningAgent(llmBrain)

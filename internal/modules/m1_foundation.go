@@ -52,7 +52,7 @@ func (m *M1Foundation) Execute(ctx context.Context, session *model.SLRSession) e
 func (m *M1Foundation) generateBriefing(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [Langkah 1] Menyusun briefing fondasi teori SLR (disesuaikan dengan topik)...")
 
-	llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+	llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
 		return err
 	}

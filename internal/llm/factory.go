@@ -72,8 +72,25 @@ func (f *LLMFactory) RoleProviders(ctx context.Context, role string) (primary, f
 		return r.Reviewer2, r.Reviewer2Fallback
 	case "supervisor":
 		return r.Supervisor, r.SupervisorFallback
+	case "brain":
+		return r.Brain, r.BrainFallback
 	}
 	return "", ""
+}
+
+// BrainClient membuat client untuk peran "brain" (gemini default): coba primary lalu fallback.
+func (f *LLMFactory) BrainClient(ctx context.Context) (LLMClient, error) {
+	r := f.mongoRepo.GetLLMRoles(ctx)
+	c, err := f.CreateClient(ctx, r.Brain)
+	if err == nil {
+		return c, nil
+	}
+	if r.BrainFallback != "" {
+		if c2, e2 := f.CreateClient(ctx, r.BrainFallback); e2 == nil {
+			return c2, nil
+		}
+	}
+	return nil, err
 }
 
 // RoleClient membuat client untuk sebuah peran: coba primary, lalu fallback (sesuai config).

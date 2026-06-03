@@ -17,10 +17,6 @@ import (
 
 const fulltextBatchSize = 10
 
-// r1FallbackProvider = provider fallback untuk Reviewer/Screener 1 (zhipu) di M5/M6/M7.
-// Dipusatkan di sini agar mudah diubah (mis. ke 'rprompt' / 'xiaomi') tanpa berburu literal.
-const r1FallbackProvider = "rprompt"
-
 // ===========================================================================
 // LANGKAH 2: FULL-TEXT SCREENING (dual-reviewer + AI-assist, RAG dari Qdrant)
 // ===========================================================================

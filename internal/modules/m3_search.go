@@ -28,7 +28,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 	// =========================================================================
 	case "M3_INIT", "M3_STEP1_DATABASE_SELECTION":
 		logger.Log(session.ID, "   [Langkah 3.1] Menganalisis lanskap Database Selection...")
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
@@ -63,7 +63,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		
 		scopeContext := string(scopeBytes) + fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s", session.Feedback)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		logger.Log(session.ID, "   [API] Memanggil Gemini (gemini-pro-latest) dengan Google Search Grounding...")
@@ -90,7 +90,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 	// =========================================================================
 	case "M3_STEP2_KEYWORDS":
 		logger.Log(session.ID, "   [Langkah 3.2] Mengembangkan Keywords (PICO + Avoid List)...")
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		picoBytes, _ := json.MarshalIndent(session.PICODefinitions, "", "  ")
@@ -120,7 +120,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		
 		picoContext := string(picoBytes) + fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s", session.Feedback)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		kwAgent := agent.NewKeywordsAgent(llmBrain)
@@ -144,7 +144,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 	// =========================================================================
 	case "M3_STEP3_SEARCH_STRING":
 		logger.Log(session.ID, "   [Langkah 3.3] Merangkai Search String & Filter Specifications...")
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		kwBytes, _ := json.MarshalIndent(session.Keywords, "", "  ")
@@ -177,7 +177,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		
 		scopeContext := string(scopeBytes) + fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s", session.Feedback)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		ssAgent := agent.NewSearchStringAgent(llmBrain)
@@ -201,7 +201,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 	// =========================================================================
 	case "M3_STEP4_PRE_VALIDATION":
 		logger.Log(session.ID, "   [Langkah 3.4 Fase 1] Melakukan Pre-Validasi Search String...")
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		ssBytes, _ := json.MarshalIndent(session.SearchString, "", "  ")
@@ -244,7 +244,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 
 		userHits := session.Feedback
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		ssBytes, _ := json.MarshalIndent(session.SearchString, "", "  ")
@@ -277,7 +277,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		
 		userHits := fmt.Sprintf("KOREKSI DARI PENELITI: %s", session.Feedback)
 
-		llmBrain, err := m.deps.LLMFactory.CreateClient(ctx, "gemini")
+		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
 		ssBytes, _ := json.MarshalIndent(session.SearchString, "", "  ")
