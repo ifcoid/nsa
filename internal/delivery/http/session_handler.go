@@ -647,6 +647,9 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 				for _, qp := range qdrantPapers {
 					if qp.Title != "" {
 						sim := similarityRatio(title, qp.Title)
+						if strings.Contains(title, "DHCM") {
+							log.Printf("DEBUG DHCM: DB Title='%s', Qdrant Title='%s', Sim=%f", title, qp.Title, sim)
+						}
 						if sim > 0.8 {
 							matched = true
 							newDOI = qp.DOI
@@ -664,6 +667,9 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 				if newDOI != "" {
 					updateFields["doi"] = newDOI
 				}
+				// Also update uppercase Full_Text_Retrieved just in case UI reads it
+				updateFields["Full_Text_Retrieved"] = true
+
 				update := bson.M{"$set": updateFields}
 				coll.UpdateByID(ctx, p["_id"], update)
 				syncedCount++
