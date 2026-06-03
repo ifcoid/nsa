@@ -651,9 +651,6 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 				for _, qp := range qdrantPapers {
 					if qp.Title != "" {
 						sim := similarityRatio(title, qp.Title)
-						if strings.Contains(title, "DHCM") {
-							log.Printf("DEBUG DHCM: DB Title='%s', Qdrant Title='%s', Sim=%f", title, qp.Title, sim)
-						}
 						if sim > 0.8 {
 							matched = true
 							newDOI = qp.DOI
