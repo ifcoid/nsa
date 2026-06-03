@@ -68,7 +68,8 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, systemPrompt, use
 	}
 
 	// 3. Eksekusi HTTP Request dengan Exponential Backoff (Khusus 429 & 50x)
-	client := &http.Client{Timeout: 60 * time.Second}
+	// Timeout longgar: backend bridge berbasis Claude Code headless (mis. rprompt) bisa 30-90s+.
+	client := &http.Client{Timeout: 180 * time.Second}
 	var resp *http.Response
 	var body []byte
 	var lastErr error
