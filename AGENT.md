@@ -1150,6 +1150,14 @@ Modul **opsional**: dipicu dari kartu M8 L4 (tombol "Jalankan Bibliometric SLNA"
 
 ---
 
-## Modul 9 (Manuscript Writing)  📝 Planned
+## Modul 9 — Manuscript Writing → manuscript_final  ✅ Implemented
 
-Modul 9 (Manuscript Writing) masih **stub** di kode. Spesifikasi desain lengkap ada di **[ROADMAP.md](ROADMAP.md)**.
+Input: seluruh artefak M2–M8(b) (di sesi). Output di `session.manuscript`: section per-bagian + `final` (manuscript_final.md), `latex` (.tex), `bibtex` (.bib), `prisma_checklist`, `coherence_audit`, `summary`. Brain = peran `brain` (config-driven, default rprompt-sonnet).
+
+- **Grup A** (`M9_GROUPA`): tulis **Methods** (PRISMA 2020 item 5–19), **Results** (struktur framework), **Discussion** (6 subseksi), **Future Research** → review.
+- **Grup B** (`M9_GROUPB`): **Introduction** (5 subseksi), **Conclusions**, **Abstract** (250–300 kata), **Title** (3–5 alternatif) → review.
+- **Compile** (`M9_COMPILE`): **References via Crossref** (BibTeX asli per DOI studi included, anti-halusinasi) + **coherence audit** (A–J) + **PRISMA 2020 27-item checklist** + compile `manuscript_final.md` (16 section, incl. AI Assistance Declaration) + **.tex** (konversi Go-native) + `modul9_summary` → review → **COMPLETED**.
+
+Aturan Bagian C ditegakkan via prompt: tanpa sebutan AI/Claude di manuskrip (framing Reviewer/Extractor/Rater), angka dari artefak (κ/N/%), hedging per GRADE, geographic honesty, anti-calque, bahasa sesuai Jalur A/B.
+
+**Alur status:** `M9_MANUSCRIPT → M9_GROUPA → _WAITING_APPROVAL → _APPROVED → M9_GROUPB → _WAITING_APPROVAL → _APPROVED → M9_COMPILE → _WAITING_APPROVAL → _APPROVED → COMPLETED`. 3 gate HITL (grouped); figur/manuscript disimpan di Mongo (download dari UI). Pipeline SLR **selesai** di sini. 🎉

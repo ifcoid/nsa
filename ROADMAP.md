@@ -2,7 +2,7 @@
 
 > Dokumen ini memuat **spesifikasi desain** untuk modul/langkah yang **belum ada di kode** (masih stub atau belum dibuat). Dipisahkan dari [AGENT.md](AGENT.md) agar AGENT.md fokus pada alur yang sudah berjalan (Modul 2–5 + Modul 6 Langkah 1).
 >
-> Status saat ini di kode: Modul 6, 7, 8 & 8b **sudah diimplementasi** — lihat [AGENT.md](AGENT.md). Hanya Modul 9 (Manuscript) yang masih *stub*. (Publish figur ke GitHub Pages: ✅ config-driven via Settings.)
+> Status saat ini di kode: SELURUH modul (M1–M9) **sudah diimplementasi** — lihat [AGENT.md](AGENT.md). Pipeline SLR end-to-end lengkap. (Publish figur ke GitHub Pages: ✅ config-driven via Settings.)
 >
 > Saat sebuah langkah selesai diimplementasi, pindahkan spesifikasinya kembali ke AGENT.md dan ganti penanda menjadi ✅.
 
@@ -1127,7 +1127,9 @@ Konfirmasi 2 file tersimpan + path absolut.
 
 ---
 
-## Modul 9 — Manuscript Writing → manuscript_final  📝 Planned (stub)
+## Modul 9 — Manuscript Writing → manuscript_final  ✅ Implemented
+
+> **Sudah diimplementasi** (L1–L10, grouped 3 gate) — lihat [AGENT.md](AGENT.md). References via Crossref, .tex Go-native. Spec rinci di bawah = referensi desain.
 
 BRIEF AWAL CONTEXT:
 
