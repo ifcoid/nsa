@@ -1133,7 +1133,7 @@ Input: `slr_extraction` + `synthesis_prep`/`qa_threshold` (M7) + research questi
 - **L3 — GRADE + Robustness**: grading 5 domain GRADE per outcome → tabel; robustness verdict (ROBUST/CONDITIONAL/NOT) + confidence statements.
 - **L4 — Interpretation**: `interpretation_package` (jawaban RQ, key findings, kontradiksi, dialog teori, gaps, limitations 3-tier) + `modul8_summary` → ke Modul 9.
 
-**Alur status:** `M8_SYNTHESIS → M8_STEP1_DESCRIPTIVE → _WAITING_APPROVAL → _APPROVED → M8_STEP2_SYNTHESIS → … → M8_STEP3_GRADE → … → M8_STEP4_INTERPRETATION → _WAITING_APPROVAL → _APPROVED → M9_MANUSCRIPT`. Tiap `_WAITING_APPROVAL` = gate HITL generik. Figur dipublikasikan ke GitHub Pages = **ditunda** (saat ini SVG disimpan di sesi).
+**Alur status:** `M8_SYNTHESIS → M8_STEP1_DESCRIPTIVE → _WAITING_APPROVAL → _APPROVED → M8_STEP2_SYNTHESIS → … → M8_STEP3_GRADE → … → M8_STEP4_INTERPRETATION → _WAITING_APPROVAL → _APPROVED → M9_MANUSCRIPT`. Tiap `_WAITING_APPROVAL` = gate HITL generik. **Figur**: SVG disimpan di sesi, dan **dipublikasikan ke GitHub Pages** bila config aktif (Settings → GitHub Pages: token/owner/repo/branch/path/pages → push via Contents API, URL Pages disimpan di tiap figur untuk manuskrip Modul 9). PNG dpi-300 belum (Go SVG-only).
 
 ---
 
