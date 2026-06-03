@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 )
@@ -347,17 +348,22 @@ func (m *M7Extraction) opDefs(session *model.SLRSession) string {
 	return "(operational definitions tidak tersedia)"
 }
 
+// agentWithFallback membuat ExtractionAgent dengan retry+fallback (primary -> fallback).
 func (m *M7Extraction) agentWithFallback(ctx context.Context, primary, fallback string) (*agent.ExtractionAgent, error) {
-	c, err := m.deps.LLMFactory.CreateClient(ctx, primary)
-	if err == nil {
-		return agent.NewExtractionAgent(c), nil
-	}
+	p, errP := m.deps.LLMFactory.CreateClient(ctx, primary)
+	var fb llm.LLMClient
 	if fallback != "" {
-		if c2, e2 := m.deps.LLMFactory.CreateClient(ctx, fallback); e2 == nil {
-			return agent.NewExtractionAgent(c2), nil
+		if c, e := m.deps.LLMFactory.CreateClient(ctx, fallback); e == nil {
+			fb = c
 		}
 	}
-	return nil, err
+	if errP != nil {
+		if fb != nil {
+			return agent.NewExtractionAgent(llm.NewRetryingClient(nil, fb)), nil
+		}
+		return nil, errP
+	}
+	return agent.NewExtractionAgent(llm.NewRetryingClient(p, fb)), nil
 }
 
 func docTypeBreakdown(papers []map[string]interface{}) string {

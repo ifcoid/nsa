@@ -78,34 +78,41 @@ func (f *LLMFactory) RoleProviders(ctx context.Context, role string) (primary, f
 	return "", ""
 }
 
-// BrainClient membuat client untuk peran "brain" (gemini default): coba primary lalu fallback.
+// BrainClient membuat client untuk peran "brain" (gemini default) dengan retry+fallback.
 func (f *LLMFactory) BrainClient(ctx context.Context) (LLMClient, error) {
 	r := f.mongoRepo.GetLLMRoles(ctx)
-	c, err := f.CreateClient(ctx, r.Brain)
-	if err == nil {
-		return c, nil
-	}
+	primary, errP := f.CreateClient(ctx, r.Brain)
+	var fallback LLMClient
 	if r.BrainFallback != "" {
-		if c2, e2 := f.CreateClient(ctx, r.BrainFallback); e2 == nil {
-			return c2, nil
+		if fb, e := f.CreateClient(ctx, r.BrainFallback); e == nil {
+			fallback = fb
 		}
 	}
-	return nil, err
+	if errP != nil {
+		if fallback != nil {
+			return NewRetryingClient(nil, fallback), nil
+		}
+		return nil, errP
+	}
+	return NewRetryingClient(primary, fallback), nil
 }
 
 // RoleClient membuat client untuk sebuah peran: coba primary, lalu fallback (sesuai config).
 // Mengembalikan client + provider id yang dipakai.
 func (f *LLMFactory) RoleClient(ctx context.Context, role string) (LLMClient, string, error) {
-	primary, fallback := f.RoleProviders(ctx, role)
-	if primary != "" {
-		if c, err := f.CreateClient(ctx, primary); err == nil {
-			return c, primary, nil
+	primaryID, fallbackID := f.RoleProviders(ctx, role)
+	primary, errP := f.CreateClient(ctx, primaryID)
+	var fallback LLMClient
+	if fallbackID != "" {
+		if fb, e := f.CreateClient(ctx, fallbackID); e == nil {
+			fallback = fb
 		}
 	}
-	if fallback != "" {
-		if c, err := f.CreateClient(ctx, fallback); err == nil {
-			return c, fallback, nil
-		}
+	if errP == nil {
+		return NewRetryingClient(primary, fallback), primaryID, nil
 	}
-	return nil, "", fmt.Errorf("peran '%s': tidak ada provider yang bisa dimuat (primary=%s, fallback=%s)", role, primary, fallback)
+	if fallback != nil {
+		return NewRetryingClient(nil, fallback), fallbackID, nil
+	}
+	return nil, "", fmt.Errorf("peran '%s': tidak ada provider yang bisa dimuat (primary=%s, fallback=%s)", role, primaryID, fallbackID)
 }
