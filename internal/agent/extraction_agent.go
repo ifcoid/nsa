@@ -230,9 +230,37 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	if err != nil {
 		return nil, fmt.Errorf("PrepareSynthesis LLM: %w", err)
 	}
-	var res model.SynthesisPrep
-	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
+	// criteria_check & groupings kadang dikembalikan LLM sebagai objek/array, bukan string —
+	// terima fleksibel via json.RawMessage lalu ratakan ke string.
+	var p struct {
+		DescriptiveOverview  string          `json:"descriptive_overview"`
+		HeterogeneityVerdict string          `json:"heterogeneity_verdict"`
+		MetaFeasibility      string          `json:"meta_feasibility"`
+		CriteriaCheck        json.RawMessage `json:"criteria_check"`
+		Groupings            json.RawMessage `json:"groupings"`
+		Markdown             string          `json:"markdown"`
+	}
+	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &p); err != nil {
 		return nil, fmt.Errorf("parse SynthesisPrep (%w). Raw: %s", err, raw)
 	}
-	return &res, nil
+	return &model.SynthesisPrep{
+		DescriptiveOverview:  p.DescriptiveOverview,
+		HeterogeneityVerdict: p.HeterogeneityVerdict,
+		MetaFeasibility:      p.MetaFeasibility,
+		CriteriaCheck:        rawToString(p.CriteriaCheck),
+		Groupings:            rawToString(p.Groupings),
+		Markdown:             p.Markdown,
+	}, nil
+}
+
+// rawToString meratakan json.RawMessage: jika string JSON -> nilainya; selain itu -> JSON apa adanya.
+func rawToString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	return string(raw)
 }

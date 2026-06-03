@@ -487,6 +487,62 @@ Konfirmasi 2 dokumen tersimpan di database.
 
 ### LANGKAH 1: DESCRIPTIVE ANALYSIS + HETEROGENEITY DEEP-DIVE
 
+Berdasarkan extraction + synthesis_prep.
+
+Eksekusi 3 task. Tulis ke descriptive_analysis + generate figures.
+
+=== TASK 1: DESCRIPTIVE OVERVIEW ===
+
+1. STUDY DESIGN distribution (frekuensi + % dominan)
+2. TEMPORAL distribution (min/max/median, trend, burst period)
+3. GEOGRAPHIC distribution (negara breakdown + dominasi regional jika ada)
+   ⚠️ PENTING: ini bahan disclosure bias geografis di Discussion Modul 9
+4. SAMPLE SIZE statistics (range, median, mean, total participants)
+5. FRAMEWORK COMPONENT distribution (per TCCM/ADO/PICO)
+6. QUALITY distribution: HIGH/MODERATE/LOW + %
+
+=== TASK 2: VISUALISASI (SVG + PNG dual-format) ===
+
+Generate ke outputs/figures/:
+- fig_temporal.svg + .png (line chart distribusi tahun)
+- fig_geographic.svg + .png (bar chart top regions)
+- fig_design.svg + .png (pie chart study design)
+- fig_quality.svg + .png (stacked bar HIGH/MOD/LOW)
+
+Aspect 16:9. Generate via Python matplotlib/seaborn:
+    plt.savefig('outputs/figures/fig_temporal.svg', bbox_inches='tight')
+    plt.savefig('outputs/figures/fig_temporal.png', dpi=300, bbox_inches='tight')
+
+Jika cowork tidak bisa render → output script .py yang peserta jalankan.
+
+=== TASK 3: HETEROGENEITY DEEP-DIVE ===
+
+Kritis untuk Jalur A/B decision di L2.
+
+A. CLINICAL/CONTEXTUAL HETEROGENEITY:
+- Populasi COMPARABLE? (rentang usia, demographics)
+- Intervention COMPARABLE? (durasi, intensitas, format)
+- Outcomes COMPARABLE? (konstruk + measurement tools)
+
+B. METHODOLOGICAL HETEROGENEITY:
+- Designs seragam? Analysis techniques serupa? Settings serupa?
+
+C. STATISTICAL HETEROGENEITY (jika data tersedia):
+- Effect sizes range (lebar atau sempit?)
+- Direction of effect (konsisten atau kontradiktif?)
+- Estimasi I² preliminary
+
+VERDICT:
+- LOW (clinical+method+stat homogen) → meta-analysis kuat dibenarkan
+- MODERATE → meta feasible random-effects
+- HIGH → meta berisiko, prefer narrative
+- VERY HIGH → narrative only, effect sizes indicative
+
+Cluster identification: studi yang COMPARABLE → mungkin meta subset (HYBRID).
+
+No preamble.
+
+
 ### LANGKAH 2: SYNTHESIS PATH DECISION + EXECUTION (JALUR A DEFAULT atau B UPGRADE)
 
 ### LANGKAH 3: GRADE EVIDENCE GRADING + ROBUSTNESS CHECKS
