@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"nsa/internal/agent"
 	"nsa/internal/logger"
@@ -184,55 +185,101 @@ func (m *M9Manuscript) geoFrameworkHint(session *model.SLRSession) string {
 	return fmt.Sprintf("\n\n=== KONTEKS TITLE ===\nFramework: %s | Synthesis path: %s | Topik: %s\n", fw, path, session.Topic)
 }
 
-// artifactBundle merangkai artefak M2-M8 (JSON) sebagai konteks; SVG figur dikecualikan.
+// artifactBundle merangkai artefak M2-M8 sebagai konteks TEKS RINGKAS (bukan JSON penuh)
+// agar prompt kecil/fokus (penting untuk backend lambat seperti rprompt/claude headless).
 func (m *M9Manuscript) artifactBundle(session *model.SLRSession) string {
-	var descr interface{}
-	if session.DescriptiveAnalysis != nil {
-		descr = map[string]string{
-			"markdown":  session.DescriptiveAnalysis.Markdown,
-			"verdict":   session.DescriptiveAnalysis.HeterogeneityVerdict,
-			"narrative": session.DescriptiveAnalysis.HeterogeneityNarrative,
+	var b strings.Builder
+	w := func(label, val string) {
+		if strings.TrimSpace(val) != "" {
+			fmt.Fprintf(&b, "## %s\n%s\n\n", label, val)
 		}
+	}
+	b.WriteString("=== ARTEFAK SLR (sumber data; pakai angka & kutipan APA ADANYA) ===\n\n")
+	w("TOPIC", session.Topic)
+
+	if t := session.SelectedTopic; t != nil {
+		w("GAP", fmt.Sprintf("%s | Tipe %s | %s", t.Name, t.Type, t.Gap))
+	}
+	if p := session.PICODefinitions; p != nil {
+		w("PICO", fmt.Sprintf("P: %s\nI: %s\nC: %s\nO: %s\nCanonical term: %s — %s",
+			p.P.Value, p.I.Value, p.C.Value, p.O.Value, p.CanonicalTerm.Term, p.CanonicalTerm.Definition))
+	}
+	if len(session.ResearchQuestions) > 0 {
+		var rq strings.Builder
+		for _, q := range session.ResearchQuestions {
+			fmt.Fprintf(&rq, "- [%s] %s\n", q.Type, q.Question)
+		}
+		w("RESEARCH QUESTIONS", rq.String())
+	}
+	if pr := session.PriorReviewsMatrix; pr != nil {
+		var s strings.Builder
+		for _, r := range pr.Reviews {
+			fmt.Fprintf(&s, "- %s | Scope: %s | Method: %s | Findings: %s | Limitations: %s | Selisih: %s\n",
+				r.AuthorYear, r.Scope, r.Methodology, r.KeyFindings, r.Limitations, r.Selisih)
+		}
+		w("PRIOR REVIEWS", s.String())
+	}
+	if len(session.ScopeJustifications) > 0 {
+		var s strings.Builder
+		for _, sj := range session.ScopeJustifications {
+			fmt.Fprintf(&s, "- %s: T=%s; M=%s; P=%s\n", sj.Name, sj.Theoretical, sj.Methodological, sj.Practical)
+		}
+		w("SCOPE JUSTIFICATIONS", s.String())
+	}
+	if sl := session.SearchLog; sl != nil {
+		dates, _ := json.Marshal(sl.DateExecuted)
+		hits, _ := json.Marshal(sl.TotalHits)
+		w("SEARCH", fmt.Sprintf("String: %s\nDatabases: %s\nDate: %s | Hits: %s\nUpdate policy: %s",
+			sl.SearchStringFinal, strings.Join(sl.Databases, ", "), string(dates), string(hits), sl.UpdatePolicy))
+	}
+	if et := session.ExclusionTable; et != nil {
+		w("PRISMA FLOW + EXCLUSION + KAPPA", et.FlowNumbers+"\n\n"+et.KappaReport+"\n\n"+et.ExclusionReasons)
 	}
 	kappaTA := 0.0
 	if n := len(session.KalibrasiLog); n > 0 {
 		kappaTA = session.KalibrasiLog[n-1].Kappa
 	}
-	robKappa := 0.0
-	if session.QAThreshold != nil {
-		robKappa = session.QAThreshold.Kappa
-	}
-	extKappa := 0.0
+	extK, robK := 0.0, 0.0
 	if session.ExtractionLog != nil {
-		extKappa = session.ExtractionLog.ExtractionKappa
+		extK = session.ExtractionLog.ExtractionKappa
 	}
+	if session.QAThreshold != nil {
+		robK = session.QAThreshold.Kappa
+	}
+	w("KAPPA VALUES", fmt.Sprintf("κ_TA=%.3f | κ_FT=%.3f | κ_extract=%.3f | κ_rob=%.3f", kappaTA, session.FulltextKappa, extK, robK))
 
-	b := map[string]interface{}{
-		"topic":                session.Topic,
-		"selected_topic_gap":   session.SelectedTopic,
-		"pico":                 session.PICODefinitions,
-		"research_questions":   session.ResearchQuestions,
-		"scope_justifications": session.ScopeJustifications,
-		"prior_reviews":        session.PriorReviewsMatrix,
-		"search_log":           session.SearchLog,
-		"prisma_flow_and_kappa": session.ExclusionTable, // flow numbers + kappa report + exclusion reasons
-		"kappa": map[string]float64{
-			"kappa_TA": kappaTA, "fulltext": session.FulltextKappa, "extract": extKappa, "rob": robKappa,
-		},
-		"framework":            session.FrameworkSelection,
-		"extraction_log":       session.ExtractionLog,
-		"qa_threshold":         session.QAThreshold,
-		"sensitivity":          session.SensitivityAnalysis,
-		"synthesis_path":       session.SynthesisPathDecision,
-		"synthesis_results":    session.SynthesisResults,
-		"grade_evidence":       session.GradeEvidence,
-		"descriptive":          descr,
-		"interpretation":       session.InterpretationPackage,
-		"acquisition":          session.AcquisitionLog,
-		"inaccessible_impact":  session.InaccessibleImpact,
-		"slna_integration":     session.SLNAIntegration, // nil bila M8b tak dijalankan
-		"modul8_summary":       session.Modul8Summary,
+	if fw := session.FrameworkSelection; fw != nil {
+		w("FRAMEWORK", fw.Framework+" — "+fw.Justification)
 	}
-	j, _ := json.Marshal(b)
-	return "=== ARTEFAK SLR (sumber data; pakai angka apa adanya) ===\n" + string(j)
+	if el := session.ExtractionLog; el != nil {
+		w("EXTRACTION", fmt.Sprintf("Total %d | verifikasi %d | disagreement %.1f%%", el.TotalExtracted, el.VerifiedSample, el.DisagreementRate))
+	}
+	if qa := session.QAThreshold; qa != nil {
+		w("QUALITY APPRAISAL", fmt.Sprintf("Tool %s | threshold %.0f%% | %s | tool justification: %s", qa.Tool, qa.Threshold, qa.Categorization, qa.ToolJustification))
+	}
+	if s := session.SensitivityAnalysis; s != nil {
+		w("SENSITIVITY", s.Verdict+" — "+s.Markdown)
+	}
+	if sp := session.SynthesisPathDecision; sp != nil {
+		w("SYNTHESIS PATH", sp.Verdict+" — "+sp.Rationale)
+	}
+	if sr := session.SynthesisResults; sr != nil {
+		w("SYNTHESIS RESULTS", sr.Markdown)
+	}
+	if g := session.GradeEvidence; g != nil {
+		w("GRADE EVIDENCE", g.TableMarkdown+"\nRobustness: "+g.RobustnessVerdict+"\n"+g.ConfidenceStatements)
+	}
+	if d := session.DescriptiveAnalysis; d != nil {
+		w("DESCRIPTIVE", d.Markdown+"\nHeterogeneity: "+d.HeterogeneityVerdict+"\n"+d.HeterogeneityNarrative)
+	}
+	if ip := session.InterpretationPackage; ip != nil {
+		w("INTERPRETATION PACKAGE", ip.Markdown)
+	}
+	if ac := session.AcquisitionLog; ac != nil {
+		w("ACQUISITION", fmt.Sprintf("Included %d | inaccessible %d (%.1f%%)", ac.TotalInclude, ac.InaccessibleCount, ac.InaccessiblePct))
+	}
+	if si := session.SLNAIntegration; si != nil {
+		w("SLNA INTEGRATION", si.Markdown+"\nConvergent gaps: "+si.ConvergentGaps)
+	}
+	return b.String()
 }
