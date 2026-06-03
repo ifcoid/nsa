@@ -503,7 +503,7 @@ Eksekusi 3 task. Tulis ke descriptive_analysis + generate figures.
 
 === TASK 2: VISUALISASI (SVG + PNG dual-format) ===
 
-Generate ke outputs/figures/:
+Generate ke outputs/figures/ di dalam repo github yang diinput di bagian config di frontend dan disimpan di mongodb(token, url repo, github pages adress):
 - fig_temporal.svg + .png (line chart distribusi tahun)
 - fig_geographic.svg + .png (bar chart top regions)
 - fig_design.svg + .png (pie chart study design)
@@ -540,7 +540,6 @@ VERDICT:
 
 Cluster identification: studi yang COMPARABLE → mungkin meta subset (HYBRID).
 
-No preamble.
 
 
 ### LANGKAH 2: SYNTHESIS PATH DECISION + EXECUTION (JALUR A DEFAULT atau B UPGRADE)

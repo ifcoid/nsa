@@ -73,7 +73,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
 		if err != nil { 
 			logger.Logf(session.ID, "   [INFO] Zhipu gagal dimuat (%v). Fallback awal ke Xiaomi MiMo...\n", err)
-			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
 			if err != nil {
 				return fmt.Errorf("Reviewer 1 (Zhipu maupun Xiaomi) gagal dimuat. Harap konfigurasi API di Pengaturan")
 			}
@@ -153,7 +153,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				
 				if res1 == nil || err1 != nil { 
 					logger.Log(session.ID, "      [!] R1 Utama (Zhipu) gagal merespons. Melakukan Fallback on-the-fly ke Xiaomi MiMo...")
-					llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+					llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
 					if errF != nil {
 						logger.Logf(session.ID, "      [!] Gagal memuat Xiaomi MiMo untuk fallback R1: %v", errF)
 					} else {
@@ -419,7 +419,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
 		if err != nil { 
 			logger.Logf(session.ID, "   [INFO] Zhipu gagal dimuat (%v). Fallback awal ke Xiaomi MiMo...\n", err)
-			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
 			if err != nil {
 				return fmt.Errorf("Reviewer 1 (Zhipu maupun Xiaomi) gagal dimuat. Harap konfigurasi API di Pengaturan")
 			}
@@ -504,7 +504,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 			if res1 == nil || err1 != nil { 
 				logger.Log(session.ID, "      [!] R1 Utama (Zhipu) gagal memberikan evaluasi. Melakukan Fallback on-the-fly ke Xiaomi MiMo...")
-				llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+				llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
 				if errF != nil {
 					logger.Logf(session.ID, "      [!] Gagal memuat Xiaomi MiMo untuk fallback R1: %v", errF)
 				} else {

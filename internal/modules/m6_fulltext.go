@@ -17,6 +17,10 @@ import (
 
 const fulltextBatchSize = 10
 
+// r1FallbackProvider = provider fallback untuk Reviewer/Screener 1 (zhipu) di M5/M6/M7.
+// Dipusatkan di sini agar mudah diubah (mis. ke 'rprompt' / 'xiaomi') tanpa berburu literal.
+const r1FallbackProvider = "rprompt"
+
 // ===========================================================================
 // LANGKAH 2: FULL-TEXT SCREENING (dual-reviewer + AI-assist, RAG dari Qdrant)
 // ===========================================================================
@@ -54,7 +58,7 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 	llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
 	if err != nil {
 		logger.Logf(session.ID, "   [INFO] Zhipu gagal (%v). Fallback awal ke Xiaomi...\n", err)
-		llmR1, err = m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
+		llmR1, err = m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
 		if err != nil {
 			return fmt.Errorf("Reviewer 1 (Zhipu/Xiaomi) gagal dimuat. Konfigurasi API dulu")
 		}
@@ -124,11 +128,11 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 			continue
 		}
 
-		// R1 (zhipu, lalu fallback xiaomi on-the-fly)
+		// R1 (zhipu, lalu fallback r1FallbackProvider on-the-fly)
 		res1, err1 := reviewWithRetry(ctx, scR1, opDefs, title, fulltext,
 			[]time.Duration{10 * time.Second, 30 * time.Second, 60 * time.Second}, session.ID, "R1")
 		if res1 == nil || err1 != nil {
-			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, "xiaomi"); e == nil {
+			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider); e == nil {
 				res1, err1 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, title, fulltext,
 					[]time.Duration{1 * time.Minute, 3 * time.Minute}, session.ID, "R1-fallback")
 			}

@@ -209,7 +209,7 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 		ftIndex = map[string]string{}
 	}
 
-	leadAg, err := m.agentWithFallback(ctx, "zhipu", "xiaomi")
+	leadAg, err := m.agentWithFallback(ctx, "zhipu", r1FallbackProvider)
 	if err != nil {
 		return fmt.Errorf("extractor utama (zhipu/xiaomi) gagal: %w", err)
 	}

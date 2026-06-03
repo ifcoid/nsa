@@ -53,7 +53,7 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		if ftIndex == nil {
 			ftIndex = map[string]string{}
 		}
-		r1, err := m.agentWithFallback(ctx, "zhipu", "xiaomi")
+		r1, err := m.agentWithFallback(ctx, "zhipu", r1FallbackProvider)
 		if err != nil {
 			return fmt.Errorf("QA Rater 1 (zhipu/xiaomi) gagal: %w", err)
 		}
