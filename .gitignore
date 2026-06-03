@@ -218,3 +218,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Output/log dump sementara dari skrip debug
+/output*.txt
+/debug.txt

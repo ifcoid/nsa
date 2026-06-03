@@ -1,6 +1,16 @@
-# Modul Topik(Langkah di dalamnya) Output
+# Pipeline SLR — Spesifikasi Modul, Langkah & Output
 
-## 1 Fondasi Teori + Aturan Global -> (briefing)
+> **Legenda status implementasi** (per audit kode terakhir):
+> - ✅ **Implemented** — alur sudah berjalan penuh di kode Go.
+> - ⚠️ **Partial** — sebagian langkah sudah ada, sisanya masih spesifikasi.
+> - 📝 **Planned** — masih desain; kode baru berupa *stub* (sekadar log + transisi status ke modul berikutnya).
+>
+> Format tiap modul: **Topik** _(langkah di dalamnya)_ → **Output**.
+> Koleksi MongoDB yang dipakai kode: `slr_sessions`, `slr_papers`, `slr_papers_post_dedup`, `slr_screening`, `users`, `papers`, `llm_providers`.
+
+## Modul 1 — Fondasi Teori + Aturan Global → briefing  📝 Planned (stub)
+
+> _Kode saat ini hanya stub: mencetak log briefing lalu langsung transisi ke Modul 2. Langkah-langkah di bawah adalah rencana materi, belum dieksekusi sistem._
 
  Langkah :
 
@@ -14,7 +24,7 @@
 
 ### 5. ATURAN GLOBAL SLR + COWORK (BERLAKU UNTUK SEMUA MODUL 2-9)
 
-## 2 Topik Penelitian (PICO) -> pico_definitions
+## Modul 2 — Topik Penelitian (PICO) → pico_definitions  ✅ Implemented
 
 ### LANGKAH 1: TENTUKAN TOPIK + KLASIFIKASI TIPE GAP
 
@@ -298,7 +308,7 @@ Cara Mengujinya Nanti:
 4. Jika SUDAH lulus, ubah status menjadi "M2_STEP6_APPROVED". Sistem akan berpindah ke Modul 3.
 5. Jika BUTUH REVISI, ubah status menjadi "M2_STEP6_NEEDS_REVISION" dan isi keluhan di feedback.
 
-## 3. Search Strategy -> search_log
+## Modul 3 — Search Strategy → search_log  ✅ Implemented
 
 ### LANGKAH 1: DATABASE SELECTION + JUSTIFICATION
 
@@ -352,7 +362,7 @@ output : keywords
 
 ```txt
 Gunakan RAG dari dokumen:
-- picopico_definitions (canonical term + WHAT COUNTS/DOESN'T):
+- pico_definitions (canonical term + WHAT COUNTS/DOESN'T):
 
 Develop keywords PER komponen PICO. Tulis ke dokumen keywords di database. dengan ketentuan:
 
@@ -517,7 +527,7 @@ Cara Mengujinya Nanti:
 5. Jika SUDAH lengkap, ubah status ke "M3_STEP4_APPROVED".
 6. Jika BUTUH REVISI, ubah ke "M3_STEP4_NEEDS_REVISION" dan isi feedback.
 
-## 4. Data Mining dan export Scopus dan source lainnya(multi sources database) -> screening
+## Modul 4 — Data Mining & Export (multi-source database) → screening  ✅ Implemented
 
 ### LANGKAH 1: EKSEKUSI FINAL SEARCH + SANITY CHECK
 
@@ -543,7 +553,7 @@ Reasonable untuk SLR berdasar scope?
 - >> expected: trap keyword? identifikasi
 - << expected: filter terlalu ketat? saran longgarkan
 
-1. GO/NO-GO DECISION:
+3. GO/NO-GO DECISION:
 - PROCEED: lanjut ke export Langkah 2
 - REVISE: balik ke Modul 3 Langkah berapa?, alasan
 
@@ -725,7 +735,7 @@ Cara Mengujinya Nanti:
 4. Periksa juga *field* `screening_setup` (berisi *embedded criteria*) dan `modul4_summary` di dalam dokumen sesi Anda.
 5. Jika semua terlihat sempurna sebagai meja kerja *Screening* Anda, ubah status ke `M4_STEP3_APPROVED`. Modul 4 pun rampung!
 
-## 5. Title & Abstract Screening -> screening (filled)
+## Modul 5 — Title & Abstract Screening → screening (filled)  ✅ Implemented
 
 ### LANGKAH 1: SCREENER BRIEFING (FINALISASI INTERPRETASI KRITERIA)
 
@@ -772,13 +782,13 @@ If NOT [X] → EXCLUDE
 - Abstract tidak cukup info → "pending full-text" di Notes
 - JANGAN decide INCLUDE/EXCLUDE tanpa grounded operational def
 
-1. AI-ASSISTANT WORKFLOW:
+6. AI-ASSISTANT WORKFLOW:
 - Cowork berikan DUAL PERSPECTIVE (Strict + Liberal) untuk record sulit
 - Reviewer baca, decide independen
 - Decision/Reason/Notes = ditulis HUMAN
 - Cowork tidak menggantikan judgment, hanya enrich pertimbangan
 
-1. REPORTING (untuk Methods M9):
+7. REPORTING (untuk Methods M9):
 - Cohen's kappa = R1 vs R2 (HUMAN, bukan AI)
 - AI-assistance dideklarasikan di Methods
 ---
@@ -803,7 +813,7 @@ Gunakan RAG:
 - collection slr_screening
 
 Prosedur kalibrasi (Hitl):
-1. Siapkan dua agent untuk dijadikan reviewer 1 dan 2, Reviewer 1 menggunakan API Z-AI GLM dan Reviewer 2 menggunakan API groq. Keduanya menggunakan temperature 0.2.
+1. Siapkan dua agent sebagai reviewer 1 dan 2. Sesuai kode: Reviewer 1 = provider `zhipu` (Z-AI / GLM; fallback otomatis ke `xiaomi`), Reviewer 2 = provider `groq`. Resolusi konflik (supervisor) = `xiaomi` (fallback `openrouter`). Semua client dibuat via `LLMFactory` dengan kredensial dari koleksi `llm_providers` di MongoDB.
 2. Ambil Random 20 sample dari collection slr_screening (15 clear + 5 ambigu)
 3. Kedua reviewer INDEPENDEN (tidak saling lihat)
 4. Isi Screener_1_* dan Screener_2_* (Decision + Reason_Code + Notes), dimana Notes disi PERSPEKTIF + VERDICT-AID
@@ -823,11 +833,11 @@ Root-cause analysis:
 - Records mana yang berbeda?
 - Disagreement di komponen tertentu (P/I/C/O)?
 - Reason code berbeda meski decision sama (precision issue)?
-1. AKAR MASALAH:
+2. AKAR MASALAH:
 - Operational def ambigu? Komponen mana perlu dipertajam?
 - Edge case belum tercover di briefing?
 - Personality bias (R1 strict, R2 liberal)?
-1. REKOMENDASI:
+3. REKOMENDASI:
 - Revisi screener_briefing (tambah edge cases)
 - Diskusi 2 reviewer untuk disagreement → consensus → update interpretasi
 - Rerun kalibrasi 20 sample BARU (bukan 20 yang sama)
@@ -839,7 +849,7 @@ PROCEED ke Langkah3(L3) hanya jika kappa ≥0.60.
 
 Cara Mengujinya Nanti:
 
-1. Sistem kita telah dilengkapi *fallback*. Jika Anda belum mensetting kredensial API `z-ai` atau `groq` di MongoDB (`llm_configs`), program akan cerdas melakukan *fallback* ke `gemini`.
+1. Sistem dilengkapi rantai *fallback* (dikonfigurasi di koleksi `llm_providers` di MongoDB): Reviewer 1 `zhipu` → fallback `xiaomi`; Reviewer 2 `groq` (tanpa fallback — jika kredensial tidak ada, kalibrasi gagal); supervisor `xiaomi` → fallback `openrouter`. Catatan: `gemini` dipakai sebagai "otak"/auditor di langkah lain, bukan sebagai fallback reviewer.
 2. Ubah status sesi Anda ke `M5_STEP2_CALIBRATION` lalu jalankan `go run cmd/app/main.go`.
 3. Program akan secara acak memungut 20 *paper* dari `slr_screening`, dan mendelegasikannya ke dua agen independen. Anda akan melihat log proses eksekusinya di terminal (1 hingga 20).
 4. Setelah selesai, Go akan langsung membedah matriks probabilitas dan menghitung rasio **Cohen's Kappa**.
@@ -919,7 +929,7 @@ Eksekusi 2 dokumen output sekaligus:
 - Records excluded
 - Records included for full-text
 
-1. EXCLUSION REASONS TABLE (agregasi Reason_Code semua EXCLUDE):
+2. EXCLUSION REASONS TABLE (agregasi Reason_Code semua EXCLUDE):
 | Reason Code | Count | % | Deskripsi |
 | P-NOMATCH | X | Y% | Population tidak sesuai |
 | I-NOMATCH | X | Y% | ... |
@@ -930,7 +940,7 @@ Eksekusi 2 dokumen output sekaligus:
 | NO-ABSTRACT | X | Y% | ... |
 | OTHER | X | Y% | (ringkas notes) |
 
-2. KAPPA REPORT untuk Methods:
+3. KAPPA REPORT untuk Methods:
 - Kalibrasi iterasi 1: [X]
 - Jumlah iterasi
 - Kalibrasi final: [≥0.60]
@@ -938,11 +948,11 @@ Eksekusi 2 dokumen output sekaligus:
 - Klasifikasi: Substantial/Almost Perfect
 - Disagreements: [N], Resolved via discussion: [N], Deferred ke full-text: [N]
 
-1. PICO-CONSISTENCY POST-SCREENING AUDIT:
+4. PICO-CONSISTENCY POST-SCREENING AUDIT:
 Random 10% INCLUDED → cek konsisten dengan WHAT COUNTS.
 Slipped-through: [N], Action: [re-screening / none]
 
-2. FULL-TEXT PRIORITIZATION (untuk Modul 6):
+5. FULL-TEXT PRIORITIZATION (untuk Modul 6):
 - HIGH: clearly match PICO berdasar abstract
 - MEDIUM: match sebagian, butuh full-text verify
 - LOW: UNCERTAIN, defer ke full-text
@@ -992,88 +1002,72 @@ Panduan Cara Mengujinya:
 5. Terakhir, AI akan memprioritaskan semua paper `INCLUDE` menjadi tier HIGH/MEDIUM/LOW sebagai bekal Anda di Modul 6 nanti.
 6. Semua hasil agregasi ini (*ExclusionTable* & *Modul5Summary*) akan ditanam secara permanen ke dalam koleksi dokumen sesi SLR Anda di MongoDB, lalu status dikunci menjadi `M5_DONE`. Silakan verifikasi wujud dokumen JSON tersebut melalui MongoDB Compass.
 
-## 6 Full-text Acquisition -> pdfs/ + tracking
+## Modul 6 — Full-text Acquisition → pdfs/ + tracking  ⚠️ Partial (baru Langkah 1)
 
-### LANGKAH 1: ACQUISITION STRATEGY + AUTO-DOWNLOAD + PRIORITY TRACKING
+> _Implementasi kode saat ini: **Langkah 1 saja**, sampai status `M6_STEP1_WAITING_SYNC` (cek Unpaywall + arXiv, lalu menandai sisanya `hitl download`). Vektorisasi PEDE → BGE-M3 → Qdrant dijalankan **di luar aplikasi** (Google Colab) dan disinkronkan via tombol di UI. Langkah 2 & 3 masih spesifikasi._
 
-collection slr_screening adalah data list paper screening yang dihasilkan dari modul 5, di mongoDB.
+### LANGKAH 1: ACQUISITION STRATEGY + AUTO-DOWNLOAD + PRIORITY TRACKING  ⚠️ Partial
 
-output :  acquisition_log
+**Input:** collection `slr_screening` (daftar paper hasil screening Modul 5).
+**Output:** `acquisition_log` (di dokumen sesi) + kolom akuisisi pada tiap dokumen `slr_screening`.
 
-Tahapan Langkahnya:
-1. Cek Open Access via Unpaywall API (https://api.unpaywall.org/v2/[DOI]) dari slr_screening yang memiliki status untuk dilakukan Full-text Acquisition.
-2. Jika Open Acess dan bisa diambil dari unpaywall update Full_Text_Location diisi dengan unpaywall dan download dari URL yang dikembalikan berikan kepada user(melalui frontend, download browser) untuk menyimpannya.
-3. Jika tidak OA → cek arXiv/SSRN/OSF preprint via DOI, Jika ditemukan update Full_Text_Location diisi dengan arXiv dan download dari URL yang dikembalikan berikan kepada user untuk menyimpannya.
-4. Jika tidak ditemukan juga, update Full_Text_Location diisi dengan 'hitl download', berikan ke user per batch (user download via Hitl)
-5. Semua pdf yang berhasil di download dimasukkan ke dalam folder pdfs.
-6. User mengunggah semua pdf yang sudah di download ke google drive
-7. User membuka google colab dan melakukan mounting ke folder di google drive yang berisi pdfs yang akan di proses.
-8. Di Colab git clone aplikasi PEDE kemudian menjalankannya untuk mengubah pdf ke markdowntext, melakukan chunk berdasarkan strategi Markdown Header Text Splitter, dan merubahnya menjadi vector dengan model vector embedding BGE-M3 (dari BAAI). kemudian menyimpan nya di database qdrant(Saat membuat collection baru di Qdrant dari Colab, pastikan dimensinya dikunci pada 1024 (sesuai spesifikasi dense vector BGE-M3) dengan cara akses dari secret google collab yang di set yaitu QDRANT_API_KEY dan QDRANT_ENDPOINT,Saat memasukkan (upsert) vektor ke Qdrant, bawa struktur data payload yang memuat field "doi", "title", dan metadata penting lainnya. Ini krusial untuk memetakan vektor kembali ke dokumen aslinya di MongoDB.)
-9. aplikasi backend tinggal cek vector db qdrant(ambil di os environtment QDRANT_API_KEY dan QDRANT_ENDPOINT) berdasarkan field doi, jika ada maka set kolom Full_Text_Retrieved menjadi true dan kolom Acquisition_Date set tanggal hari ini.
-10. Pengecekan apakah butuh tombol cek di frontend atau otomatis ? saya butuh saran untuk alur pengecekannya di qdrant.
-11. Cek folder aplikasi PEDE di ./if/PEDE apakah alurnya sudah sesuai brief ini atau belum? jika belum tolong sesuaikan.
-12. Apakah perlu dibuat file .ipynb di aplikasi PEDE untuk membantu proses yang user lakukan di colab(UX friendly)? jika perlu tolong dibuatkan, jika tidak perlu tolong jelaskan mengapa.
-13. Jika sudah dari 3 channel gagal mendapatkan paper tersebut, kemudian untuk jurnal-jurnal yang tidak ada. Lakukan confirmasi statusnya INACCESSIBLE dari frontend, lalu set kolom INACCESSIBLE menjadi true di document jurnal di collection slr_screening,wajib masukan dokumentasinya di kolom Documentation_inaccessible.
-14. INACCESSIBLE PROTOCOL, jika jumlah dokumen inaccessible:
-    - <5%: dokumentasi standar, low impact
-    - 5-15%: detail + analisis bias (skewed ke region/tahun?)
-    - >15%: REVISI strategi (tambah channel, konsultasi supervisor)
-15. Append progress + breakdown HIGH/MEDIUM/LOW retrieved ke acquisition_log
-16. Target: ≥80% MEDIUM retrieved, semua HIGH retrieved, jalur jelas LOW.
+Sumber paper yang diproses: semua record dengan `Final_Decision = "INCLUDE"`, atau (`Final_Decision` kosong **dan** `Screener_1_Decision = "INCLUDE"`).
+
+#### A. Auto-resolve sumber full-text — *dilakukan kode* (`M6_STEP1_ACQUISITION`)
+
+Untuk setiap paper INCLUDE, sistem menetapkan `full_text_location` + `download_url` secara berurutan:
+
+1. **Tanpa DOI** → langsung `full_text_location = "hitl download"`.
+2. **Unpaywall** (`GET https://api.unpaywall.org/v2/{DOI}?email=…`): jika `is_oa = true`, pakai `best_oa_location.url_for_pdf` (fallback `.url`) → `full_text_location = "unpaywall"`, `download_url` = URL PDF.
+3. **arXiv** (`export.arxiv.org/api/query?search_query=doi:{DOI}`): jika ada entry, konversi URL `/abs/` → `/pdf/…pdf` → `full_text_location = "arxiv"`.
+4. **Gagal semua** → `full_text_location = "hitl download"` (user mengunduh manual).
+
+Setelah seluruh paper diproses, `acquisition_log` dihitung ulang dan status berpindah ke `M6_STEP1_WAITING_SYNC`. Record yang `full_text_location`-nya sudah terisi akan dilewati (idempotent — aman untuk re-run/resume).
+
+#### B. Vektorisasi PDF — *proses eksternal di Google Colab (repo PEDE)*
+
+Langkah ini dijalankan user di luar aplikasi backend:
+
+1. User mengunduh PDF (dari `download_url` OA, atau manual untuk `hitl download`) lalu mengunggahnya ke Google Drive.
+2. Buka Google Colab, mount folder Drive berisi PDF.
+3. `git clone` repo **PEDE**, jalankan pipeline: PDF → Markdown → chunking (*Markdown Header Text Splitter*) → embedding **BGE-M3** (BAAI, dense vector **dim 1024**) → upsert ke **Qdrant**.
+4. Kredensial Qdrant diambil dari Colab Secrets: `QDRANT_API_KEY` dan `QDRANT_ENDPOINT`.
+5. Payload tiap vektor **wajib** memuat field `doi` dan `title` (+ metadata lain) — ini kunci pemetaan balik vektor ke dokumen MongoDB.
+
+> Catatan: repo PEDE menyediakan notebook `.ipynb` siap-jalan agar langkah Colab ini UX-friendly (clone → set secret → run). Audit/penyelarasan isi repo PEDE berada di luar cakupan dokumen ini.
+
+#### C. Sinkronisasi Qdrant → MongoDB — *dilakukan kode* (`M6_STEP1_WAITING_SYNC`)
+
+Status `M6_STEP1_WAITING_SYNC` menunggu user menekan **tombol sinkronisasi di UI**, yang memanggil endpoint `POST /api/sessions/{id}/m6/sync-qdrant` (handler `SessionHandler.SyncQdrant`):
+
+- Backend membaca env `QDRANT_URL` (atau `QDRANT_ENDPOINT`) + `QDRANT_API_KEY`. Jika kosong → jalan dalam **mock-mode**.
+- Scroll collection Qdrant **`scientific_articles`**, kumpulkan `doi` + `title` tiap vektor.
+- Cocokkan ke `slr_screening`: **primer via DOI**, **sekunder via kemiripan judul** (untuk record yang DOI-nya kosong).
+- Yang cocok → set `Full_Text_Retrieved = true` dan `Acquisition_Date = tanggal hari ini`.
+- `acquisition_log` dihitung ulang setelah sync.
+
+#### D. INACCESSIBLE protocol
+
+Jika ketiga channel gagal dan PDF tetap tidak tersedia, user mengonfirmasi dari frontend → set `Inaccessible = true` + isi `Documentation_inaccessible` (wajib). Tindak lanjut berdasar proporsi inaccessible:
+
+- **<5%** → dokumentasi standar, low impact.
+- **5–15%** → dokumentasi detail + analisis bias (apakah skewed ke region/tahun tertentu?).
+- **>15%** → REVISI strategi (tambah channel, konsultasi supervisor).
+
+#### E. Target & log
+
+`acquisition_log` mencatat: `total_include`, `high_retrieved` (unpaywall/arxiv), `medium_retrieved` (hitl download), `vectorized_count` (terverifikasi di Qdrant), `inaccessible_count`, `inaccessible_pct`.
+**Target:** semua tier HIGH ter-retrieve, ≥80% MEDIUM ter-retrieve, jalur LOW jelas.
 
 
-### LANGKAH 2: FULL-TEXT SCREENING (DUAL-REVIEWER + AI-ASSIST)
+### LANGKAH 2 & 3 (Full-text screening, resolve conflicts, extraction prep)  📝 Planned
 
-### LANGKAH 3: RESOLVE CONFLICTS + AUDIT + EXTRACTION PREP + HASIL AKHIR
+Belum diimplementasi. Spesifikasi dipindahkan ke **[ROADMAP.md](ROADMAP.md)**.
 
-## 7 Data Extraction + QA -> extraction
+---
 
-### LANGKAH 1: FRAMEWORK SELECTION + EXTRACTION TEMPLATE
+## Modul 7–9 (Extraction, Synthesis, Bibliometric, Manuscript)  📝 Planned
 
-### LANGKAH 2: SYSTEMATIC EXTRACTION (AI-ASSISTED + 20% SPOT-VERIFICATION)
+Modul 7 (Data Extraction + QA), 8 (Analysis + Synthesis), 8b (Bibliometric/SLNA), dan 9 (Manuscript Writing) saat ini masih **stub** di kode (sekadar log + transisi status hingga `COMPLETED`).
 
-### LANGKAH 3: QUALITY APPRAISAL + THRESHOLD JUSTIFICATION + DUAL-RATER + SENSITIVITY ANALYSIS
-
-### LANGKAH 4: SYNTHESIS PREPARATION + META-ANALYSIS FEASIBILITY + HASIL AKHIR
-
-## 8 Analysis + Synthesis (A/B) -> synthesis_results + figures
-
-### LANGKAH 1: DESCRIPTIVE ANALYSIS + HETEROGENEITY DEEP-DIVE
-
-### LANGKAH 2: SYNTHESIS PATH DECISION + EXECUTION (JALUR A DEFAULT atau B UPGRADE)
-
-### LANGKAH 3: GRADE EVIDENCE GRADING + ROBUSTNESS CHECKS
-
-### LANGKAH 4: INTERPRETATION PREPARATION + HASIL AKHIR (BRIDGE KE MODUL 9)
-
-## 8b Bibliometric (SLNA, opsional) VOSviewer + integration
-
-### LANGKAH 1: DATA PREPARATION + THESAURUS CONSTRUCTION
-
-### LANGKAH 2: VOSVIEWER ANALYSIS + 9-PARAMETER JUSTIFICATION
-
-### LANGKAH 3: CLUSTER INTERPRETATION + KRITERIA KUANTITATIF (TIER 1-4)
-
-### LANGKAH 4: SLNA INTEGRATION (BIBLIOMETRIC + SLR) + HASIL AKHIR
-
-## 9 Manuscript Writing manuscript_final
-
-### LANGKAH 1: METHODS WRITING (PRISMA 2020 COMPLIANT)
-
-### LANGKAH 2: RESULTS WRITING (STRUKTUR FRAMEWORK TCCM/ADO)
-
-### LANGKAH 3: DISCUSSION WRITING (6 SUBSEKSI WAJIB)
-
-### LANGKAH 4: FUTURE RESEARCH AGENDA (SUBSEKSI KHUSUS)
-
-### LANGKAH 5: INTRODUCTION WRITING (5 SUBSEKSI WAJIB)
-
-### LANGKAH 6: CONCLUSIONS WRITING (LEAN)
-
-### LANGKAH 7: REFERENCES (FORMAT + VERIFY + TEMPORAL AUDIT + JOURNAL TIER)
-
-### LANGKAH 8: ABSTRACT WRITING (250-300 KATA)
-
-### LANGKAH 9: TITLE CREATION (3-5 ALTERNATIF)
-
-### LANGKAH 10: AUDIT + COMPILE FINAL + HASIL AKHIR
+Spesifikasi desain lengkap untuk modul-modul ini ada di **[ROADMAP.md](ROADMAP.md)**.
