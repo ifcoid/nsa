@@ -882,7 +882,7 @@ Setelah kappa kalibrasi ≥0.60.
 
 Workflow per reviewer (jalankan agen review 1 dan 2 secara paralel di sesi masing-masing untuk seluruh collection slr_screening):
 
-=== PROMPT PER BATCH (sesuaikan dengan input output maksimal token a-ai dan groq, atau gunakan teknik chunking / batching sederhana dengan menjaga hemat token dan bebas halusinasi) ===
+=== PROMPT PER BATCH (sesuaikan dengan input/output maksimal token `zhipu` dan `groq`, atau gunakan teknik chunking / batching sederhana dengan menjaga hemat token dan bebas halusinasi) ===
 
 "Anda Reviewer [1 atau 2] untuk SLR [topik]. Briefing ada di dokumen
 screener_briefing, kalibrasi κ=[X] (passed).
@@ -1013,9 +1013,9 @@ Panduan Cara Mengujinya:
 1. Pastikan semua *paper* telah lolos kalibrasi dan *batch screening*, atau ubah status secara manual (untuk *bypass*) menjadi `M5_STEP4_REVIEW_HASIL`.
 2. Jalankan perintah terminal: `go run cmd/app/main.go`.
 3. Go akan secara otomatis mengagregasi seluruh perhitungan matematis: **PRISMA Flow Numbers** dan **Tabel Persentase Exclusion Reasons**.
-4. Go juga akan mengambil 10% *paper* yang berstatus `INCLUDE` secara acak dan memanggil AI Auditor (`z-ai`) untuk melakukan *PICO-Consistency Audit* untuk memastikan tidak ada paper melenceng yang lolos (*slipped-through*).
+4. Go juga akan mengambil 10% *paper* yang berstatus `INCLUDE` secara acak dan memanggil AI Auditor (`xiaomi`, fallback `zhipu` lalu `groq`) untuk melakukan *PICO-Consistency Audit* untuk memastikan tidak ada paper melenceng yang lolos (*slipped-through*).
 5. Terakhir, AI akan memprioritaskan semua paper `INCLUDE` menjadi tier HIGH/MEDIUM/LOW sebagai bekal Anda di Modul 6 nanti.
-6. Semua hasil agregasi ini (*ExclusionTable* & *Modul5Summary*) akan ditanam secara permanen ke dalam koleksi dokumen sesi SLR Anda di MongoDB, lalu status dikunci menjadi `M5_DONE`. Silakan verifikasi wujud dokumen JSON tersebut melalui MongoDB Compass.
+6. Semua hasil agregasi ini (*ExclusionTable* & *Modul5Summary*) ditanam ke dokumen sesi SLR di MongoDB, lalu status berhenti di `M5_STEP4_WAITING_APPROVAL`. Setelah Anda **Approve** → `M5_STEP4_APPROVED` → otomatis lanjut ke Modul 6 (`M6_INIT`). (`M5_DONE` hanya status usang yang otomatis dimigrasi ke `M6_INIT`.) Silakan verifikasi dokumen JSON via MongoDB Compass.
 
 ## Modul 6 — Full-text Acquisition + Screening → pdfs/ + screening (full)  ✅ Implemented
 
