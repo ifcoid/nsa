@@ -203,6 +203,118 @@ func (r *MongoRepository) MarkPapersAsEvaluated(ctx context.Context, sessionID s
 	return err
 }
 
+// ===== Modul 6 Langkah 2: Full-text screening =====
+// Paper "eligible" untuk full-text screening = INCLUDE di tahap abstrak (Modul 5)
+// DAN full_text_retrieved == true (sudah tervektorisasi di Qdrant).
+
+func fulltextEligibleFilter(sessionID string) bson.M {
+	return bson.M{
+		"session_id":          sessionID,
+		"full_text_retrieved": true,
+		"$or": []bson.M{
+			{"Final_Decision": "INCLUDE"},
+			{"$and": []bson.M{{"Final_Decision": ""}, {"Screener_1_Decision": "INCLUDE"}}},
+		},
+	}
+}
+
+func (r *MongoRepository) GetUnscreenedFullTextPapers(ctx context.Context, sessionID string, limit int) ([]map[string]interface{}, error) {
+	filter := bson.M{
+		"session_id":          sessionID,
+		"full_text_retrieved": true,
+		"$and": []bson.M{
+			{"$or": []bson.M{
+				{"Final_Decision": "INCLUDE"},
+				{"$and": []bson.M{{"Final_Decision": ""}, {"Screener_1_Decision": "INCLUDE"}}},
+			}},
+			{"$or": []bson.M{
+				{"Screener_1_Decision_Full": ""},
+				{"Screener_1_Decision_Full": bson.M{"$exists": false}},
+			}},
+		},
+	}
+	findOptions := options.Find().SetLimit(int64(limit))
+	cursor, err := r.GetScreeningCollection().Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, err
+	}
+	var results []map[string]interface{}
+	err = cursor.All(ctx, &results)
+	return results, err
+}
+
+func (r *MongoRepository) GetUnevaluatedFullTextPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
+	filter := bson.M{
+		"session_id":               sessionID,
+		"Screener_1_Decision_Full": bson.M{"$nin": bson.A{"", nil}},
+		"Batch_Evaluated_Full":     bson.M{"$ne": true},
+	}
+	cursor, err := r.GetScreeningCollection().Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	var results []map[string]interface{}
+	err = cursor.All(ctx, &results)
+	return results, err
+}
+
+func (r *MongoRepository) MarkFullTextEvaluated(ctx context.Context, sessionID string, paperIDs []primitive.ObjectID) error {
+	if len(paperIDs) == 0 {
+		return nil
+	}
+	filter := bson.M{"session_id": sessionID, "_id": bson.M{"$in": paperIDs}}
+	update := bson.M{"$set": bson.M{"Batch_Evaluated_Full": true}}
+	_, err := r.GetScreeningCollection().UpdateMany(ctx, filter, update)
+	return err
+}
+
+func (r *MongoRepository) GetFullTextScreeningProgress(ctx context.Context, sessionID string) (total int64, screened int64, err error) {
+	coll := r.GetScreeningCollection()
+	total, err = coll.CountDocuments(ctx, fulltextEligibleFilter(sessionID))
+	if err != nil {
+		return 0, 0, err
+	}
+	screenedFilter := fulltextEligibleFilter(sessionID)
+	screenedFilter["Screener_1_Decision_Full"] = bson.M{"$nin": bson.A{"", nil}}
+	screened, err = coll.CountDocuments(ctx, screenedFilter)
+	return total, screened, err
+}
+
+// GetDisagreedFullTextPapers mengembalikan kasus yang BELUM final (Final_Decision_Full kosong)
+// dan butuh keputusan manusia: DISAGREE, atau salah satu reviewer UNCERTAIN.
+func (r *MongoRepository) GetDisagreedFullTextPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
+	filter := bson.M{
+		"session_id":          sessionID,
+		"Final_Decision_Full": bson.M{"$in": bson.A{"", nil}},
+		"$or": []bson.M{
+			{"Agreement_Full": "DISAGREE"},
+			{"Screener_1_Decision_Full": "UNCERTAIN"},
+			{"Screener_2_Decision_Full": "UNCERTAIN"},
+		},
+	}
+	cursor, err := r.GetScreeningCollection().Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	var results []map[string]interface{}
+	err = cursor.All(ctx, &results)
+	return results, err
+}
+
+func (r *MongoRepository) UpdateScreeningPaperResolutionFull(ctx context.Context, sessionID, paperIDHex, finalDecision, notes string) error {
+	objID, err := primitive.ObjectIDFromHex(paperIDHex)
+	if err != nil {
+		return err
+	}
+	filter := bson.M{"_id": objID, "session_id": sessionID}
+	update := bson.M{"$set": bson.M{
+		"Final_Decision_Full":      finalDecision,
+		"Conflict_Resolution_Full": notes,
+	}}
+	_, err = r.GetScreeningCollection().UpdateOne(ctx, filter, update)
+	return err
+}
+
 func (r *MongoRepository) GetScreeningProgress(ctx context.Context, sessionID string) (total int64, screened int64, err error) {
 	coll := r.GetScreeningCollection()
 	

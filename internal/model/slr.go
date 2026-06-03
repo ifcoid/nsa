@@ -336,6 +336,11 @@ type SLRSession struct {
 	ExclusionTable        *ExclusionTable        `bson:"exclusion_table,omitempty" json:"exclusion_table,omitempty"`
 	Modul5Summary         *Modul5Summary         `bson:"modul5_summary,omitempty" json:"modul5_summary,omitempty"`
 	AcquisitionLog        *AcquisitionLog        `bson:"acquisition_log,omitempty" json:"acquisition_log,omitempty"`
+	FulltextScreeningLog  []ScreeningResultsLog  `bson:"fulltext_screening_log,omitempty" json:"fulltext_screening_log,omitempty"`
+	FulltextKappa         float64                `bson:"fulltext_kappa,omitempty" json:"fulltext_kappa,omitempty"`
+	InaccessibleImpact    *InaccessibleImpact    `bson:"inaccessible_impact,omitempty" json:"inaccessible_impact,omitempty"`
+	ExtractionReadiness   *ExtractionReadiness   `bson:"extraction_readiness,omitempty" json:"extraction_readiness,omitempty"`
+	Modul6Summary         *Modul6Summary         `bson:"modul6_summary,omitempty" json:"modul6_summary,omitempty"`
 	InclusionCriteria     []string               `bson:"inclusion_criteria" json:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria" json:"exclusion_criteria"`
 	Status            string            `bson:"status" json:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
@@ -365,6 +370,26 @@ type Paper struct {
 	AcquisitionDate          string `bson:"acquisition_date" json:"acquisition_date"`                       // Date of retrieval
 	Inaccessible             bool   `bson:"inaccessible" json:"inaccessible"`                               // User marked as inaccessible
 	DocumentationInaccessible string `bson:"documentation_inaccessible" json:"documentation_inaccessible"` // Reason for failure
+}
+
+// ===== Modul 6 Langkah 2-3: Full-text Screening =====
+
+// FulltextImpact = OUTPUT 2 (inaccessible_impact) Modul 6 L3.
+type InaccessibleImpact struct {
+	Count    int     `bson:"count" json:"count"`
+	Pct      float64 `bson:"pct" json:"pct"`
+	Markdown string  `bson:"markdown" json:"markdown"`
+}
+
+// ExtractionReadiness = OUTPUT 3 Modul 6 L3 (checklist sebelum Modul 7).
+type ExtractionReadiness struct {
+	AllReady bool   `bson:"all_ready" json:"all_ready"`
+	Markdown string `bson:"markdown" json:"markdown"`
+}
+
+// Modul6Summary = OUTPUT 4 Modul 6 L3 (hasil akhir).
+type Modul6Summary struct {
+	Markdown string `bson:"markdown" json:"markdown"`
 }
 
 type AcquisitionLog struct {

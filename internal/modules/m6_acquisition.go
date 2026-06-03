@@ -53,9 +53,36 @@ func (m *M6Acquisition) Execute(ctx context.Context, session *model.SLRSession) 
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M6_STEP1_WAITING_SYNC":
-		// Menunggu user menekan tombol sinkronisasi Qdrant di UI.
-		// Proses sinkronisasi dilakukan via HTTP handler (session_handler.go)
+		// Menunggu user menekan tombol sinkronisasi Qdrant di UI, lalu Approve untuk
+		// lanjut ke full-text screening (ApproveStep men-set M6_STEP2_FULLTEXT_SCREENING).
 		return nil
+
+	// ===== LANGKAH 2: Full-text screening (dual-reviewer + RAG Qdrant) =====
+	case "M6_STEP2_FULLTEXT_SCREENING":
+		return m.runFullTextScreeningBatch(ctx, session)
+
+	case "M6_STEP2_WAITING_RESOLUTION":
+		logger.Log(session.ID, "   [System] Batch full-text dijeda (HITL). Resolusi DISAGREE/UNCERTAIN di UI lalu lanjutkan.")
+		return nil
+
+	// ===== LANGKAH 3: Resolve + audit + extraction prep + hasil akhir =====
+	case "M6_STEP3_REVIEW":
+		return m.buildModul6Outputs(ctx, session)
+
+	case "M6_STEP3_WAITING_APPROVAL":
+		logger.Log(session.ID, "   [System] Modul 6 selesai disusun. Menunggu persetujuan akhir sebelum ke Modul 7.")
+		return nil
+
+	case "M6_STEP3_NEEDS_REVISION":
+		logger.Logf(session.ID, "   [Revisi 6.3] Menyusun ulang output Modul 6 (feedback: '%s')...\n", session.Feedback)
+		session.Feedback = ""
+		session.Status = "M6_STEP3_REVIEW"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	case "M6_STEP3_APPROVED":
+		session.Status = "M7_EXTRACTION"
+		logger.Log(session.ID, "   [System] Modul 6 SELESAI. Memulai Modul 7 (Data Extraction + QA).")
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	default:
 		return nil

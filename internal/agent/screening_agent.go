@@ -183,6 +183,52 @@ Keluarkan HANYA JSON MURNI tanpa blok markdown dengan struktur berikut:
 	return &result, nil
 }
 
+// FullTextReviewPaper melakukan screening tahap FULL-TEXT (Modul 6 L2) berbasis RAG.
+// `fulltext` adalah konten teks artikel yang diambil dari Qdrant (vektorisasi PEDE).
+// Reviewer WAJIB hanya menyimpulkan dari konten RAG ini (anti-halusinasi).
+func (a *ScreeningAgent) FullTextReviewPaper(ctx context.Context, operationalDefs, title, fulltext string) (*model.ScreeningPerspective, error) {
+	systemPrompt := fmt.Sprintf(`Anda adalah Reviewer Independen untuk FULL-TEXT screening Systematic Literature Review.
+Anda menilai berdasarkan ISI FULL-TEXT (bukan sekadar abstract).
+
+OPERATIONAL DEFINITIONS (WHAT COUNTS / WHAT DOESN'T / EDGE CASES):
+%s
+
+ATURAN ANTI-HALUSINASI (WAJIB):
+- Simpulkan HANYA dari kutipan teks full-text yang diberikan pengguna (konteks RAG).
+- DILARANG memakai pengetahuan di luar teks. Jika informasi tidak ada di teks, jangan mengarang.
+- Jika teks tidak cukup untuk memutuskan suatu komponen, gunakan "UNCERTAIN".
+
+REASON CODES (12; pakai PERSIS salah satu jika EXCLUDE):
+- 8 dari tahap abstrak: P-NOMATCH, I-NOMATCH, O-NOMATCH, STUDY-DESIGN, LANGUAGE, DUPLICATE, NO-ABSTRACT, OTHER
+- 4 tambahan full-text: METHODS-UNCLEAR (deskripsi metodologi tak cukup), NO-EMPIRICAL-DATA (konseptual tanpa data empiris), DUPLICATE-POSTHOC (overlap dataset/konten), POOR-QUALITY (kualitas metodologis ekstrem rendah, mis. predatory)
+
+Analisis tiap artikel: (1) STUDY DESIGN dari bagian Methods, (2) POPULATION vs WHAT COUNTS, (3) INTERVENTION/EXPOSURE, (4) OUTCOME + alat ukur, (5) RED FLAGS metodologis untuk QA Modul 7 (sample kecil tanpa power analysis? confounder tak ditangani? follow-up kurang? missing data tak dilaporkan?).
+
+Keluarkan HANYA JSON MURNI tanpa blok markdown:
+{
+  "strict": "Perspektif STRICT (bias EXCLUDE) dengan kutipan dari full-text",
+  "liberal": "Perspektif LIBERAL (bias INCLUDE) dengan kutipan dari full-text",
+  "recommend": "INCLUDE" atau "EXCLUDE" atau "UNCERTAIN",
+  "reason_code": "salah satu dari 12 reason code jika EXCLUDE, '-' jika INCLUDE/UNCERTAIN",
+  "evidence": "Kutipan kalimat dari Methods/Results sebagai bukti. Awali red flags QA dengan 'QA_RED:' jika ada.",
+  "confidence": "HIGH" atau "MEDIUM" atau "LOW"
+}`, operationalDefs)
+
+	userPrompt := fmt.Sprintf("Title: %s\n\n=== FULL-TEXT (KONTEKS RAG, satu-satunya sumber yang boleh dipakai) ===\n%s", title, fulltext)
+
+	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("gagal full-text review paper: %w", err)
+	}
+
+	cleanJSON := CleanJSONResponse(rawResponse)
+	var result model.ScreeningPerspective
+	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON FullTextReviewPaper (%w). Raw: %s", err, rawResponse)
+	}
+	return &result, nil
+}
+
 type ResolutionAdvice struct {
 	Analysis string `json:"analysis"`
 	Advice   string `json:"advice"`

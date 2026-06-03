@@ -1017,11 +1017,11 @@ Panduan Cara Mengujinya:
 5. Terakhir, AI akan memprioritaskan semua paper `INCLUDE` menjadi tier HIGH/MEDIUM/LOW sebagai bekal Anda di Modul 6 nanti.
 6. Semua hasil agregasi ini (*ExclusionTable* & *Modul5Summary*) akan ditanam secara permanen ke dalam koleksi dokumen sesi SLR Anda di MongoDB, lalu status dikunci menjadi `M5_DONE`. Silakan verifikasi wujud dokumen JSON tersebut melalui MongoDB Compass.
 
-## Modul 6 — Full-text Acquisition → pdfs/ + tracking  ⚠️ Partial (baru Langkah 1)
+## Modul 6 — Full-text Acquisition + Screening → pdfs/ + screening (full)  ✅ Implemented
 
-> _Implementasi kode saat ini: **Langkah 1 saja**, sampai status `M6_STEP1_WAITING_SYNC` (cek Unpaywall + arXiv, lalu menandai sisanya `hitl download`). Vektorisasi PEDE → BGE-M3 → Qdrant dijalankan **di luar aplikasi** (Google Colab) dan disinkronkan via tombol di UI. Langkah 2 & 3 masih spesifikasi._
+> _Langkah 1 (akuisisi) selesai kecuali **vektorisasi PDF** yang memang dijalankan **di luar aplikasi** (Google Colab + repo PEDE → Qdrant). Langkah 2 (full-text screening dual-reviewer berbasis RAG Qdrant) & Langkah 3 (resolve + audit + extraction prep + summary) sudah terimplementasi penuh._
 
-### LANGKAH 1: ACQUISITION STRATEGY + AUTO-DOWNLOAD + PRIORITY TRACKING  ⚠️ Partial
+### LANGKAH 1: ACQUISITION STRATEGY + AUTO-DOWNLOAD + PRIORITY TRACKING  ✅ (vektorisasi eksternal)
 
 **Input:** collection `slr_screening` (daftar paper hasil screening Modul 5).
 **Output:** `acquisition_log` (di dokumen sesi) + kolom akuisisi pada tiap dokumen `slr_screening`.
@@ -1075,9 +1075,39 @@ Jika ketiga channel gagal dan PDF tetap tidak tersedia, user mengonfirmasi dari 
 **Target:** semua tier HIGH ter-retrieve, ≥80% MEDIUM ter-retrieve, jalur LOW jelas.
 
 
-### LANGKAH 2 & 3 (Full-text screening, resolve conflicts, extraction prep)  📝 Planned
+### LANGKAH 2: FULL-TEXT SCREENING (DUAL-REVIEWER + AI-ASSIST, RAG QDRANT)  ✅ Implemented
 
-Belum diimplementasi. Spesifikasi dipindahkan ke **[ROADMAP.md](ROADMAP.md)**.
+**Input:** paper *eligible* = INCLUDE di tahap abstrak (Modul 5) **dan** `full_text_retrieved = true`. **Output:** kolom `*_Full` pada `slr_screening` + `fulltext_screening_log` (per batch) di sesi.
+
+- **RAG anti-halusinasi:** untuk tiap paper, sistem mengambil seluruh chunk dari Qdrant `scientific_articles` (payload `content`, urut `chunk_index`) yang `doi`-nya cocok (ternormalisasi), digabung jadi konteks full-text. Reviewer WAJIB hanya menyimpulkan dari konteks ini.
+- **RAG kosong** (DOI tak cocok / belum tervektorisasi) → ditandai *pending manual*: `Screener_*_Decision_Full = UNCERTAIN`, `Reason_Code_Full = NO-FULLTEXT-RAG`, `Agreement_Full = DISAGREE` (muncul di antrian resolusi untuk diputuskan manusia). Tidak di-auto-screen tanpa konten.
+- **Dual reviewer** (mirror M5): R1 `zhipu`→fallback `xiaomi`, R2 `groq`, supervisor `xiaomi`→`openrouter`. Batch 10/iterasi; setiap batch dihitung **Cohen's kappa** (`fulltext_kappa`) lalu jeda di `M6_STEP2_WAITING_RESOLUTION`.
+- **12 reason codes**: 8 dari abstrak + 4 full-text (`METHODS-UNCLEAR`, `NO-EMPIRICAL-DATA`, `DUPLICATE-POSTHOC`, `POOR-QUALITY`). Red flags QA diawali `QA_RED:` di evidence (bekal Modul 7).
+- Resolusi DISAGREE/UNCERTAIN ditulis ke `Final_Decision_Full` + `Conflict_Resolution_Full` (endpoint `resolve-conflicts` dengan `stage=fulltext`).
+
+### LANGKAH 3: RESOLVE + AUDIT + EXTRACTION PREP + HASIL AKHIR  ✅ Implemented
+
+Saat semua full-text selesai di-screen → status `M6_STEP3_REVIEW` menyusun 4 output di sesi lalu jeda di `M6_STEP3_WAITING_APPROVAL`:
+
+1. **`fulltext_screening_log`** — log per batch (kappa, disagreements, drift).
+2. **`inaccessible_impact`** — count/pct inaccessible + band (<5 / 5–15 / >15%) + template disclosure Limitations.
+3. **`extraction_readiness`** — checklist kesiapan ke Modul 7 (`all_ready` true bila semua konflik terselesaikan).
+4. **`modul6_summary`** — ringkasan akhir: acquisition, kappa final, decisions (INCLUDED/EXCLUDED/UNCERTAIN), tabel exclusion reasons full-text, **PICO-consistency final audit** (15% sample), inaccessible impact, readiness.
+
+**Alur status:**
+```
+M6_STEP1_WAITING_SYNC --(Approve, stlh sync Qdrant)--> M6_STEP2_FULLTEXT_SCREENING
+M6_STEP2_FULLTEXT_SCREENING : batch dual-review (RAG) + kappa
+   ├─ ada konflik/uncertain → M6_STEP2_WAITING_RESOLUTION → (resolve / Approve) → balik screening
+   └─ semua selesai → M6_STEP3_REVIEW → M6_STEP3_WAITING_APPROVAL
+M6_STEP3_WAITING_APPROVAL --(Approve)--> M7_EXTRACTION   (revisi → regenerate output)
+```
+
+Cara Mengujinya Nanti:
+
+1. Setelah sinkronisasi Qdrant di `M6_STEP1_WAITING_SYNC`, klik **Setuju & Lanjut** → status pindah ke `M6_STEP2_FULLTEXT_SCREENING` dan agen mulai men-screen full-text per batch.
+2. Saat jeda `M6_STEP2_WAITING_RESOLUTION`, buka UI: putuskan kasus DISAGREE/UNCERTAIN/pending-RAG (INCLUDE/EXCLUDE) → **Simpan Resolusi Full-text**, atau **Setuju & Lanjut** untuk batch berikutnya. Ulangi hingga selesai.
+3. Di `M6_STEP3_WAITING_APPROVAL`, periksa `modul6_summary`, `inaccessible_impact`, `extraction_readiness` di Compass/UI. Setujui → lanjut ke Modul 7. (Revisi → output disusun ulang.)
 
 ---
 

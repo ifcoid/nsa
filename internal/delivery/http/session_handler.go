@@ -201,6 +201,12 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 			session.Status = session.Status[:len(session.Status)-17] + "_APPROVED"
 		} else if session.Status == "M5_STEP3_WAITING_RESOLUTION" {
 			session.Status = "M5_STEP3_BATCH_SCREENING"
+		} else if session.Status == "M6_STEP1_WAITING_SYNC" {
+			// Setelah sinkronisasi Qdrant, lanjut ke full-text screening (Modul 6 L2)
+			session.Status = "M6_STEP2_FULLTEXT_SCREENING"
+		} else if session.Status == "M6_STEP2_WAITING_RESOLUTION" {
+			// Lanjut batch full-text berikutnya / evaluasi
+			session.Status = "M6_STEP2_FULLTEXT_SCREENING"
 		}
 		
 		// Custom data handling untuk M2_STEP1
@@ -415,7 +421,13 @@ func (h *SessionHandler) GetDisagreements(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	papers, err := h.mongoRepo.GetDisagreedPapers(r.Context(), id)
+	var papers []map[string]interface{}
+	var err error
+	if r.URL.Query().Get("stage") == "fulltext" {
+		papers, err = h.mongoRepo.GetDisagreedFullTextPapers(r.Context(), id)
+	} else {
+		papers, err = h.mongoRepo.GetDisagreedPapers(r.Context(), id)
+	}
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to get disagreed papers: "+err.Error())
 		return
@@ -435,6 +447,7 @@ func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Reque
 	}
 
 	var payload struct {
+		Stage       string `json:"stage,omitempty"` // "" (abstrak/M5) atau "fulltext" (M6)
 		Resolutions []struct {
 			PaperID           string `json:"paper_id"`
 			FinalDecision     string `json:"final_decision"`
@@ -454,9 +467,14 @@ func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
+	isFulltext := payload.Stage == "fulltext"
 	for _, res := range payload.Resolutions {
 		if res.PaperID != "" && res.FinalDecision != "" {
-			err := h.mongoRepo.UpdateScreeningPaperResolution(ctx, id, res.PaperID, res.FinalDecision, res.ConflictResolution)
+			if isFulltext {
+				err = h.mongoRepo.UpdateScreeningPaperResolutionFull(ctx, id, res.PaperID, res.FinalDecision, res.ConflictResolution)
+			} else {
+				err = h.mongoRepo.UpdateScreeningPaperResolution(ctx, id, res.PaperID, res.FinalDecision, res.ConflictResolution)
+			}
 			if err != nil {
 				sendJSONError(w, http.StatusInternalServerError, "Gagal mengupdate resolusi: "+err.Error())
 				return
@@ -464,7 +482,11 @@ func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Reque
 		}
 	}
 
-	session.Status = "M5_STEP3_BATCH_SCREENING"
+	if isFulltext {
+		session.Status = "M6_STEP2_FULLTEXT_SCREENING"
+	} else {
+		session.Status = "M5_STEP3_BATCH_SCREENING"
+	}
 	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Gagal mengupdate status sesi: "+err.Error())
 		return
