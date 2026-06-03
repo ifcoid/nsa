@@ -91,23 +91,24 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 		session.Manuscript = &model.Manuscript{}
 	}
 	bundle := m.artifactBundle(session)
+	lang := langDirective(session)
 
-	methods, err := ag.Write(ctx, promptMethods, bundle)
+	methods, err := ag.Write(ctx, promptMethods+lang, bundle)
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Methods")
-	results, err := ag.Write(ctx, promptResults, bundle+sectionCtx("METHODS (sudah ditulis)", methods))
+	results, err := ag.Write(ctx, promptResults+lang, bundle+sectionCtx("METHODS (sudah ditulis)", methods))
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Results")
-	discussion, err := ag.Write(ctx, promptDiscussion, bundle+sectionCtx("RESULTS (sudah ditulis — jangan diulang)", results))
+	discussion, err := ag.Write(ctx, promptDiscussion+lang, bundle+sectionCtx("RESULTS (sudah ditulis — jangan diulang)", results))
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Discussion")
-	future, err := ag.Write(ctx, promptFuture, bundle+sectionCtx("DISCUSSION (limitations — agenda harus beda/actionable)", discussion))
+	future, err := ag.Write(ctx, promptFuture+lang, bundle+sectionCtx("DISCUSSION (limitations — agenda harus beda/actionable)", discussion))
 	if err != nil {
 		return err
 	}
@@ -130,23 +131,24 @@ func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSes
 	ag := agent.NewManuscriptAgent(brain)
 	ms := session.Manuscript
 	bundle := m.artifactBundle(session)
+	lang := langDirective(session)
 
-	intro, err := ag.Write(ctx, promptIntro, bundle+sectionCtx("RESULTS (untuk tune preview, JANGAN bocorkan angka spesifik di Intro)", trim(ms.Results, 4000)))
+	intro, err := ag.Write(ctx, promptIntro+lang, bundle+sectionCtx("RESULTS (untuk tune preview, JANGAN bocorkan angka spesifik di Intro)", trim(ms.Results, 4000)))
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Introduction")
-	conclusions, err := ag.Write(ctx, promptConclusions, bundle+sectionCtx("DISCUSSION", trim(ms.Discussion, 5000))+sectionCtx("FUTURE RESEARCH", trim(ms.FutureResearch, 2500)))
+	conclusions, err := ag.Write(ctx, promptConclusions+lang, bundle+sectionCtx("DISCUSSION", trim(ms.Discussion, 5000))+sectionCtx("FUTURE RESEARCH", trim(ms.FutureResearch, 2500)))
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Conclusions")
-	abstract, err := ag.Write(ctx, promptAbstract, bundle+sectionCtx("METHODS", trim(ms.Methods, 3000))+sectionCtx("RESULTS", trim(ms.Results, 4000))+sectionCtx("DISCUSSION", trim(ms.Discussion, 3000)))
+	abstract, err := ag.Write(ctx, promptAbstract+lang, bundle+sectionCtx("METHODS", trim(ms.Methods, 3000))+sectionCtx("RESULTS", trim(ms.Results, 4000))+sectionCtx("DISCUSSION", trim(ms.Discussion, 3000)))
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Abstract")
-	title, err := ag.Write(ctx, promptTitle, sectionCtx("ABSTRACT", abstract)+m.geoFrameworkHint(session))
+	title, err := ag.Write(ctx, promptTitle+lang, sectionCtx("ABSTRACT", abstract)+m.geoFrameworkHint(session))
 	if err != nil {
 		return err
 	}
@@ -161,6 +163,15 @@ func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSes
 }
 
 // ===== context helpers =====
+
+// langDirective menentukan bahasa output manuskrip (default Bahasa Indonesia untuk draft).
+func langDirective(session *model.SLRSession) string {
+	lang := strings.ToLower(strings.TrimSpace(session.ManuscriptLang))
+	if lang == "en" || lang == "english" || lang == "inggris" {
+		return "\n\nLANGUAGE: Write the entire section in formal, publication-quality academic English."
+	}
+	return "\n\nBAHASA: Tulis SELURUH section dalam Bahasa Indonesia akademik formal (kualitas jurnal). Istilah metodologi baku boleh tetap Inggris ('systematic review', 'PRISMA 2020', 'PICO', 'meta-analysis', nama tool RoB seperti RoB 2/NOS/MMAT). Judul karya & daftar referensi JANGAN diterjemahkan."
+}
 
 func sectionCtx(label, content string) string {
 	if content == "" {

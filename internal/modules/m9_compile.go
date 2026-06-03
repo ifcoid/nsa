@@ -25,7 +25,8 @@ G. Training-workflow voice leak.
 H. Indonesian calque ("It is known that", "Many studies have" opener).
 I. Geographic claim consistency (Title/Abstract/Intro/Methods/Discussion).
 J. GRADE/RoB hedging consistency.
-Output ringkas per huruf A-J.`
+K. AI-STYLE TELLS (anti-ciri-AI): tandai pemakaian em-dash "—"/"–" (HARUS NOL di seluruh manuskrip), transisi klise bertumpuk (Moreover/Furthermore/In addition/Notably/"It is worth noting"/"It is important to note"), pola terlalu rapi "not only X but also Y", kata over-AI (delve/leverage/underscore/pivotal/realm/tapestry/intricate), kutip keriting/emoji. Saran ganti ke gaya akademisi manusia.
+Output ringkas per huruf A-K.`
 
 const promptPrisma = `Susun PRISMA 2020 27-ITEM COMPLIANCE CHECK (supplementary) sebagai tabel Markdown:
 | # | Item | Section | Status |
@@ -33,6 +34,15 @@ Status: ✓ COVERED / ⚠ PARTIAL / ✗ MISSING. Untuk PARTIAL/MISSING beri reko
 Item 1 Title, 2 Abstract, 3-4 Intro (rationale, objectives), 5-19 Methods, 20-22 Results, 23-25 Discussion+Conclusions (incl. 24a-c limitations: study/review/missing-data), 26-27 Other (registration, support, COI, data availability). Nilai berdasarkan section yang diberikan.`
 
 const aiDeclaration = `AI tools were used solely to assist with language refinement, grammar checking, and readability of the manuscript. AI was not used for any analytic decision, study screening, data extraction, risk-of-bias rating, evidence synthesis, or methodological judgement; those were performed by the named reviewers, extractors, and raters. All scholarly content, methodological decisions, interpretations, and final wording are the responsibility of the author(s).`
+
+const aiDeclarationID = `Bantuan AI digunakan semata untuk penyempurnaan bahasa, pemeriksaan tata bahasa, dan keterbacaan naskah. AI tidak digunakan untuk keputusan analitis apa pun, penyaringan studi, ekstraksi data, penilaian risiko bias, sintesis bukti, maupun pertimbangan metodologis; seluruhnya dilakukan oleh reviewer, extractor, dan rater yang disebutkan. Seluruh isi ilmiah, keputusan metodologis, interpretasi, dan kata akhir adalah tanggung jawab penulis.`
+
+func aiDeclFor(session *model.SLRSession) string {
+	if l := strings.ToLower(strings.TrimSpace(session.ManuscriptLang)); l == "en" || l == "english" || l == "inggris" {
+		return aiDeclaration
+	}
+	return aiDeclarationID
+}
 
 func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [L10] Compile: references (Crossref) + coherence audit + PRISMA checklist + final + .tex...")
@@ -61,15 +71,16 @@ func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession
 	}
 	ag := agent.NewManuscriptAgent(brain)
 	allSections := m.allSectionsBundle(ms)
+	lang := langDirective(session)
 
-	if audit, e := ag.Write(ctx, promptCoherence, allSections); e == nil {
+	if audit, e := ag.Write(ctx, promptCoherence+lang, allSections); e == nil {
 		ms.CoherenceAudit = audit
 		logger.Log(session.ID, "      ✓ Coherence audit")
 	} else {
 		ms.CoherenceAudit = "Audit gagal: " + e.Error()
 		logger.Logf(session.ID, "      [WARN] Coherence audit gagal: %v\n", e)
 	}
-	if prisma, e := ag.Write(ctx, promptPrisma, allSections+m.artifactBundle(session)); e == nil {
+	if prisma, e := ag.Write(ctx, promptPrisma+lang, allSections+m.artifactBundle(session)); e == nil {
 		ms.PrismaChecklist = prisma
 		logger.Log(session.ID, "      ✓ PRISMA checklist")
 	} else {
@@ -165,7 +176,7 @@ func (m *M9Manuscript) compileFinal(session *model.SLRSession) string {
 	w("## Conflict of Interest")
 	w("_[Diisi penulis]_")
 	w("## AI Assistance Declaration")
-	w(aiDeclaration)
+	w(aiDeclFor(session))
 	w(ms.References)
 	w("## Figure Captions")
 	w(m.figureCaptions(session))
