@@ -1111,8 +1111,21 @@ Cara Mengujinya Nanti:
 
 ---
 
-## Modul 7–9 (Extraction, Synthesis, Bibliometric, Manuscript)  📝 Planned
+## Modul 7 — Data Extraction + QA → slr_extraction + synthesis_prep  ✅ Implemented
 
-Modul 7 (Data Extraction + QA), 8 (Analysis + Synthesis), 8b (Bibliometric/SLNA), dan 9 (Manuscript Writing) saat ini masih **stub** di kode (sekadar log + transisi status hingga `COMPLETED`).
+Input: paper **FINAL INCLUDED** dari M6 + RAG full-text Qdrant + PICO/RQ. Output: collection **`slr_extraction`** (1 dok/paper) + subdoc sesi `framework_selection`, `extraction_log`, `qa_threshold_justification`, `sensitivity_analysis`, `synthesis_prep`, `modul7_summary`.
 
-Spesifikasi desain lengkap untuk modul-modul ini ada di **[ROADMAP.md](ROADMAP.md)**.
+- **L1 — Framework + Template** (`gemini`): rekomendasi framework (TCCM/ADO/PICO/CUSTOM) dari PICO+RQ+design breakdown, turunkan kolom template, pre-populate `slr_extraction` per paper → `M7_STEP1_WAITING_APPROVAL`.
+- **L2 — Systematic Extraction** (RAG): extractor utama (`zhipu`→`xiaomi`) mengisi tiap field dari full-text Qdrant (kutipan + `[NOT REPORTED]` + flag `QA_RED:`/AMBIGUOUS, anti-halusinasi). Lalu **spot-verification 20%** + AMBIGUOUS oleh extractor 2 (`groq`→`xiaomi`) → `extraction_log` (disagreement rate band <5/5–15/>15%). Paper tanpa RAG → `coverage=NO_FULLTEXT_RAG` (ekstraksi manual). Batch 6/iterasi.
+- **L3 — Quality Appraisal**: pilih tool (RoB2/NOS/CASP/AMSTAR/MMAT/JBI…) + **threshold 3-lapis** (`gemini`); **dual-rater** QA (`zhipu`+`groq`) skor 0–100 → kategori HIGH/MODERATE/LOW + **Cohen's kappa**; **sensitivity analysis** 3 skenario (baseline/ketat/longgar) → verdict ROBUST/CONDITIONAL/SENSITIVE.
+- **L4 — Synthesis Prep** (`gemini`): descriptive overview + **heterogeneity verdict** (LOW/MOD/HIGH/VERY HIGH) + **meta-analysis feasibility** (Jalur A naratif / B meta / Hybrid, cek 5-kriteria) + framework-driven groupings → `synthesis_prep` + `modul7_summary` → ke Modul 8.
+
+**Alur status:** `M7_EXTRACTION → M7_STEP1_FRAMEWORK → _WAITING_APPROVAL → _APPROVED → M7_STEP2_EXTRACTION → _WAITING_APPROVAL → _APPROVED → M7_STEP3_QA → _WAITING_APPROVAL → _APPROVED → M7_STEP4_SYNTHESIS_PREP → _WAITING_APPROVAL → _APPROVED → M8_SYNTHESIS`. Tiap `_WAITING_APPROVAL` pakai gate HITL generik (Approve / Revisi+feedback → regenerate langkah itu).
+
+---
+
+## Modul 8 / 8b / 9 (Synthesis, Bibliometric, Manuscript)  📝 Planned
+
+Modul 8 (Analysis + Synthesis), 8b (Bibliometric/SLNA), dan 9 (Manuscript Writing) saat ini masih **stub** di kode (sekadar log + transisi status hingga `COMPLETED`).
+
+Spesifikasi desain lengkap ada di **[ROADMAP.md](ROADMAP.md)**.

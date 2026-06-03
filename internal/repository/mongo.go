@@ -96,6 +96,11 @@ func (r *MongoRepository) ClearAndInsertPapers(ctx context.Context, sessionID st
 	return nil
 }
 
+// GetExtractionCollection = koleksi data ekstraksi Modul 7 (satu dokumen per paper).
+func (r *MongoRepository) GetExtractionCollection() *mongo.Collection {
+	return r.client.Database(r.dbName).Collection("slr_extraction")
+}
+
 func (r *MongoRepository) GetScreeningCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_screening")
 }

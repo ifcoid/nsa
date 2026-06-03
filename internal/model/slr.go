@@ -341,6 +341,12 @@ type SLRSession struct {
 	InaccessibleImpact    *InaccessibleImpact    `bson:"inaccessible_impact,omitempty" json:"inaccessible_impact,omitempty"`
 	ExtractionReadiness   *ExtractionReadiness   `bson:"extraction_readiness,omitempty" json:"extraction_readiness,omitempty"`
 	Modul6Summary         *Modul6Summary         `bson:"modul6_summary,omitempty" json:"modul6_summary,omitempty"`
+	FrameworkSelection    *FrameworkSelection    `bson:"framework_selection,omitempty" json:"framework_selection,omitempty"`
+	ExtractionLog         *ExtractionLog         `bson:"extraction_log,omitempty" json:"extraction_log,omitempty"`
+	QAThreshold           *QAThresholdJustification `bson:"qa_threshold_justification,omitempty" json:"qa_threshold_justification,omitempty"`
+	SensitivityAnalysis   *SensitivityAnalysis   `bson:"sensitivity_analysis,omitempty" json:"sensitivity_analysis,omitempty"`
+	SynthesisPrep         *SynthesisPrep         `bson:"synthesis_prep,omitempty" json:"synthesis_prep,omitempty"`
+	Modul7Summary         *Modul7Summary         `bson:"modul7_summary,omitempty" json:"modul7_summary,omitempty"`
 	InclusionCriteria     []string               `bson:"inclusion_criteria" json:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria" json:"exclusion_criteria"`
 	Status            string            `bson:"status" json:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
@@ -389,6 +395,71 @@ type ExtractionReadiness struct {
 
 // Modul6Summary = OUTPUT 4 Modul 6 L3 (hasil akhir).
 type Modul6Summary struct {
+	Markdown string `bson:"markdown" json:"markdown"`
+}
+
+// ===== Modul 7: Data Extraction + QA =====
+
+type FrameworkColumn struct {
+	Key      string `bson:"key" json:"key"`
+	Category string `bson:"category" json:"category"` // Meta/T/C/Ch/M/Output/QA
+	Desc     string `bson:"desc" json:"desc"`
+}
+
+// FrameworkSelection = output L1 (framework_selection).
+type FrameworkSelection struct {
+	Framework     string            `bson:"framework" json:"framework"` // TCCM / ADO / PICO / CUSTOM
+	Justification string            `bson:"justification" json:"justification"`
+	Columns       []FrameworkColumn `bson:"columns" json:"columns"`
+}
+
+// ExtractionLog = log L2 (progress + verifikasi spot-check).
+type ExtractionLog struct {
+	TotalExtracted   int     `bson:"total_extracted" json:"total_extracted"`
+	VerifiedSample   int     `bson:"verified_sample" json:"verified_sample"`
+	DisagreementRate float64 `bson:"disagreement_rate" json:"disagreement_rate"`
+	AmbiguousCount   int     `bson:"ambiguous_count" json:"ambiguous_count"`
+	NRNote           string  `bson:"nr_note" json:"nr_note"`
+	ExtractionKappa  float64 `bson:"extraction_kappa,omitempty" json:"extraction_kappa,omitempty"`
+}
+
+// QAThresholdJustification = output L3 (tool + threshold 3-lapis + kappa).
+type QAThresholdJustification struct {
+	Tool             string  `bson:"tool" json:"tool"`
+	ToolJustification string `bson:"tool_justification" json:"tool_justification"`
+	Threshold        float64 `bson:"threshold" json:"threshold"`
+	LayerLiterature  string  `bson:"layer_literature" json:"layer_literature"`
+	LayerDeveloper   string  `bson:"layer_developer" json:"layer_developer"`
+	LayerFeasibility string  `bson:"layer_feasibility" json:"layer_feasibility"`
+	Categorization   string  `bson:"categorization" json:"categorization"`
+	Kappa            float64 `bson:"kappa" json:"kappa"`
+}
+
+type SensitivityScenario struct {
+	Name      string `bson:"name" json:"name"`
+	Threshold string `bson:"threshold" json:"threshold"`
+	NIncluded int    `bson:"n_included" json:"n_included"`
+	Findings  string `bson:"findings" json:"findings"`
+}
+
+// SensitivityAnalysis = output L3 fase 4 (sensitivity_analysis).
+type SensitivityAnalysis struct {
+	Scenarios []SensitivityScenario `bson:"scenarios" json:"scenarios"`
+	Verdict   string                `bson:"verdict" json:"verdict"` // ROBUST / CONDITIONALLY ROBUST / SENSITIVE
+	Markdown  string                `bson:"markdown" json:"markdown"`
+}
+
+// SynthesisPrep = output L4 (synthesis_prep, input Modul 8).
+type SynthesisPrep struct {
+	DescriptiveOverview  string `bson:"descriptive_overview" json:"descriptive_overview"`
+	HeterogeneityVerdict string `bson:"heterogeneity_verdict" json:"heterogeneity_verdict"` // LOW/MODERATE/HIGH/VERY HIGH
+	MetaFeasibility      string `bson:"meta_feasibility" json:"meta_feasibility"`           // JALUR A / JALUR B / HYBRID
+	CriteriaCheck        string `bson:"criteria_check" json:"criteria_check"`
+	Groupings            string `bson:"groupings" json:"groupings"`
+	Markdown             string `bson:"markdown" json:"markdown"`
+}
+
+type Modul7Summary struct {
 	Markdown string `bson:"markdown" json:"markdown"`
 }
 
