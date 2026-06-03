@@ -499,6 +499,32 @@ func (r *MongoRepository) GetLLMRoles(ctx context.Context) *model.LLMRoles {
 	return &roles
 }
 
+// GetGitHubConfig mengambil konfigurasi publikasi figur GitHub (default bila absen).
+func (r *MongoRepository) GetGitHubConfig(ctx context.Context) *model.GitHubConfig {
+	var cfg model.GitHubConfig
+	err := r.client.Database(r.dbName).Collection("github_config").
+		FindOne(ctx, bson.M{"_id": "default"}).Decode(&cfg)
+	if err != nil {
+		def := &model.GitHubConfig{}
+		def.Defaults()
+		return def
+	}
+	cfg.Defaults()
+	return &cfg
+}
+
+// UpdateGitHubConfig menyimpan konfigurasi GitHub (upsert, _id="default").
+func (r *MongoRepository) UpdateGitHubConfig(ctx context.Context, cfg *model.GitHubConfig) error {
+	cfg.ID = "default"
+	cfg.Defaults()
+	cfg.UpdatedAt = time.Now()
+	filter := bson.M{"_id": "default"}
+	update := bson.M{"$set": cfg}
+	opts := options.Update().SetUpsert(true)
+	_, err := r.client.Database(r.dbName).Collection("github_config").UpdateOne(ctx, filter, update, opts)
+	return err
+}
+
 // UpdateLLMRoles menyimpan pemetaan peran->provider (upsert, _id="default").
 func (r *MongoRepository) UpdateLLMRoles(ctx context.Context, roles *model.LLMRoles) error {
 	roles.ID = "default"

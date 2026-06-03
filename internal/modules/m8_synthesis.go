@@ -11,6 +11,7 @@ import (
 	"nsa/internal/agent"
 	"nsa/internal/logger"
 	"nsa/internal/model"
+	"nsa/internal/publisher"
 )
 
 type M8Synthesis struct {
@@ -123,6 +124,19 @@ func (m *M8Synthesis) runDescriptiveL1(ctx context.Context, session *model.SLRSe
 		figureFromCounts("fig_geographic", "Distribusi Geografis", geo, false),
 		figureFromCounts("fig_design", "Distribusi Study Design", designs, false),
 		figureFromCounts("fig_quality", "Distribusi Kualitas (GRADE QA)", quality, false),
+	}
+
+	// Publikasi figur ke GitHub Pages bila config aktif (opsional; SVG disimpan di Mongo apa pun).
+	if gh := m.deps.MongoRepo.GetGitHubConfig(ctx); gh.IsReady() {
+		for i := range figs {
+			rel := fmt.Sprintf("%s/%s.svg", session.ID, figs[i].Name)
+			if url, e := publisher.PublishSVG(ctx, gh, rel, figs[i].SVG); e == nil {
+				figs[i].URL = url
+				logger.Logf(session.ID, "   [System] Figur %s dipublikasi: %s\n", figs[i].Name, url)
+			} else {
+				logger.Logf(session.ID, "   [WARN] Publish figur %s gagal: %v\n", figs[i].Name, e)
+			}
+		}
 	}
 
 	// Heterogeneity deep-dive via brain LLM.

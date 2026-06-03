@@ -83,6 +83,31 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+// GetGitHubConfig mengembalikan config GitHub (token DIREDAKSI).
+func (h *LLMHandler) GetGitHubConfig(w http.ResponseWriter, req *http.Request) {
+	cfg := h.mongoRepo.GetGitHubConfig(context.Background())
+	tokenSet := cfg.Token != ""
+	cfg.Token = "" // jangan kirim token ke klien
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"config": cfg, "token_set": tokenSet})
+}
+
+// UpdateGitHubConfig menyimpan config GitHub. Token kosong -> pertahankan yang lama.
+func (h *LLMHandler) UpdateGitHubConfig(w http.ResponseWriter, req *http.Request) {
+	var cfg model.GitHubConfig
+	if err := json.NewDecoder(req.Body).Decode(&cfg); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if cfg.Token == "" {
+		cfg.Token = h.mongoRepo.GetGitHubConfig(context.Background()).Token // preserve
+	}
+	if err := h.mongoRepo.UpdateGitHubConfig(context.Background(), &cfg); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update GitHub config: "+err.Error())
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "GitHub config updated"})
+}
+
 // GetRoles mengembalikan pemetaan peran->provider (Model Routing).
 func (h *LLMHandler) GetRoles(w http.ResponseWriter, req *http.Request) {
 	roles := h.mongoRepo.GetLLMRoles(context.Background())

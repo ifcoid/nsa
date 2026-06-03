@@ -5,6 +5,7 @@ package model
 type Figure struct {
 	Name string `bson:"name" json:"name"`
 	SVG  string `bson:"svg" json:"svg"`
+	URL  string `bson:"url,omitempty" json:"url,omitempty"` // URL GitHub Pages bila dipublikasi
 }
 
 // DescriptiveAnalysis = output L1 (descriptive_analysis + figures + heterogeneity).
