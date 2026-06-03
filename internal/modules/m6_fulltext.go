@@ -80,16 +80,38 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 
 	opDefs := m.operationalDefsContext(session)
 
-	// 3. Bangun indeks RAG full-text dari Qdrant (sekali per batch run).
-	ftIndex, ragAvailable, err := BuildFulltextIndex(ctx)
+	// 3. Bangun indeks RAG full-text dari Qdrant (sekali per batch run), beserta
+	//    vektor dense tiap chunk untuk pemilihan top-k semantik.
+	rag, ragAvailable, err := BuildFulltextRAG(ctx)
 	if err != nil {
 		logger.Logf(session.ID, "   [WARN] Gagal membangun indeks RAG Qdrant: %v. Paper tanpa RAG akan ditandai pending manual.\n", err)
-		ftIndex = map[string]string{}
+		rag = nil
 	}
 	if !ragAvailable {
 		logger.Log(session.ID, "   [WARN] QDRANT_URL/ENDPOINT belum diset. Semua paper akan ditandai pending manual (NO-FULLTEXT-RAG).")
-		ftIndex = map[string]string{}
+		rag = nil
 	}
+
+	// 3b. Embed query screening (PICO/definisi operasional) SEKALI agar tiap paper
+	//     cukup diberi top-k chunk paling relevan (prompt lebih pendek => lebih cepat
+	//     & murah). Jika endpoint embedding tak diset, fallback ke konteks penuh.
+	var qvec []float32
+	if rag != nil {
+		queryText := opDefs
+		if len(queryText) > 2000 {
+			queryText = queryText[:2000]
+		}
+		if v, ok, e := EmbedText(ctx, queryText); e != nil {
+			logger.Logf(session.ID, "   [WARN] Embedding query gagal (%v). Fallback ke konteks full-text penuh.\n", e)
+		} else if ok && len(v) > 0 {
+			qvec = v
+			logger.Logf(session.ID, "   [RAG] Top-k semantik aktif (BGE-M3, dim %d): konteks per paper dipangkas ke chunk paling relevan.\n", len(v))
+		} else {
+			logger.Log(session.ID, "   [RAG] EMBED_ENDPOINT belum diset — pakai konteks full-text penuh (top-k nonaktif).")
+		}
+	}
+	const fulltextTopK = 8
+	const fulltextTopKChars = 8000
 
 	fetchLimit := fulltextBatchSize - len(unevaluated)
 	papers, err := m.deps.MongoRepo.GetUnscreenedFullTextPapers(ctx, session.ID, fetchLimit)
@@ -104,8 +126,12 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		logger.Logf(session.ID, "      -> Full-text [%d/%d] DOI=%s\n", i+1, len(papers), doi)
 
 		fulltext := ""
-		if doi != "" {
-			fulltext = ftIndex[doi]
+		if doi != "" && rag != nil {
+			if len(qvec) > 0 {
+				fulltext = rag.TopK(doi, qvec, fulltextTopK, fulltextTopKChars)
+			} else {
+				fulltext = rag.TopK(doi, nil, 0, maxFulltextChars)
+			}
 		}
 
 		// RAG tidak tersedia -> tandai pending manual (jangan auto-screen tanpa konten).
