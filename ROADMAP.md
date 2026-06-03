@@ -1,8 +1,8 @@
-# Roadmap — Modul SLR yang Belum Diimplementasi
+﻿# Roadmap — Modul SLR yang Belum Diimplementasi
 
 > Dokumen ini memuat **spesifikasi desain** untuk modul/langkah yang **belum ada di kode** (masih stub atau belum dibuat). Dipisahkan dari [AGENT.md](AGENT.md) agar AGENT.md fokus pada alur yang sudah berjalan (Modul 2–5 + Modul 6 Langkah 1).
 >
-> Status saat ini di kode: Modul 6, 7 & 8 **sudah diimplementasi** — lihat [AGENT.md](AGENT.md). Modul 8b & 9 masih *stub* (log + transisi status). (Publish figur ke GitHub Pages: ✅ config-driven via Settings.)
+> Status saat ini di kode: Modul 6, 7, 8 & 8b **sudah diimplementasi** — lihat [AGENT.md](AGENT.md). Hanya Modul 9 (Manuscript) yang masih *stub*. (Publish figur ke GitHub Pages: ✅ config-driven via Settings.)
 >
 > Saat sebuah langkah selesai diimplementasi, pindahkan spesifikasinya kembali ke AGENT.md dan ganti penanda menjadi ✅.
 
@@ -861,7 +861,9 @@ Konfirmasi 2 dokumen tersimpan di database.
 
 ---
 
-## Modul 8b — Bibliometric (SLNA, opsional) — VOSviewer + integration  📝 Planned (stub)
+## Modul 8b — Bibliometric (SLNA, opsional) — VOSviewer + integration  ✅ Implemented
+
+> **Sudah diimplementasi** (L1–L4) — lihat [AGENT.md](AGENT.md). VOSviewer dijalankan manual oleh user (paste hasil). Spec rinci di bawah = referensi desain.
 
 
 BRIEF AWAL CONTEXT:
@@ -1293,20 +1295,803 @@ demi langkah L1-L10.
 
 ### LANGKAH 1: METHODS WRITING (PRISMA 2020 COMPLIANT)
 
+Write the Methods section in academic English to manuscript/methods
+Methods must be PRISMA 2020 compliant and consistent with all artifact files.
+
+Read these files from the working folder:
+- screening (PRISMA flow numbers, inter-reviewer κ for screening)
+- extraction (framework + inter-extractor κ + RoB inter-rater κ)
+- synthesis_results (Jalur A/B + GRADE)
+- pico_definitions (PICO + scope)
+- search_log (search strategy + date stamp + update policy)
+- _provenance_log (internal audit trail — DO NOT surface in
+  manuscript)
+
+Structure (PRISMA 2020 items 5-19):
+
+5. Eligibility criteria — PICO + reason codes
+6. Information sources — DBs + grey lit + date of last search.
+   If a Scopus coverage statistic is needed, use web search to fetch
+   current figure from Elsevier's content coverage page, cite with
+   access date — do NOT recall from training data.
+7. Search strategy — Boolean strings full + filter + update policy
+8. Selection process — GENERATE FRESH (no template paste)
+
+   Write Item 8 in author voice. Cover these points in fresh prose:
+   - Screening conducted at two stages (title/abstract, then
+     full-text) by two independent reviewers (Reviewer 1 and
+     Reviewer 2) applying the same PICO eligibility rubric
+   - Cohen's κ between reviewers reported at each stage — READ
+     actual values from screening.xlsx Sheet "Kappa" (κ_TA, κ_FT);
+     DO NOT INVENT or estimate
+   - Disagreements resolved by author arbitration or third-reviewer
+     adjudication (state which approach used)
+   - Final inclusion decisions are the responsibility of the author(s)
+   - Introduce Figure 1 (PRISMA 2020 flow diagram) here, with brief
+     description of stages (Identification → Screening → Eligibility
+     → Included). Numerical breakdown in Results Item 16.
+
+   DO NOT mention AI, Claude, or any LLM. AI use limited to Section
+   12 (language/readability only).
+
+9. Data collection process — GENERATE FRESH
+
+   - Extraction conducted by two independent extractors (Extractor 1
+     and Extractor 2) using a rigid a priori extraction form
+   - Inter-extractor κ_extract — read from extraction.xlsx Sheet
+     "Kappa"; DO NOT invent
+   - Author reconciled disagreements and validated 100% of extracted
+     rows against source PDFs post-reconciliation
+   - State the extraction framework (TCCM/ADO/PICO from M7 L1)
+   - DO NOT mention AI, Claude, or LLM
+
+10. Data items — variabel framework
+11. Study risk of bias assessment — GENERATE FRESH
+
+   - RoB tool used (state actual tool: RoB 2 / ROBINS-I / NOS / MMAT /
+     AACODS depending on study designs)
+   - Two independent raters (Rater 1 and Rater 2) assessed each study
+   - Inter-rater κ_rob — read from Sheet "Kappa"
+   - Threshold 3-tier (low/some/high) + sensitivity analysis approach
+   - DO NOT mention AI, Claude, or LLM
+
+12. Effect measures — only if Jalur B (effect size type + rationale)
+13. Synthesis methods — Jalur A DEFAULT or B UPGRADE (declare clearly).
+    Cite Higgins/Cochrane Handbook only if specific synthesis approach
+    is invoked (do not name-drop).
+14. Reporting bias assessment — publication bias if Jalur B
+15. Certainty assessment — GRADE per outcome (if applied). Cite GRADE
+    Working Group only if certainty assessment is reported.
+
+GENERAL RULES:
+- Every decision + justification ("We did X because Y" — not just
+  "We did X")
+- All parameters replicable (tool versions, thresholds, formulas)
+- DO NOT mention AI/Claude/LLM in any Methods item; that disclosure
+  is limited to Section 12 (language/readability)
+- DO NOT cite foundational refs (Page 2021, Higgins 2023, RoB 2,
+  GRADE) as a block; cite each only where it supports a specific
+  claim in the prose
+- Numbers (κ values, N records) read from artifact files; do not
+  invent or estimate
+
+Length target: 1200-1800 words.
+Follow global rules L0 Bagian C (especially K Section role boundaries).
+After writing, append to _provenance_log:
+"methods drafted [date], awaiting author per-paragraph review".
+
+
+
 ### LANGKAH 2: RESULTS WRITING (STRUKTUR FRAMEWORK TCCM/ADO)
+
+Tulis Results section ke outputs/manuscript/results
+
+Input: descriptive_analysis + synthesis_results +
+       grade_evidence_table + figures/
+
+Struktur per framework (TCCM/ADO/PICO sesuai M7 L1):
+
+2.1. Evolution of the Research Field (Temporal + Descriptive)
+- Narasi numerik PRISMA 2020 flow per stage (Identification, Screening,
+  Eligibility, Included) + cross-reference ke Figure 1 (yang sudah
+  diperkenalkan di Methods Item 8). Reviewers see numbers here;
+  figure introduced earlier per convention.
+- Publication year + trend
+- Total studies + descriptive stats
+- Geographic distribution JUJUR (sebut dominasi regional jika ada,
+  mis. dari data aktual descriptive_analysis — JANGAN invent
+  percentage)
+
+2.2. Dominant Theories (T — jika TCCM)
+- Teori dominan studi primer (n per teori)
+- Under-utilized theories
+
+2.3. Contexts (C)
+- Geographic / Sectoral / Temporal contexts
+
+2.4. Key Characteristics + Constructs (Ch)
+- Demographic patterns | Variables | Measurement tools heterogeneity
+
+2.5. Methodological Trends (M)
+- Study design distribution | Analytical approaches | Methodological gaps
+
+2.6. Synthesis Results
+- Jalur A: thematic findings dengan consistent + contradictory patterns,
+  indicative effect ranges (per studi)
+- Jalur B: forest plot Figure X, pooled results, subgroup analysis
+- GRADE evidence profile table
+
+ATURAN TAMBAHAN:
+1. TEMPORAL AUDIT: tidak boleh sitasi studi primer publish setelah search
+   date (dari search_log). Flag + hapus jika ada.
+2. CONSISTENT TERMINOLOGY: canonical dari pico_definitions.
+3. FIGURES + TABLES (referensi filename SVG):
+   - Figure 1: flow diagram PRISMA 2020 — **placed in Methods Item 8**
+     (introduces selection process); cross-referenced from Results 2.1
+   - Table 1: Characteristics of Included Studies (Results 2.x)
+   - Table 2: Quality Assessment Summary (Results 2.x atau 2.5)
+   - Figure 2-N: dari outputs/figures/ (descriptive viz)
+   - Forest plot (jika Jalur B)
+   - Table 3: GRADE evidence profile
+4. NON-INTERPRETATION: present OBJECTIVELY, interpretasi → Discussion
+
+GUARDRAILS (lihat Aturan K):
+- DO NOT mention AI, Claude, LLM, Pass 1/2, blind prompt, internal
+  workflow vocabulary di Results (any subsection)
+- DO NOT interpret findings — pure description per RQ; interpretation
+  pindah ke Discussion
+- Numbers (N, %, κ, GRADE confidence) WAJIB konsisten dengan Methods
+  + Abstract (akan diaudit di L10 Phase 1.E)
+- DO NOT reference internal filenames (extraction, qdrantdb, dll)
+- Geographic % dari descriptive_analysis, jangan invent
+
+Length: 2000-3000 kata.
+Ikuti aturan brief Modul 9 Bagian C.
+
+
 
 ### LANGKAH 3: DISCUSSION WRITING (6 SUBSEKSI WAJIB)
 
+Tulis Discussion ke outputs/manuscript/discussion.
+
+Input: results (untuk avoid repetisi) + interpretation_package +
+       grade_evidence_table + prior_reviews_matrix (M2)
+
+Struktur 6 subseksi WAJIB:
+
+3.1. Summary of Findings (2-3 paragraf)
+- Jawab RQ primary + secondary ringkas
+- BUKAN repetisi Results — sintesis high-level dengan interpretasi
+
+3.2. Geographic and Contextual Honesty (1-2 paragraf — DI AWAL Discussion)
+- Acknowledge geographic bias JIKA ADA, dengan angka aktual dari
+  descriptive_analysis (jangan invent percentage)
+- Cover (in author voice, not boilerplate paste):
+  · Actual dominant region + percentage
+  · Structural explanation (research infrastructure, funding patterns,
+    cultural focus) — write specific to topic, not generic
+  · Implication for interpretation of subsequent findings
+- Reframe overclaim: jika data regional, framing harus "X context"
+  bukan "global". Specific framing depend on topic and region (do NOT
+  paste a canned reframe).
+
+3.3. Dialog with Existing Theory (2-3 paragraf)
+- Findings yang MENDUKUNG / MENANTANG / MEMPERLUAS teori existing
+  — sebut teori spesifik dengan citation ke primary studies yang
+  mendukung argumen
+- Teori UNDER-UTILIZED meski relevan untuk topik
+- Kontribusi teoretis spesifik: apa yang baru? (write topic-specific,
+  not generic)
+
+3.4. Heterogeneity Analysis (2 paragraf)
+- Mengapa effect size/findings bervariasi? (mis. "d = 0.3-0.9" — varian dari?)
+- Studi kontradiktif: mengapa?
+- Moderator teridentifikasi (context/design/population)
+
+3.5. Comparison with Prior Reviews (1-2 paragraf)
+- Bandingkan dengan matriks prior reviews (outputs/prior_reviews_matrix.md M2)
+- Apa KONSISTEN? Apa BERBEDA? Kontribusi novelty riset ini
+
+3.6. Limitations (3-tier dengan mitigasi per limitasi)
+
+TIER 1 — REVIEW-LEVEL:
+- Database coverage (Scopus-only?) | Geographic bias | Bahasa filter |
+  Timeframe | PICO consistency caveats
+
+TIER 2 — STUDY-LEVEL:
+- Quality distribution | Measurement heterogeneity | Inaccessible ([N], [%])
+
+TIER 3 — SYNTHESIS-LEVEL:
+- Jalur A: subjectivity thematic coding
+- Jalur B: publication bias residual, subgroup power
+- Framework selection subjectivity
+
+ATURAN: tiap limitasi + 1 kalimat mitigasi atau implikasi generalisasi.
+
+ATURAN TAMBAHAN:
+1. TIDAK BOLEH REPETISI RESULTS: kutip angka → sertakan interpretasi
+   baru (sintesis high-level, dialog dengan teori, atau dialog dengan
+   prior reviews)
+2. KUTIPAN PRIOR REVIEWS wajib eksplisit di subseksi 3.5.
+3. CANONICAL TERMINOLOGY konsisten.
+4. HEDGING: GRADE LOW confidence → "evidence suggests" bukan "results prove".
+
+GUARDRAILS (lihat Aturan K):
+- DO NOT mention AI/Claude/LLM/Pass 1-2/internal workflow vocabulary
+- DO NOT repeat Intro 5.2 prior reviews framing — Discussion 3.5 =
+  "how findings dialogue" (post-findings), bukan ulang summary
+- DO NOT introduce new data — semua angka harus muncul di Results
+- DO NOT use Indonesian calque ("It is known that", "Many studies have")
+- Triple-track implications detail di Discussion; Conclusions tetap
+  ringkas (akan diaudit Phase 1.A)
+- DO NOT use template paragraph paste — write topic-specific paragraphs
+
+Length: 2000-2800 kata.
+Ikuti aturan brief Modul 9 Bagian C.
+
+
 ### LANGKAH 4: FUTURE RESEARCH AGENDA (SUBSEKSI KHUSUS)
+
+Tulis ke manuscript/future_research sebagai subseksi tersendiri
+setelah Discussion.
+
+Input: interpretation_package (gaps + future research items dari M8 L4) +
+       prior_reviews_matrix (gaps yang prior reviews sebut)
+
+Struktur:
+
+4.1. Pendahuluan Agenda (1 paragraf) — justify agenda kritis, turunan findings
+
+4.2. Matriks Prioritas (tabel):
+| Priority | Timeframe | Rationale (linked to gap) | Research Question | Suggested Methodology |
+| HIGH | 1-2 yr | [gap konkret] | [RQ spesifik] | [survey/qual/SLR] |
+| MEDIUM | 2-3 yr + infrastruktur | [...] | [...] | [...] |
+| LONG-TERM | 3+ yr | [...] | [...] | [...] |
+
+Aturan:
+- Setiap agenda HARUS trace ke gap konkret di Discussion
+- Formulasikan sebagai RESEARCH QUESTION spesifik
+  ❌ "Future research on emerging markets"
+  ✓ "How does [construct X] operate in non-Southeast-Asian Muslim economies
+     (Middle East, Africa) compared to observed Indonesia-Malaysia patterns?"
+- Minimum: 3 HIGH + 2-3 MEDIUM + 1-2 LONG-TERM
+- Suggested methodology eksplisit
+
+4.3. Prioritization Rationale (2-3 paragraf)
+- HIGH: mengapa addressable sekarang, data/infra tersedia, impact
+- LONG-TERM: mengapa tidak bisa sekarang, apa yang perlu berkembang dulu
+
+4.4. Methodological Advancements Needed (1-2 paragraf)
+- Gap metodologis dari findings
+- Rekomendasi: dataset baru, framework baru, measurement tools baru
+
+Length: 800-1200 kata.
+Ikuti aturan Modul 9 L0 Bagian C. JANGAN "more research needed" — selalu spesifik.
+
+GUARDRAILS (lihat Aturan K):
+- Gap statements DI SINI = actionable (RQ + methodology); BEDA dari
+  Discussion 3.6 limitations (current scope) — Aturan K.2
+- DO NOT mention AI/Claude/internal workflow
+- DO NOT use generic "more research needed" framing
+
 
 ### LANGKAH 5: INTRODUCTION WRITING (5 SUBSEKSI WAJIB)
 
+Tulis ke manuscript/introduction.
+
+Input: pico_definitions + scope_justification +
+       prior_reviews_matrix + research_questions (semua dari M2) +
+       manuscript/results (untuk preview tune)
+
+Struktur 5 subseksi WAJIB:
+
+5.1. Background (2-3 paragraf)
+- Field overview + importance
+- Current state of knowledge (high-level + foundational works)
+- Why this field matters now (SDGs, post-COVID, policy)
+
+5.2. Review of Prior Reviews (SUBSEKSI TERSENDIRI — KRITIS)
+- 3-5 prior reviews terdekat (dari outputs/prior_reviews_matrix.md M2)
+- Per review: scope, methodology, key findings, limitations
+- Paragraf "Sintesis Novelty": apa SUDAH dilakukan kolektif, apa BELUM,
+  mengapa riset ini MENUTUP gap
+
+Length: 400-600 kata.
+
+5.3. Problem Statement dengan Tipe Gap (1-2 paragraf) — GENERATE FRESH
+
+Articulate WHY a systematic review addresses the gap for THIS specific
+topic. Use the gap type (A/B/C dari gap_characterization M2)
+as a CONCEPTUAL FRAMING, NOT a script:
+
+- TYPE A (fragmentation): explain HOW literature is fragmented in
+  this specific field, why no prior review has integrated it, what
+  systematic synthesis will reveal
+- TYPE B (conflicting findings): explain WHAT specific contradictions
+  exist among primary studies on this construct, why these matter,
+  what systematic synthesis can reconcile
+- TYPE C (no integrative framework): explain WHAT theoretical
+  fragmentation exists for the author's specific concepts, why
+  integration matters, what framework synthesis contributes
+
+Write in author voice specific to the topic; do NOT paste a template
+sentence. Cite Page et al. (2021) or Cochrane Handbook only if the
+methodology framing explicitly relies on PRISMA 2020 here.
+
+5.4. Scope Justification (1-2 paragraf) — pull from 
+scope_justification M2, integrate dalam author voice, do NOT
+paste verbatim.
+
+5.5. Research Questions + Objectives (1 paragraf)
+- Primary RQ + 3 secondary (from research_questions M2)
+- Brief preview objektif (tanpa spoil findings)
+- Include sentence locating review within PRISMA 2020 reporting and
+  Cochrane methodology — integrated dengan author's specific
+  objectives, NOT canned declaration. A reviewer should not detect
+  training-template origin from section 5.5 alone.
+
+ATURAN:
+- JANGAN repetisi Discussion/Conclusion (akan diaudit L10)
+- Canonical terminology konsisten
+- Jangan klaim "global" jika regional (disclose di 5.4)
+- Preview framework (TCCM/ADO/PICO) yang diadopsi
+
+GUARDRAILS (lihat Aturan K):
+- 5.2 Prior reviews = "what mapped + gap remains" (forward-looking);
+  Discussion 3.5 nanti = "how findings dialogue" (backward-looking).
+  DO NOT preview findings di Intro 5.2.
+- DO NOT mention AI/Claude/LLM/internal workflow
+- DO NOT use Indonesian calque ("It is known that", "Many studies have")
+- DO NOT preview specific N or κ — those belong in Results
+
+Length: 1000-1500 kata.
+Ikuti aturan brief Modul 9 Bagian C.
+
+
 ### LANGKAH 6: CONCLUSIONS WRITING (LEAN)
+
+Tulis ke manuscript/conclusions (3-4 paragraf, 400-600 kata).
+
+Input: manuscript/discussion + future_research + interpretation_package
+
+Paragraf 1 — Main Conclusions:
+- Direct answer ke primary RQ
+- Key evidence (brief, tidak repetisi Results)
+
+Paragraf 2 — Theoretical Contributions:
+- Apa yang riset ini tambahkan ke teori existing?
+- Framework TCCM/ADO insight
+- Hedging tepat per GRADE
+
+Paragraf 3 — Practical Implications:
+- Implikasi kebijakan/praktisi/policymaker
+- Tetap grounded di evidence
+
+Paragraf 4 (OPTIONAL) — Brief Forward Look:
+- 1-2 kalimat → arahkan ke Future Research Agenda subseksi
+- JANGAN detail future research (sudah di L4)
+
+ATURAN:
+- JANGAN repetisi Discussion substansial
+- Canonical terminology konsisten
+- Geographic honesty: jangan overclaim jika bias disclosed di Discussion
+
+GUARDRAILS (lihat Aturan K):
+- LEAN — Conclusions BUKAN expanded Discussion (Aturan K.4)
+- DO NOT introduce new arguments or data
+- DO NOT repeat Discussion sentences verbatim (audit Phase 1.A)
+- DO NOT mention AI/Claude/internal workflow
+
+Ikuti aturan brief Modul 9 Bagian C.
 
 ### LANGKAH 7: REFERENCES (FORMAT + VERIFY + TEMPORAL AUDIT + JOURNAL TIER)
 
+⚠️ PERINGATAN: Tahap paling rawan hallucination. JANGAN minta cowork generate
+referensi dari nol. Hanya format, verify, audit yang SUDAH ADA. Sebenernya solusi tercepat ambil bibtex ga sih dari crossref?
+
+Tulis ke manuscript/references
+
+Input: scan semua file di outputs/manuscript/ untuk in-text citations.
+
+Target style: [APA 7th / Vancouver / Harvard / sesuai jurnal target]
+
+Eksekusi 4 fase:
+
+=== FASE 1: FORMAT REFERENCE LIST ===
+- Format sesuai style
+- Ensure completeness (author, year, title, journal, vol, pages, DOI)
+- Sort alfabetis atau urutan kemunculan
+
+=== FASE 2: WEB VERIFICATION (Scopus api,crossref api,WAJIB) ===
+Per referensi, web search verifikasi:
+- Author, Year, Title, Journal, Volume, Pages, DOI
+- Status: ✅ VERIFIED / ⚠️ PARTIAL / ❌ NOT FOUND
+Tabel hasil. NOT FOUND → peserta cek manual.
+
+=== FASE 3: TEMPORAL AUDIT vs SEARCH DATE (dari search_log) ===
+- BEFORE search date: OK (studi primer atau context)
+- AFTER search date:
+  · Context citation (Intro/Discussion): OK + flag
+  · Studi primer: INKONSISTEN — hapus atau justify update-search
+
+Flag referensi "publish setelah search date + di-include sebagai studi primer":
+hapus atau justify (Modul 3 L4 update policy).
+
+=== FASE 4: AUDIT FOUNDATIONAL WORKS + JOURNAL TIER ===
+
+Web search:
+1. Foundational works di bidang [topic] — sudah di-cite?
+   (mis. entrepreneurship: Shane & Venkataraman 2000, Gartner 1988)
+2. Distribusi journal tier — dominasi niche atau ada top-tier?
+   (mis. JBV, ETP, Research Policy, Small Business Economics)
+
+Rekomendasi: foundational absent → wajib tambah; dominasi niche → tambah
+2-3 sitasi top-journal (relevan, bukan namedropping). Semua addition WAJIB
+lolos verifikasi Fase 2 + temporal audit Fase 3.
+
+In-text citation orphan check: in-text tanpa entry → flag untuk peserta resolve.
+
+
+
 ### LANGKAH 8: ABSTRACT WRITING (250-300 KATA)
+
+Tulis ke manuscript/abstract.
+
+Input: methods + results + discussion + interpretation_package
+       (top-3 future research priorities)
+
+Struktur 4 bagian:
+
+Background & Objective (2-3 kalimat):
+- Problem + rationale + objective + tipe gap
+- Eksplisit "systematic review"
+
+Methods (3-4 sentences) — cover these elements in author voice (NOT
+canned sentences):
+- Systematic review framing (PRISMA 2020 + Cochrane methodology
+  jika genuinely framed that way; do NOT paste canned phrase)
+- Search: databases + date range + date of search
+- Framework: TCCM/ADO/PICO eksplisit
+- Synthesis path: narrative thematic / meta-analysis (Jalur A/B)
+- Final N included
+
+Results (4-5 sentences):
+- Actual N studies + participants (if applicable)
+- 2-3 key findings utama (descriptive, hedged per GRADE)
+- Geographic coverage JUJUR (state actual % from data, not invented)
+- GRADE confidence ringkas
+
+Conclusions (2-3 sentences):
+- Main conclusions
+- Top 1-3 future research priorities (pull from interpretation_package.md)
+
+ELEMENTS TO ENSURE PRESENT (CONTENT requirements, not text-to-paste):
+- Framework (TCCM/ADO/PICO) referenced
+- Methodology framing (PRISMA 2020) integrated
+- N final studies
+- Geographic coverage honestly described
+- Key findings + priorities present
+
+ANTI-OVERCLAIMING:
+- Hedging per GRADE
+- Geographic framing must match data (regional jika regional, no
+  "global" overclaim)
+- NO JARGON (abstract dibaca non-specialist dulu)
+
+ANTI-HALLUCINATION: All numbers (N, %, κ) from artifact files. Abstract
+should not read as generated from template.
+
+GUARDRAILS (lihat Aturan K):
+- Numbers (N, %, GRADE) WAJIB konsisten dengan Methods + Results
+  (Phase 1.E audit)
+- DO NOT mention AI/Claude/LLM di Abstract
+- Geographic scope = konsisten dengan Title + Methods + Discussion
+  (Phase 1.J audit)
+- DO NOT use Indonesian calque opener
+
+Ikuti aturan brief Modul 9 Bagian C.
+
 
 ### LANGKAH 9: TITLE CREATION (3-5 ALTERNATIF)
 
+Tulis ke manuscript/title.
+
+Input: abstract + framework + synthesis path + geographic coverage + key findings.
+
+Title criteria:
+1. DESCRIPTIVE — jelas topik + approach
+2. SPECIFIC — include key components
+3. METHODOLOGY EKSPLISIT — WAJIB cantumkan "systematic review" / "systematic
+   literature review" (PRISMA 2020 reporting standard)
+4. CONCISE — 12-18 kata (SLNA), 10-14 kata (SLR biasa)
+5. SEARCHABLE — keywords untuk discoverability
+6. GEOGRAPHIC HONESTY:
+   - JANGAN klaim "global" jika dominasi regional
+   - Alternatif framing:
+     * "Southeast Asian context with global implications"
+     * "Lessons from Indonesia-Malaysia for emerging Muslim economies"
+     * "Evidence from [region]: [topic]"
+
+Anti-overclaiming checklist per candidate:
+[ ] "Systematic review" eksplisit?
+[ ] Geographic scope jujur?
+[ ] Tidak overclaim novelty?
+[ ] Approach (SLR/SLNA) eksplisit?
+[ ] Framework tidak misrepresent?
+
+Format alternatif:
+- "[Topic]: A Systematic Literature Review"
+- "[Topic]: A Systematic Literature Network Analysis" (jika SLNA)
+- "Toward an Integrated Framework of [topic]: [approach]"
+- "[Region-qualified topic]: [approach]"
+
+OUTPUT: 3-5 alternatif. Per alternatif:
+- Title candidate | Word count | Keywords | Geographic honesty PASS/FAIL |
+  Rationale 2-3 kalimat | Appeal audience
+
+Di akhir: REKOMENDASI title terbaik + justifikasi.
+Ikuti aturan Modul 9 L0 Bagian C.
+
+GUARDRAILS (lihat Aturan K):
+- Title geographic claim WAJIB konsisten dengan Abstract Results,
+  Methods eligibility, Discussion 3.2 Geographic Honesty (Phase 1.J)
+- DO NOT klaim "global" jika data dominant regional
+- DO NOT include AI platform names ("AI-assisted", "Claude-powered")
+  di Title
+- Title harus standalone — reader tidak boleh detect training-template
+  origin dari Title saja
+
+
 ### LANGKAH 10: AUDIT + COMPILE FINAL + HASIL AKHIR
+
+
+Eksekusi 5 fase otomatis dalam single sesi cowork.
+
+=== FASE 1: COHERENCE AUDIT ===
+Tulis ke outputs/coherence_audit (daftar issue + saran replacement).
+Audit ini WAJIB lengkap — setiap subcheck harus dilaporkan PASS atau
+list issue spesifik.
+
+A. AUDIT REPETISI (Intro ↔ Discussion ↔ Conclusion):
+- Identifikasi kalimat/frasa nyaris identik di ≥2 bagian
+- Khusus: prior reviews matrix (Intro 5.2 vs Discussion 3.5) dibedakan
+  framing (Aturan K.1)
+- Khusus: gap content (Discussion 3.6 vs Future Research 4.x) tidak
+  repetitif (Aturan K.2)
+- Khusus: implications (Discussion 3 vs Conclusions paragraf 3) tidak
+  paragraf identik (Aturan K.4)
+- Saran rewrite per bagian
+
+B. AUDIT TERMINOLOGI (canonical dari outputs/pico_definitions.md):
+- Konsistensi term kanonikal end-to-end
+- Cek SLR-style: "systematic review", "extraction", "synthesis"/"meta-analysis"
+  sesuai jalur, "PICO"
+- Cek tidak ada SLR-vs-ScR mix-up: "scoping review", "charting", "PCC"
+
+C. AUDIT BAHASA SESUAI JALUR:
+JALUR A: tidak ada "pooled effect", "d = X across studies", "overall effect"
+JALUR B: tidak ada vote counting tanpa kualifikasi
+
+D. AUDIT AI-MENTION LEAK (Jalur A — di luar Section 12):
+Scan SEMUA section (Title, Abstract, Intro, Methods, Results, Discussion,
+Future Research, Conclusions, References) untuk keyword berikut. Setiap
+match = issue KECUALI di Section 12:
+- "AI", "artificial intelligence", "LLM", "large language model"
+- "Claude", "Anthropic", "ChatGPT", "GPT"
+- "Pass 1", "Pass 2", "blind prompt", "AI pass", "Claude session"
+- "AI-assisted screening", "AI-assisted extraction"
+- "inter-pass agreement" → seharusnya "inter-reviewer/extractor/rater
+  agreement"
+Saran: rewrite untuk reframe sebagai Reviewer/Extractor/Rater generik.
+
+E. AUDIT NUMERICAL CONSISTENCY (across sections):
+Baca artifact files (screening.xlsx, extraction.xlsx Sheet "Kappa" +
+"Summary"). Untuk setiap angka kritis berikut, cek MUNCUL KONSISTEN di
+Methods + Results + Abstract:
+- Total N records identified
+- N records screened (T/A) + N excluded
+- N reports assessed (full-text) + N excluded with reasons
+- N final included
+- κ_TA, κ_FT, κ_extract, κ_rob
+- Geographic distribution %
+- GRADE per outcome (jika applicable)
+- Forest plot pooled estimate (Jalur B)
+Setiap inkonsistensi numerik = critical issue. Flag + tunjukkan source
+angka yang benar.
+
+F. AUDIT INTERNAL VOCABULARY / PROVENANCE LEAK:
+Scan untuk content yang seharusnya internal:
+- References ke "outputs/", "Sheet \"X\"", "screening.xlsx",
+  "extraction.xlsx", filenames internal
+- "_provenance_log.md" content (drafted dates, session IDs)
+- "modul 2 L5", "Modul 4", references ke training modul
+- "draft v1", "iteration 3", "pilot batch"
+Manuscript HARUS standalone.
+
+G. AUDIT TRAINING-WORKFLOW VOICE:
+Scan untuk hint manuscript dari training:
+- "as per the training", "modul ini", "the workflow document"
+- "outputs/manuscript folder", "the cowork session"
+- "Workflow Modul 2-8", "follow Modul 9 structure"
+Replace dengan author-voice standalone academic prose.
+
+H. AUDIT INDONESIAN CALQUE (English manuscript only):
+Scan untuk pattern terjemahan Indonesia → English yang awkward:
+- "It is known that...", "It can be concluded...", "It seems that..."
+- "Many studies have..." sebagai opener generic
+- "On the other hand" overused
+- "Furthermore" / "Moreover" stacked sebagai filler
+- Sentence dengan struktur S-O-V dalam English
+Suggest revisi ke native academic English.
+
+I. AUDIT GEOGRAPHIC CLAIM CONSISTENCY:
+Pull geographic scope claims dari:
+- Title (geographic qualifier jika ada)
+- Abstract Results (geographic coverage statement)
+- Introduction 5.4 (scope justification geographic)
+- Methods Item 5 (eligibility geographic)
+- Discussion 3.2 (geographic honesty)
+- Limitations 3.6 (geographic constraint jika ada)
+Verify CONSISTENCY. Setiap divergensi = issue.
+
+J. AUDIT GRADE/RoB CONSISTENCY:
+Setiap claim hedge wording WAJIB sesuai dengan GRADE certainty per
+outcome dari grade_evidence_table.md:
+- HIGH certainty → strong language acceptable
+- MODERATE → "likely", "probably"
+- LOW → "may", "suggests"
+- VERY LOW → "tentative", "uncertain"
+Setiap mismatch hedge ↔ GRADE = issue.
+
+=== FASE 2: PRISMA 2020 27-ITEM COMPLIANCE CHECK ===
+Tulis ke outputs/prisma_2020_checklist (akan jadi supplementary material).
+
+Format tabel: | # | Item | Section/Paragraf | Status (✓/⚠/✗) |
+
+- Item 1 (Title) — title.md
+- Item 2 (Abstract) — abstract.md
+- Item 3-4 (Intro: rationale, objectives) — introduction.md
+- Item 5-19 (Methods) — methods.md
+- Item 20-22 (Results: study selection, characteristics, RoB, individual
+  results, syntheses) — results.md
+- Item 23-25 (Discussion: discussion, limitations, conclusions) — discussion.md
+  + conclusions.md
+- Item 26-27 (Other: registration, support, COI, data availability) —
+  tambahkan section di compile
+
+Status: ✓ COVERED / ⚠ PARTIAL / ✗ MISSING. Untuk MISSING/PARTIAL: rekomendasi fix.
+
+Item 24a-c (Limitations, Discussion implications): wajib mencakup study-level,
+review-level, missing data.
+
+=== FASE 3: COMPILE dokumen MASTER ===
+Compile semua section dari outputs/manuscript/ ke outputs/manuscript_final.
+
+Urutan 16 section:
+1. Title
+2. Abstract
+3. Keywords (3-5, generate dari abstract)
+4. Introduction
+5. Methods
+6. Results
+7. Discussion
+8. Future Research Agenda
+9. Conclusions
+10. Funding [placeholder peserta]
+11. Conflict of Interest [placeholder]
+12. AI Assistance Declaration — LIMITED to language/readability
+
+    Write a brief section (2-4 sentences, author voice, fresh prose)
+    titled "AI Assistance Declaration" stating ONLY:
+    - AI tools were used to assist with language refinement, grammar
+      checking, and readability improvements of the manuscript
+    - AI was NOT used for analytic decisions, screening, extraction,
+      RoB rating, synthesis, or any aspect of evidence synthesis
+      methodology
+    - All scholarly content, methodological decisions, and final
+      wording are the responsibility of the author(s)
+
+    DO NOT:
+    - Mention AI involvement in screening, extraction, RoB rating
+      (those framed as Reviewer/Extractor/Rater in Methods)
+    - List specific Claude version or session IDs
+    - Provide per-stage AI workflow table
+    - Cite ICMJE or COPE guidelines (not applicable when limited to
+      language)
+    - Surface outputs/_provenance_log.md as supplementary material
+
+    Generate fresh wording in author voice. Length: ~50-100 words.
+13. References
+14. Figure Captions (filename SVG dari outputs/figures/)
+15. Tables (dari results)
+16. Supplementary list:
+    - prisma_2020_checklist
+    - extraction (full data, anonymized)
+    - screening
+    - protocol PROSPERO [URL]
+
+Pastikan: smooth transitions, heading hierarchy konsisten (# section, ##
+subseksi), figure/table callouts ke SVG filename, canonical terminology.
+
+=== FASE 4: COMPILE .tex (SUBMISSION-READY) ===
+Convert outputs/manuscript_final → outputs/manuscript_final.tex.
+
+OPSI A — Pandoc (recommended atau ada tool golang lebih gampang):
+  pandoc outputs/manuscript_final -o outputs/manuscript_final.tex \
+    --reference-doc=[template jurnal jika ada] \
+    --citeproc --bibliography=outputs/manuscript/references.bib
+
+OPSI B — Python python-docx (jika Pandoc tidak ada atau ada saran):
+  Generate convert_to_docx.py: parse heading hierarchy → Word styles,
+  tables, figure placeholders.
+
+OPSI C — Manual fallback: instruksi install Pandoc + run command.
+
+Formatting: Times New Roman 12pt, double-spaced, margin 1", heading styles
+built-in, references hanging indent 0.5", page numbers, line numbers continuous.
+
+Catatan SVG: Word tidak embed SVG native — pakai PNG version dari
+outputs/figures/ untuk insert (atau convert SVG→PNG/EMF dulu).
+
+=== FASE 5: PRE-SUBMISSION CHECKLIST + HASIL AKHIR ===
+Tulis ke outputs/modul9_summary.md (HASIL AKHIR + checklist):
+
+=== MANUSCRIPT WRITING COMPLETE (SLR) ===
+
+PER-SECTION Documents (outputs/manuscript/):
+- methods, results, discussion, future_research, introduction, conclusions,
+  references, abstract, title 
+
+FINAL DELIVERABLES:
+- manuscript_final (master compile)
+- manuscript_final.tex (submission-ready)
+- reference.bib
+- prisma_2020_checklist (supplementary 27-item)
+- coherence_audit (audit log)
+- modul9_summary (file ini)
+
+PRE-SUBMISSION CHECKLIST:
+[ ] manuscript_final.tex generated
+[ ] Word count total + abstract sesuai jurnal
+[ ] Reference style sesuai jurnal
+[ ] Figures (SVG submission, PNG preview): N files
+[ ] Tables embedded di tex
+[ ] Funding diisi (BUKAN placeholder)
+[ ] Conflict of Interest diisi
+[ ] AI Assistance Declaration ada
+[ ] Author info + affiliations + ORCID
+[ ] Cover letter (terpisah, dibuat sendiri)
+[ ] PRISMA 2020 checklist (supplementary)
+[ ] PROSPERO URL disclosed
+[ ] extraction + screening siap supplementary (anonymized)
+[ ] Ethical statement (jika applicable)
+
+REVIEWER-PROOF ELEMENTS (SLR-specific):
+- "Systematic review" eksplisit di Title, Abstract, Methods
+- PICO framework end-to-end
+- PRISMA 2020 flow diagram (Figure 1) — **placed in Methods Item 8**;
+  numerical breakdown in Results
+- Reviewer 1/2 + κ_TA, κ_FT inter-reviewer agreement (Methods Item 8)
+- Extractor 1/2 + κ_extract inter-extractor agreement (Methods Item 9)
+- Rater 1/2 + κ_rob inter-rater agreement (Methods Item 11)
+- QA threshold 3-lapis + sensitivity analysis
+- Synthesis path tegas (Jalur A atau B), tidak dicampur
+- GRADE evidence per outcome
+- Triple-track implications (research/practice/policy)
+- Future Research Agenda matriks prioritas
+- Geographic honesty (Title, Abstract, Discussion) — konsisten
+  cross-section
+- Foundational refs digunakan KONTEKSTUAL (cite hanya yang mendukung
+  argumen spesifik); JANGAN block-cite Page+Higgins+Cochrane sekaligus
+- PROSPERO registration disclosed
+- AI Assistance Declaration LIMITED to language/grammar/readability
+  (Q1-compliant Jalur A framing)
+- TIDAK ADA mention AI/Claude/LLM di Methods Items 5-19
+- _provenance_log.md = INTERNAL audit trail (BUKAN supplementary
+  file manuscript)
+
+NEXT: Submission ke jurnal target. Cover letter terpisah.
+
+Konfirmasi semua deliverables tersimpan + path absolut + langkah manual
+(insert figures Word, isi funding/COI, write cover letter).
+No preamble.
