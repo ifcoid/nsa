@@ -367,7 +367,7 @@ func (m *M6Acquisition) buildModul6Outputs(ctx context.Context, session *model.S
 		exTable += fmt.Sprintf("| %s | %d | %.1f%% |\n", code, c, pct)
 	}
 	if len(reasonCounts) == 0 {
-		exTable += "| (tidak ada) | 0 | 0%% |\n"
+		exTable += "| (tidak ada) | 0 | 0% |\n"
 	}
 
 	// OUTPUT 4: modul6_summary

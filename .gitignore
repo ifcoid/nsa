@@ -222,3 +222,4 @@ __marimo__/
 # Output/log dump sementara dari skrip debug
 /output*.txt
 /debug.txt
+scratch/*.txt
