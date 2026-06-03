@@ -485,3 +485,27 @@ func (r *MongoRepository) UpdateLLMConfig(ctx context.Context, config *model.LLM
 	_, err := collection.UpdateOne(ctx, filter, update, opts)
 	return err
 }
+
+// GetLLMRoles mengambil pemetaan peran->provider (llm_roles), diisi default bila kosong/absen.
+func (r *MongoRepository) GetLLMRoles(ctx context.Context) *model.LLMRoles {
+	roles := model.DefaultLLMRoles()
+	var stored model.LLMRoles
+	err := r.client.Database(r.dbName).Collection("llm_roles").
+		FindOne(ctx, bson.M{"_id": "default"}).Decode(&stored)
+	if err == nil {
+		stored.FillDefaults()
+		return &stored
+	}
+	return &roles
+}
+
+// UpdateLLMRoles menyimpan pemetaan peran->provider (upsert, _id="default").
+func (r *MongoRepository) UpdateLLMRoles(ctx context.Context, roles *model.LLMRoles) error {
+	roles.ID = "default"
+	roles.FillDefaults()
+	filter := bson.M{"_id": "default"}
+	update := bson.M{"$set": roles}
+	opts := options.Update().SetUpsert(true)
+	_, err := r.client.Database(r.dbName).Collection("llm_roles").UpdateOne(ctx, filter, update, opts)
+	return err
+}

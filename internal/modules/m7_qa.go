@@ -53,13 +53,15 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		if ftIndex == nil {
 			ftIndex = map[string]string{}
 		}
-		r1, err := m.agentWithFallback(ctx, "zhipu", r1FallbackProvider)
+		qp1, qf1 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
+		r1, err := m.agentWithFallback(ctx, qp1, qf1)
 		if err != nil {
-			return fmt.Errorf("QA Rater 1 (zhipu/xiaomi) gagal: %w", err)
+			return fmt.Errorf("QA Rater 1 (%s/%s) gagal: %w", qp1, qf1, err)
 		}
-		r2, err := m.agentWithFallback(ctx, "groq", "xiaomi")
+		qp2, qf2 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer2")
+		r2, err := m.agentWithFallback(ctx, qp2, qf2)
 		if err != nil {
-			return fmt.Errorf("QA Rater 2 (groq/xiaomi) gagal: %w", err)
+			return fmt.Errorf("QA Rater 2 (%s/%s) gagal: %w", qp2, qf2, err)
 		}
 		tool := session.QAThreshold.Tool
 		cat := session.QAThreshold.Categorization

@@ -94,6 +94,8 @@ func (r *Router) registerRoutes() {
 	// LLM config endpoints
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
 	protected.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
+	protected.HandleFunc("GET /api/llm/roles", r.llmHndlr.GetRoles)
+	protected.HandleFunc("PUT /api/llm/roles", r.llmHndlr.UpdateRoles)
 	
 	// Apply Auth Middleware to all protected routes
 	r.mux.Handle("/api/sessions", middleware.AuthMiddleware(protected))

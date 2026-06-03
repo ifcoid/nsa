@@ -160,6 +160,18 @@ Konfirmasi 4 dokumen di database tersimpan.
 
 > **Sudah diimplementasi penuh** (L1–L4) — dokumentasi ringkas + alur status di [AGENT.md](AGENT.md). Spesifikasi rinci di bawah dipertahankan sebagai referensi desain.
 
+=== BAGIAN B: BRIEF AWAL CONTEXT ===
+
+- Tugas: data extraction (RIGID a priori form) + QA wajib + sensitivity analysis
+- Standar: PRISMA 2020 + Cochrane (Modul 1 Section E)
+- Framework synthesis: TCCM / ADO / PICO-based / Custom (pilih di L1)
+- QA tool: pilih sesuai design dominan (RoB 2 / NOS / CASP / MMAT / AMSTAR 2)
+- AI assist: spot-verification 20%, decision FINAL = human
+- Output per langkah: file di outputs/ + extraction.xlsx
+- Bahasa: Indonesia. Output format: tabel ringkas, no preamble.
+
+Konfirmasi setup + context siap untuk eksekusi L1-L4.
+
 ### LANGKAH 1: FRAMEWORK SELECTION + EXTRACTION TEMPLATE
 
 Berdasarkan pico_definitions + screening breakdown study designs.
@@ -485,6 +497,20 @@ Konfirmasi 2 dokumen tersimpan di database.
 
 ## Modul 8 — Analysis + Synthesis (A/B) → synthesis_results + figures  📝 Planned (stub)
 
+BRIEF AWAL CONTEXT:
+
+- Tugas: descriptive analysis + synthesis (Jalur A or B) + GRADE
+- Standar: PRISMA 2020 + Cochrane (Modul 1 Section E)
+- Synthesis path: DEFAULT Jalur A NARRATIVE; UPGRADE ke Jalur B META hanya
+  jika 5-criteria eligibility lolos (di L2)
+- Visualisasi dual-format: SVG (submission) + PNG (slide/preview, DPI 300)
+- AI assist: descriptive analysis + drafting synthesis text. Statistik
+  meta-analysis di software (R metafor / Stata / RevMan), cowork sebagai
+  advisor + interpreter.
+- Output per langkah: file di outputs/
+- Bahasa: Indonesia. Output format: tabel ringkas, no preamble.
+
+
 ### LANGKAH 1: DESCRIPTIVE ANALYSIS + HETEROGENEITY DEEP-DIVE
 
 Berdasarkan extraction + synthesis_prep.
@@ -544,25 +570,724 @@ Cluster identification: studi yang COMPARABLE → mungkin meta subset (HYBRID).
 
 ### LANGKAH 2: SYNTHESIS PATH DECISION + EXECUTION (JALUR A DEFAULT atau B UPGRADE)
 
+
+Berdasarkan descriptive_analysis (heterogeneity verdict) +
+synthesis_prep (M7 feasibility flag).
+
+=== FASE 1: ELIGIBILITY CHECK + KEPUTUSAN ===
+
+DEFAULT: JALUR A NARRATIVE/THEMATIC SYNTHESIS.
+UPGRADE ke JALUR B META-ANALYSIS hanya jika SEMUA 5 syarat lolos:
+
+[ ] Heterogeneity verdict (L1) = LOW atau MODERATE
+[ ] ≥3 studi outcome COMPARABLE (same construct, same measurement)
+[ ] Effect size data tersedia + dapat di-ekstrak konsisten
+[ ] Studi design sebanding (semua RCT, atau cross-sectional similar)
+[ ] Operational def outcomes ≥80% similar across studies
+
+Jika SEMUA 5 YES → UPGRADE Jalur B (proceed FASE 3)
+Jika ada NO → STAY Jalur A (proceed FASE 2)
+
+Tulis verdict ke synthesis_path_decision:
+"Verdict: [JALUR A / JALUR B / HYBRID]
+Per-syarat: [check mark per syarat]
+Rationale: [3-4 kalimat untuk Methods]"
+
+⚠️ ATURAN KONSISTENSI:
+- Methods: eksplisit jalur + justifikasi
+- Results: tidak boleh bahasa meta-analitik jika Jalur A
+- Discussion: interpretasi konsisten dengan jalur
+- Abstract: sebut jalur eksplisit
+
+REKOMENDASI KUAT: jika ambigu → pilih Jalur A. Reviewer tidak akan menolak
+narrative well-executed; meta dipaksakan = tolak.
+
+=== FASE 2: JALUR A EXECUTION (DEFAULT NARRATIVE/THEMATIC) ===
+
+(Skip ke FASE 3 jika upgrade Jalur B.)
+
+Tulis ke synthesis_results.
+
+PERINGATAN BAHASA — JALUR A:
+✗ JANGAN: "pooled effect", "d = 0.XX across studies", "overall effect size"
+✓ BOLEH: indicative ranges INDIVIDUAL studies ("d = 0.3 to 0.9")
+✓ BENAR: "synthesis", "thematic pattern", "evidence suggests", "consistent
+  finding across studies"
+
+Per komponen framework (TCCM/ADO/PICO) dari synthesis_prep:
+
+A. THEORY SYNTHESIS (TCCM):
+- Teori dominan? Under-utilized? Konsistensi penerapan?
+- Sintesis: "Studies predominantly drew on [Theory X] (n=...), while [Theory Y]
+  was less represented (n=...). Notable gap: limited application of [Theory Z]
+  despite relevance."
+
+B. CONTEXT SYNTHESIS:
+- Geographic dominance (kritis — bahan Discussion limitasi)
+- Sectoral patterns | Temporal trends
+
+C. CHARACTERISTICS SYNTHESIS:
+- Sample demographics aggregate | Unit of analysis | Variables measured
+
+D. METHODOLOGY SYNTHESIS:
+- Design distribution | Analytical approaches | Methodological sophistication
+
+E. PATTERN IDENTIFICATION (3 jenis):
+1. CONSISTENT FINDINGS:
+   "Across [N] studies, [finding X] consistently observed, effect sizes
+   [Y]–[Z] (indicative range, not pooled)."
+2. CONTRADICTORY FINDINGS:
+   "Evidence regarding [X] mixed. [N1] reported [direction A] (e.g., Smith 2021);
+   [N2] reported [direction B] (e.g., Wang 2023). Divergence may reflect
+   [context/method/population differences]."
+3. EMERGING/UNDER-RESEARCHED → Future Research agenda Modul 9 L4
+
+F. VOTE COUNTING (qualified):
+"Of [N] studies examining [X], [N1] positive, [N2] negative, [N3] no
+significant. We note vote counting does not account for sample size or effect
+magnitude; findings interpreted alongside qualitative synthesis."
+
+G. QUALITY-STRATIFIED SYNTHESIS:
+- HIGH quality findings vs MODERATE vs LOW
+- Sensitivity argument: "Findings dari HIGH selaras dengan keseluruhan →
+  robustness."
+
+H. NARRATIVE INTEGRATION:
+Tulis paragraf sintesis per RQ (primary + 3 secondary). Tiap paragraf:
+- Jawab RQ langsung
+- Grounded di evidence (sitasi)
+- Akui nuansa contexts/populations
+- Tidak overclaim
+
+=== FASE 3: JALUR B EXECUTION (META-ANALYSIS — opsional upgrade) ===
+
+(Skip jika Jalur A.)
+
+Tulis ke synthesis_results.
+
+⚠️ Statistik di software (R metafor / Stata / RevMan), cowork sebagai
+advisor + interpreter. JANGAN minta cowork hitung pooled effect — tidak akurat.
+
+A. MODEL SELECTION:
+- Fixed Effects: studi sangat homogen (replicasi)
+- Random Effects (RE) — DEFAULT untuk SLR lintas-konteks
+  Estimator: DerSimonian-Laird atau REML
+
+B. EFFECT SIZE STANDARDIZATION:
+- Continuous: SMD (Cohen's d / Hedges' g) atau raw mean diff jika tool sama
+- Dichotomous: OR / RR (lebih interpretable) / RD
+- Correlation: Fisher's z transformed → back-transform untuk presentation
+
+C. POOLED EFFECT + 95% CI + 95% PI:
+"Pooled [type] = [X] (95% CI: [Y]–[Z]; 95% PI: [P]–[Q]) from [N] studies
+using random-effects (REML)."
+
+D. HETEROGENEITY STATISTICS:
+- Cochran's Q + p-value
+- I² (0-40 might not be important / 30-60 moderate / 50-90 substantial /
+  75-100 considerable)
+- τ² + Prediction Interval
+
+E. PUBLICATION BIAS (jika ≥10 studi):
+- Funnel plot + Egger's regression test
+- Trim-and-fill jika ada bias
+- <10 studi: funnel boleh, tests tidak powered cukup
+
+F. FOREST PLOT (WAJIB):
+Generate dual-format SVG + PNG ke outputs/figures/fig_forest_plot.*
+Elements: individual effects + CI, overall pooled + CI, weight, heterogeneity stats.
+
+G. SUBGROUP ANALYSIS / META-REGRESSION (jika I² >50%):
+Subgroup by: quality tier, study design, geographic, year, framework moderators.
+Meta-regression untuk continuous moderators.
+
+H. REPORTING (PRISMA 2020 compliant):
+Methods: model + estimator + effect metric + software + heterogeneity approach +
+publication bias + subgroup plan.
+Results: pooled effect + CI + PI + forest plot + heterogeneity + publication bias
++ subgroup + sensitivity.
+
+🚨 TOLAK UPGRADE jika I² >75% atau publication bias berat. Kembali Jalur A,
+dokumentasi keputusan di Methods sebagai transparency.
+
+
 ### LANGKAH 3: GRADE EVIDENCE GRADING + ROBUSTNESS CHECKS
 
+Berdasarkan synthesis_results + sensitivity_analysis
++ extraction row QA_Scores.
+
+Tulis ke grade_evidence_table.
+
+=== TASK 1: GRADE PER OUTCOME ===
+
+Per outcome / RQ, grade evidence confidence dengan 5 GRADE domains:
+1. Study limitations (RoB aggregate)
+2. Inconsistency (I² atau heterogeneity narrative)
+3. Indirectness (PICO alignment — apakah studi jawab RQ langsung?)
+4. Imprecision (CI width Jalur B / small n Jalur A)
+5. Publication bias (funnel Jalur B / database coverage Jalur A)
+
+CONFIDENCE LEVELS:
+- HIGH: semua domain lolos
+- MODERATE: 1 domain meragukan
+- LOW: 2+ domain meragukan
+- VERY LOW: banyak domain concern
+
+Tabel:
+| Outcome | Studies | RoB | Inconsistency | Indirectness | Imprecision | Pub Bias | Overall GRADE |
+
+=== TASK 2: ROBUSTNESS SUMMARY ===
+
+1. Sensitivity analysis (M7 L3.4): findings stable lintas threshold?
+2. Subgroup/stratified: konsisten lintas quality/geographic/design?
+3. Publication bias (Jalur B): trim-and-fill ubah conclusion?
+4. Missing studies (inaccessible M6): impact assessment
+
+VERDICT: ROBUST / CONDITIONALLY ROBUST / NOT ROBUST → Discussion Modul 9.
+
+=== TASK 3: CONFIDENCE STATEMENTS (untuk Discussion) ===
+
+Template Jalur B:
+"We have [HIGH/MOD/LOW] confidence in pooled estimate that [X] based on [N]
+studies with [quality profile]. Reflects [domains support/threaten]."
+
+Template Jalur A:
+"We have [HIGH/MOD/LOW] confidence in thematic finding that [X] based on [N]
+studies. Consistent patterns across [domains]; however [caveats heterogeneity/
+quality/context]."
+
+
 ### LANGKAH 4: INTERPRETATION PREPARATION + HASIL AKHIR (BRIDGE KE MODUL 9)
+
+Berdasarkan semua output L1-L3.
+
+Eksekusi 2 dokumen output:
+
+=== OUTPUT 1: interpretation_package (untuk Modul 9) ===
+
+1. ANSWERS TO RESEARCH QUESTIONS:
+- Primary RQ: [50-100 kata, grounded synthesis + GRADE confidence]
+- Secondary RQ 1-3: format serupa
+
+2. KEY FINDINGS (3-5 headline messages):
+- Finding 1-5: statement grounded
+- Tiap finding: kontribusi baru? dialog teori? implikasi praktik?
+
+3. SURPRISING/UNEXPECTED FINDINGS:
+- Statement + kemungkinan penjelasan + implikasi
+
+4. CONTRADICTIONS WORTH DISCUSSING:
+- Studi X vs Y: penjelasan (contextual/methodological/populasi) + implikasi
+
+5. DIALOG DENGAN TEORI (TCCM emphasis):
+- Teori dominan? Findings KONFIRMASI atau MEMPERLUAS atau MENANTANG?
+- Teori UNDER-UTILIZED?
+
+6. HETEROGENEITY NARRATIVE (untuk Discussion):
+- Geographic bias acknowledgment
+- Methodological/temporal differences
+
+7. GAPS FOR FUTURE RESEARCH AGENDA:
+- 3 HIGH priority + 2 MEDIUM + 1 LONG-TERM
+- Tiap gap: research question (PCC-aligned) + suggested methodology
+- Trace ke evidence specific dari synthesis
+
+8. LIMITATIONS SELF-AUDIT (3-tier):
+- Review-level: database coverage, geographic bias, language, timeframe,
+  PICO consistency
+- Study-level: quality distribution, measurement heterogeneity, missing
+  (inaccessible)
+- Synthesis-level:
+  - Jalur A: subjectivity thematic coding
+  - Jalur B: publication bias residual, subgroup power
+  - Framework selection subjectivity
+
+=== OUTPUT 2: modul8_summary (HASIL AKHIR) ===
+
+=== ANALYSIS + SYNTHESIS PACKAGE (SLR) ===
+
+DESCRIPTIVE ANALYSIS (→ Results Modul 9 L2):
+- Studies: [N] | Designs/Temporal/Geographic breakdown
+- Quality: HIGH [N] / MOD [N] / LOW [N]
+- Framework component breakdown
+
+HETEROGENEITY VERDICT: LOW/MODERATE/HIGH/VERY HIGH
+
+SYNTHESIS PATH: JALUR A NARRATIVE (default) / JALUR B META-ANALYSIS / HYBRID
+- Justifikasi 100-150 kata (Jalur B: 5 syarat checklist; Jalur A: default
+  confirmation)
+
+JALUR A (jika dipakai):
+- Framework-driven synthesis per komponen
+- Consistent + contradictory findings
+- Indicative ranges (jika applicable)
+- Quality-stratified
+
+JALUR B (jika dipakai):
+- Model: [Fixed/Random + estimator]
+- Pooled effect: [value] (95% CI, 95% PI)
+- I² + τ² + Prediction Interval
+- Forest plot di repo github : outputs/figures/fig_forest_plot.svg + .png
+- Publication bias: [assessment]
+- Subgroup analyses: [findings]
+
+GRADE EVIDENCE TABLE (→ Discussion Modul 9 L3):
+| Outcome | GRADE Confidence | di grade_evidence_table
+
+ROBUSTNESS VERDICT: ROBUST / CONDITIONALLY ROBUST / NOT ROBUST
+
+INTERPRETATION PACKAGE (→ Modul 9 L2-L5):
+- Answers to RQs (primary + secondary)
+- 3-5 key findings
+- Surprising findings
+- Contradictions
+- Dialog teori
+- Heterogeneity narrative
+- Gaps untuk Future Research
+- Limitations self-audit
+
+FORWARD ARTIFACTS (→ Modul 9):
+- interpretation_package
+- grade_evidence_table
+- synthesis_results
+- outputs/figures/* (semua dual-format SVG + PNG) pada repo github
+- Geographic bias disclosure (akan jadi Discussion paragraph + Title framing)
+
+NEXT: Manuscript Writing (Modul 9)
+
+Konfirmasi 2 dokumen tersimpan di database.
 
 ---
 
 ## Modul 8b — Bibliometric (SLNA, opsional) — VOSviewer + integration  📝 Planned (stub)
 
+
+BRIEF AWAL CONTEXT:
+
+- Tugas: bibliometric analysis (SLNA — Systematic Literature Network Analysis)
+- Tool: VOSviewer (https://www.vosviewer.com)
+- Standar: Aria & Cuccurullo (2017) bibliometrix; Donthu et al. (2021)
+  bibliometric review guidelines
+- Output: network visualization + cluster interpretation + integration SLR
+- Visualisasi dual-format: SVG (submission) + PNG (slide/preview)
+- AI assist: thesaurus construction + parameter justifikasi + cluster
+  interpretation. VOSviewer execution = peserta manual (cowork tidak run app).
+- Output per langkah: file di outputs/
+- Bahasa: Indonesia. Output format: tabel ringkas, no preamble.
+
 ### LANGKAH 1: DATA PREPARATION + THESAURUS CONSTRUCTION
+
+Berdasarkan raw exports scopus csv (RAW dari M4 — sebelum dedup atau setelah,
+tergantung scope SLNA Anda).
+
+⚠️ Untuk SLNA: gunakan SAMA dataset dengan SLR untuk integrasi koheren.
+
+Eksekusi 3 task:
+
+=== TASK 1: VERIFIKASI DATA ===
+- Total records di dari hasil raw import CSV
+- Fields essential: Authors, Author Keywords, Index Keywords, Cited References,
+  Title, Year, Source title
+- Identify missing fields (akan affect bibliometric metrics)
+
+=== TASK 2: THESAURUS CONSTRUCTION ===
+
+Bibliometric butuh terminologi konsisten — variasi kata sama (mis. "AI",
+"artificial intelligence") harus di-merge.
+
+Generate thesaurus_keywords + thesaurus_authors format VOSviewer:
+[label] [synonym1, synonym2, ...]
+
+Contoh thesaurus_keywords:
+artificial intelligence    AI, A.I., artificial-intelligence
+machine learning           ML, machine-learning
+big data                   big-data, large-scale data
+[dst — auto-generate dari Author Keywords + Index Keywords dari raw import CSV]
+
+Aturan thesaurus:
+- Lowercase semua
+- Replace "-" dengan space (atau sebaliknya, konsisten)
+- Merge plural/singular
+- Hapus stop words ("study", "analysis", "research")
+- Domain-specific synonyms
+
+Letakkan di collection atau document exports
+
+=== TASK 3: DOKUMENTASI ===
+Tulis ke bibliometric_log:
+- Total records analyzed
+- Thesaurus entries generated (jumlah merged terms)
+- Approach: bibliometrix R atau VOSviewer direct?
+- Date executed
+
+
 
 ### LANGKAH 2: VOSVIEWER ANALYSIS + 9-PARAMETER JUSTIFICATION
 
+Eksekusi VOSviewer dengan 9 parameter eksplisit-justifikasi.
+
+Tulis ke vosviewer_parameters (siap-Methods Modul 9):
+
+=== TABEL 9 PARAMETER + JUSTIFIKASI ===
+
+| # | Parameter | Setting | Justifikasi (1-2 kalimat) |
+| 1 | Type of analysis | Co-occurrence / Co-authorship / Citation / Bibliographic coupling | [pilih sesuai RQ] |
+| 2 | Unit of analysis | Author keywords / Index keywords / All keywords / Authors / Documents / Sources | [pilih + alasan] |
+| 3 | Counting method | Full counting / Fractional counting | Full untuk volume, fractional untuk equal contribution |
+| 4 | Min occurrences threshold | [N] | Justifikasi: balance noise vs signal (umumnya 5-10 untuk N=200 records) |
+| 5 | Min cluster size | [N] | Justifikasi: cluster <[N] item dianggap noise |
+| 6 | Resolution | [0.5-1.5] | Default 1.0; lower = fewer larger clusters; higher = more smaller |
+| 7 | Normalization | Association strength / Fractionalization / LinLog/modularity | Association strength = default VOSviewer |
+| 8 | Clustering algorithm | LinLog/modularity (default) | Sesuai literatur bibliometric standard |
+| 9 | Visualization | Network / Overlay (temporal) / Density | Generate ALL 3 untuk insight komprehensif |
+
+ATURAN: setiap parameter MUST ada justifikasi. Reviewer SLNA akan tanya
+"why this threshold" — siapkan jawaban di Methods.
+
+=== EKSEKUSI MANUAL OLEH USER ===
+
+1. Buka VOSviewer (https://www.vosviewer.com — gratis)
+2. Create > Map based on bibliographic data
+3. Read data from bibliographic database files (Scopus → exports/scopus_*.csv)
+4. Apply thesaurus_keywords.txt (atau thesaurus_authors.txt)
+5. Set 9 parameter sesuai justifikasi
+6. Generate network → 3 visualisasi:
+   - Network visualization (cluster colors)
+   - Overlay visualization (temporal — color = year)
+   - Density visualization (heatmap)
+7. Export ke vosviewer/ + figures/ (dual format SVG + PNG):
+   - Right click → Save image as → SVG (vector untuk submission)
+   - Right click → Save image as → PNG (DPI 300 untuk slide)
+
+=== PESERTA PASTE HASIL ===
+
+Setelah ekspor, peserta paste:
+- Total nodes (keywords/authors/documents)
+- Total edges (links)
+- Total clusters (jumlah)
+- Top-3 clusters by size + label
+- Notable bridge nodes (keywords yang menghubungkan ≥2 clusters)
+- Temporal trend dari overlay
+
+Append ke bibliometric_log.
+
+
+
+
 ### LANGKAH 3: CLUSTER INTERPRETATION + KRITERIA KUANTITATIF (TIER 1-4)
 
+Berdasarkan hasil VOSviewer (peserta paste data cluster).
+
+Eksekusi cluster classification dengan kriteria KUANTITATIF (bukan subjective).
+Tulis ke cluster_interpretation.
+
+=== TIER 1 — CORE CLUSTERS (DOMINANT) ===
+Kriteria kuantitatif:
+- Size: ≥X% dari total nodes (mis. ≥15%)
+- Total Link Strength (TLS): tinggi (top-quartile)
+- Stability: dominan di multiple resolutions
+
+Per Tier 1 cluster:
+- Label (cowork suggest dari top-5 keywords + literature context)
+- Size (n nodes, % total)
+- TLS aggregate
+- Top-5 keywords by occurrences
+- Theme interpretation (1 paragraf)
+- Foundational works yang typical di cluster ini
+
+=== TIER 2 — EMERGING CLUSTERS ===
+Kriteria:
+- Size moderate
+- Mayoritas keywords publish dalam 5 tahun terakhir
+- Trend meningkat di overlay temporal
+
+Per Tier 2 cluster:
+- Label + ukuran + emerging trend rationale
+- Top-5 keywords + tahun rata-rata
+- Implikasi: research direction yang sedang berkembang
+
+=== TIER 3 — ESTABLISHED CLUSTERS ===
+Kriteria:
+- Size moderate
+- Mayoritas keywords publish 5-10+ tahun lalu
+- TLS tinggi (saturated topic)
+
+Per Tier 3 cluster:
+- Label + insight: research area yang matur
+
+=== TIER 4 — PERIPHERAL CLUSTERS ===
+Kriteria:
+- Size kecil (<5% total nodes)
+- TLS rendah
+- Bisa overlooked atau underexplored area
+
+Per Tier 4 cluster:
+- Label + label "potential gap" atau "niche topic"
+
+=== BRIDGE KEYWORDS ===
+Identifikasi keywords yang muncul di ≥2 clusters dengan link strength tinggi:
+- Bridge antara Tier X dan Y
+- Implikasi: konsep yang menjembatani 2 areas → opportunity untuk integratif research
+
+=== STRUCTURAL HOLES (untuk Future Research M9 L4) ===
+Identifikasi area dimana 2 clusters HARUSNYA terhubung tapi tidak ada bridge:
+- Gap konseptual antara Cluster A dan Cluster B
+- Future research opportunity: develop bridge konsep
+
+Output table summary:
+| Tier | Cluster Label | Size (%) | TLS | Top-5 Keywords | Interpretation |
+
+
+
+
+
 ### LANGKAH 4: SLNA INTEGRATION (BIBLIOMETRIC + SLR) + HASIL AKHIR
+
+Berdasarkan cluster_interpretation + synthesis_results
+(dari Modul 8) + interpretation_package (M8).
+
+Eksekusi 2 dokumen output:
+
+=== OUTPUT 1: slna_integration ===
+
+INTEGRATION FRAMEWORK: theme validation lintas-method.
+
+Per tema/finding utama dari SLR (Modul 8):
+
+| SLR Theme/Finding | Bibliometric Cluster | Validation Status |
+| [theme 1] | [cluster X Tier Y] | CONVERGENT |
+| [theme 2] | [tidak ada cluster match] | SLR-ONLY |
+| [theme 3 — implicit di SLR] | [cluster Z Tier 2] | BIB-ONLY (potential gap) |
+
+VALIDATION CATEGORIES:
+- CONVERGENT: SLR finding + bibliometric cluster sejalan → kuat
+- SLR-ONLY: tema di SLR tapi tidak prominent di network → mungkin emerging atau
+  niche
+- BIB-ONLY: cluster bibliometric tapi tidak terangkat di SLR synthesis →
+  possibly missed insight (re-examine SLR atau temuan baru)
+
+RESEARCH LANDSCAPE POSITIONING:
+- Posisi riset Anda dalam network: cluster mana?
+- Bridge node potential: konsep yang Anda riset menjembatani area mana?
+
+CONVERGENT GAPS (untuk Future Research M9 L4 — paling kuat):
+Gap yang teridentifikasi DI KEDUA: SLR synthesis + bibliometric structural holes:
+- Convergent gap 1: [...]
+- Convergent gap 2: [...]
+- Convergent gap 3: [...]
+
+Trace ke evidence dari kedua method.
+
+=== OUTPUT 2: modul_bibliometric_summary (HASIL AKHIR) ===
+
+=== BIBLIOMETRIC + SLNA SUMMARY ===
+
+DATA PREPARATION:
+- Records analyzed: [N]
+- Thesaurus entries: keywords [N], authors [N]
+- Source: exports/scopus_*.csv
+
+VOSVIEWER ANALYSIS:
+- Type of analysis: [dari L2]
+- 9-parameter table: vosviewer_parameters
+- Generated: 3 visualizations (network + overlay + density)
+- Export ke github repository: figures/fig_network_keyword.svg + .png, dst.
+
+CLUSTER INTERPRETATION:
+- Total clusters: [N]
+- Tier 1 (Core): [N] clusters | [labels]
+- Tier 2 (Emerging): [N] | [labels]
+- Tier 3 (Established): [N] | [labels]
+- Tier 4 (Peripheral): [N] | [labels]
+- Bridge keywords: [list]
+- Structural holes: [list]
+
+SLNA INTEGRATION:
+- Theme validation table (CONVERGENT / SLR-ONLY / BIB-ONLY)
+- Research landscape positioning
+- Convergent gaps (HIGH priority untuk Future Research)
+
+FORWARD ARTIFACTS (→ Modul 9):
+- vosviewer_parameters (→ Methods 9-parameter table)
+- cluster_interpretation (→ Results subsection bibliometric)
+- slna_integration (→ Results subsection SLNA + Discussion)
+- outputs/figures/* (network + overlay + density, dual SVG/PNG)
+- Convergent gaps (→ Future Research Agenda M9 L4 — HIGH priority)
+
+NEXT: Manuscript Writing (Modul 9) — SLNA-specific sections:
+- Methods: include 9-parameter table
+- Results: subseksi "Bibliometric Cluster Analysis" + "Integrated SLNA Findings"
+- Title/Abstract: "Systematic Literature Network Analysis"
+
+Konfirmasi 2 file tersimpan + path absolut.
 
 ---
 
 ## Modul 9 — Manuscript Writing → manuscript_final  📝 Planned (stub)
+
+BRIEF AWAL CONTEXT:
+
+INPUT UTAMA: interpretation_package (dari M8) +
+             semua file dan atau figures di repo github 
+
+OUTPUT TARGET:
+- L1-L9: dokumen per section di collection manuscript
+- L10: manuscript_final + file latex dan bibtex di repo github + prisma_2020_checklist + coherence_audit +
+       modul9_summary
+
+=== BAGIAN C: ATURAN MODUL 9 (BERLAKU UNTUK L1-L10) ===
+
+Tambahan dari Aturan Global Modul 1 Section E:
+
+A. STANDAR: PRISMA 2020 27-item + Cochrane Handbook
+   (BUKAN PRISMA-ScR yang 22-item — beda standar)
+
+B. BAHASA SLR (Jalur A vs B berbeda, ikut keputusan M8):
+   JALUR A NARRATIVE:
+   ✓ "synthesis indicates", "consistent finding across studies", "evidence suggests"
+   ✗ "pooled effect", "d = X across studies", "overall effect size"
+   JALUR B META-ANALYSIS:
+   ✓ "pooled estimate", "[N] studies meta-analyzed", "I² = X%"
+   ✗ Mencampur dengan vote counting tanpa kualifikasi
+
+C. TERMINOLOGI WAJIB:
+   - "Systematic review" / "Systematic literature review" (eksplisit Title/Abstract/Methods)
+   - "Extraction" (BUKAN charting)
+   - "Synthesis" / "Meta-analysis" sesuai jalur
+   - Canonical terminology dari outputs/pico_definitions.md
+
+D. GEOGRAPHIC HONESTY: jangan klaim "global" jika dominasi regional
+E. ANTI-OVERCLAIMING: hedging tepat sesuai GRADE (HIGH/MOD/LOW/VERY LOW)
+F. OUTPUT FORMAT: tulis langsung ke .md di outputs/manuscript/, no preamble,
+   paragraf akademik standar
+G. FOUNDATIONAL REFERENCES (CONTEXTUAL pool — cite hanya yang
+   benar-benar mendukung argumen di draft, BUKAN sebagai checklist):
+
+   SLR methodology grounding:
+   - Page et al. (2021) PRISMA 2020 — reporting standard
+   - Higgins et al. (2023) Cochrane Handbook — synthesis methodology
+   - Booth et al. / Petticrew & Roberts — SLR generic methodology
+
+   RoB / quality assessment tools (cite tool actually used, bukan
+   semuanya):
+   - RoB 2 (RCT) — Sterne et al. (2019)
+   - ROBINS-I (non-randomized) — Sterne et al. (2016)
+   - NOS (observational) — Wells et al.
+   - AMSTAR 2 (reviews of reviews) — Shea et al. (2017)
+   - MMAT (mixed methods) — Hong et al. (2018)
+
+   GRADE (cite jika certainty assessment per outcome):
+   - GRADE Working Group / Guyatt et al. seri
+
+   Scopus coverage justification (cite di Methods Item 6 ONLY IF
+   you make a coverage-comparison argument):
+   - Mongeon & Paul-Hus (2016), Martín-Martín et al. (2018)
+
+   GUIDANCE — JANGAN treat ini sebagai checklist:
+   - Different reviews lean on different refs. Cite hanya yang
+     supports argumen spesifik di prose.
+   - JANGAN block-cite "(Page, 2021; Higgins, 2023; Cochrane, 2023)"
+     tanpa argumen unik per ref — reviewer Q1 langsung lihat ini
+     sebagai name-dropping.
+   - Verify setiap citation lengkap before submission (Claude may
+     have older metadata).
+
+H. AI ASSISTANCE DECLARATION — LIMITED to language/readability:
+   - AI use disclosed ONLY at Section 12 (compile phase), limited
+     to language refinement, grammar, readability improvements
+   - TIDAK ada disclosure AI di Methods Items 8/9 (Selection,
+     Data collection), Items 11 (RoB), atau di Discussion/Results
+   - Banyak Q1 jurnal flag analytical AI use; manuscript framing
+     pakai Reviewer 1/2, Extractor 1/2 generik (workflow standar
+     SLR dengan dual reviewer)
+
+I. PROVENANCE DISCIPLINE — INTERNAL audit trail (NOT manuscript):
+   - Setiap section L1-L9 di-review per-paragraf oleh peserta SEBELUM
+     lanjut ke section berikutnya
+   - Catat di _provenance_log per section:
+     · "drafted [date]", "edited by author [date]", "approved by
+       author [date]", "verified claims against artifact files [Y/N]"
+   - File _provenance_log = audit trail INTERNAL peserta.
+     TIDAK di-include sebagai supplementary file manuscript.
+   - Author final responsibility: setiap claim, angka, sitasi,
+     interpretasi adalah tanggung jawab author
+
+J. METHODS FRAMING — REVIEWER/EXTRACTOR/RATER GENERIK:
+   - Methods Item 8 (Selection process): framing "Reviewer 1" dan
+     "Reviewer 2"; κ antar reviewer dilaporkan sebagai inter-reviewer
+     agreement. JANGAN menyebut AI/Claude di Item 8.
+   - Methods Item 9 (Data collection): framing "Extractor 1" dan
+     "Extractor 2" untuk dual-extraction; κ_extract sebagai
+     inter-extractor agreement. JANGAN menyebut AI/Claude di Item 9.
+   - Methods Item 11 (RoB): framing "Rater 1" dan "Rater 2"; κ_rob
+     sebagai inter-rater agreement. JANGAN menyebut AI/Claude di
+     Item 11.
+   - κ angka tetap diambil dari Sheet "Kappa" di artifact files,
+     JANGAN generate atau estimate.
+
+K. SECTION ROLE BOUNDARIES — anti-leak between manuscript sections:
+
+   Setiap section punya peran spesifik. Konten yang sama TIDAK BOLEH
+   muncul di dua section dengan framing identik.
+
+   1. PRIOR REVIEWS (Intro 5.2 vs Discussion 3.5):
+      - Intro 5.2 = "what prior reviews mapped + what gap remains
+        BEFORE this review"
+      - Discussion 3.5 = "how THIS review's findings dialogue with
+        prior reviews"
+      - JANGAN: ulang summary prior reviews dengan framing identik
+
+   2. GAPS (Discussion 3.6 limitations vs Future Research 4.x):
+      - Discussion 3.6 = current limitations + impact
+      - Future Research = actionable agenda (RQ + methodology)
+      - JANGAN: gap statements identik di kedua tempat
+
+   3. NUMERICAL DATA (Methods vs Results vs Abstract):
+      - Methods: rubrik + workflow (no specific N yet)
+      - Results: N studies, κ values, distribusi (semua angka)
+      - Abstract: highlights angka terpilih
+      - JANGAN: N atau κ berbeda antar section
+
+   4. IMPLICATIONS (Discussion 3 vs Conclusions):
+      - Discussion = detail triple-track (research/practice/policy)
+      - Conclusions = ringkasan 1-2 kalimat per track
+      - JANGAN: paragraf identik di kedua tempat
+
+   5. AI MENTION (across ALL sections except Section 12):
+      - Manuscript text WAJIB tidak menyebut AI/Claude/LLM kecuali
+        Section 12
+      - Termasuk: Title, Abstract, Introduction, Methods, Results,
+        Discussion, Future Research, Conclusions
+      - Internal vocab yang BOCOR ke manuscript: "Pass 1/Pass 2",
+        "blind prompt", "Claude session", "AI-assisted screening"
+
+   6. INTERNAL WORKFLOW LEAK (provenance log content):
+      - Konten _provenance_log (drafted dates, session IDs, model
+        versions) JANGAN muncul di manuscript text atau supplementary
+
+   7. TRAINING WORKFLOW VOICE:
+      - JANGAN ada hint manuscript dari training: "modul ini",
+        "outputs/manuscript folder", "as per the training"
+      - Manuscript standalone — reference ke modul internal files
+        HANYA di provenance log
+
+   8. GEOGRAPHIC CLAIMS (Title/Abstract/Intro/Discussion):
+      - Title geographic scope WAJIB konsisten dengan Abstract,
+        Methods eligibility, Discussion 3.2 Geographic Honesty,
+        Limitations
+      - JANGAN: Title "global" tapi Discussion akui regional
+
+   9. INDONESIAN CALQUE / TRANSLATED PHRASES:
+      - "It is known that...", "It can be concluded...", "nampaknya"
+        → "it seems that", "Many studies have..." sebagai opener
+      - Replace dengan native academic English construction
+
+   10. SLR vs ScR TERMINOLOGY DRIFT:
+      - JANGAN slip "scoping review", "charting", "PCC" — manuscript
+        ini SLR (PRISMA 2020 + PICO + extraction)
+
+Konfirmasi setup + context + aturan dipegang. Selanjutnya request langkah
+demi langkah L1-L10.
 
 ### LANGKAH 1: METHODS WRITING (PRISMA 2020 COMPLIANT)
 

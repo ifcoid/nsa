@@ -68,18 +68,18 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 	case "M5_STEP2_CALIBRATION":
 		logger.Log(session.ID, "   [Langkah 5.2] Menjalankan Kalibrasi Dual-Review (20 Sample) dengan API Z-AI GLM & Groq...")
 		
-		// Inisialisasi LLM 
-		// (WAJIB menggunakan z-ai dan groq untuk dual-review, hentikan proses jika gagal)
-		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
+		// Inisialisasi LLM (config-driven via Model Routing)
+		roles := m.deps.LLMFactory.Roles(ctx)
+		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1)
 		if err != nil { 
 			logger.Logf(session.ID, "   [INFO] Zhipu gagal dimuat (%v). Fallback awal ke Xiaomi MiMo...\n", err)
-			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
+			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
 			if err != nil {
 				return fmt.Errorf("Reviewer 1 (Zhipu maupun Xiaomi) gagal dimuat. Harap konfigurasi API di Pengaturan")
 			}
 		}
 		
-		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
+		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2)
 		if err != nil { 
 			logger.Logf(session.ID, "   [ERROR] LLM groq gagal dimuat (%v). Harap konfigurasi API groq terlebih dahulu di halaman Pengaturan!\n", err)
 			return fmt.Errorf("groq LLM configuration missing or invalid. Please configure the groq API key first")
@@ -153,7 +153,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				
 				if res1 == nil || err1 != nil { 
 					logger.Log(session.ID, "      [!] R1 Utama (Zhipu) gagal merespons. Melakukan Fallback on-the-fly ke Xiaomi MiMo...")
-					llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
+					llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
 					if errF != nil {
 						logger.Logf(session.ID, "      [!] Gagal memuat Xiaomi MiMo untuk fallback R1: %v", errF)
 					} else {
@@ -415,17 +415,18 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			return m.deps.MongoRepo.UpdateSession(ctx, session)
 		}
 
-		// 2. Persiapan LLM untuk proses screening sisa kuota
-		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
+		// 2. Persiapan LLM untuk proses screening sisa kuota (config-driven via Model Routing)
+		roles := m.deps.LLMFactory.Roles(ctx)
+		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1)
 		if err != nil { 
 			logger.Logf(session.ID, "   [INFO] Zhipu gagal dimuat (%v). Fallback awal ke Xiaomi MiMo...\n", err)
-			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
+			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
 			if err != nil {
 				return fmt.Errorf("Reviewer 1 (Zhipu maupun Xiaomi) gagal dimuat. Harap konfigurasi API di Pengaturan")
 			}
 		}
 		
-		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
+		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2)
 		if err != nil { 
 			logger.Logf(session.ID, "   [ERROR] LLM groq gagal dimuat (%v). Harap konfigurasi API groq terlebih dahulu di halaman Pengaturan!\n", err)
 			return fmt.Errorf("groq LLM configuration missing or invalid. Please configure the groq API key first")
@@ -434,18 +435,18 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		var scAgentSupervisor *agent.ScreeningAgent
 		var primarySupervisorName string
 
-		llmSupervisor, err := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
-		if err == nil { 
+		llmSupervisor, err := m.deps.LLMFactory.CreateClient(ctx, roles.Supervisor)
+		if err == nil {
 			scAgentSupervisor = agent.NewScreeningAgent(llmSupervisor)
-			primarySupervisorName = "Xiaomi MiMo"
+			primarySupervisorName = roles.Supervisor
 		} else {
-			logger.Logf(session.ID, "   [INFO] Xiaomi MiMo gagal dimuat (%v). Fallback awal ke OpenRouter...\n", err)
-			llmSupervisor, err = m.deps.LLMFactory.CreateClient(ctx, "openrouter")
+			logger.Logf(session.ID, "   [INFO] Supervisor %s gagal dimuat (%v). Fallback ke %s...\n", roles.Supervisor, err, roles.SupervisorFallback)
+			llmSupervisor, err = m.deps.LLMFactory.CreateClient(ctx, roles.SupervisorFallback)
 			if err != nil {
-				return fmt.Errorf("AI Supervisor (Xiaomi maupun OpenRouter) gagal dimuat. Harap konfigurasi API di Pengaturan")
+				return fmt.Errorf("AI Supervisor (%s/%s) gagal dimuat. Harap konfigurasi API di Pengaturan", roles.Supervisor, roles.SupervisorFallback)
 			}
 			scAgentSupervisor = agent.NewScreeningAgent(llmSupervisor)
-			primarySupervisorName = "OpenRouter"
+			primarySupervisorName = roles.SupervisorFallback
 		}
 
 		scAgent1 := agent.NewScreeningAgent(llmR1)
@@ -504,7 +505,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 
 			if res1 == nil || err1 != nil { 
 				logger.Log(session.ID, "      [!] R1 Utama (Zhipu) gagal memberikan evaluasi. Melakukan Fallback on-the-fly ke Xiaomi MiMo...")
-				llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
+				llmR1Fallback, errF := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
 				if errF != nil {
 					logger.Logf(session.ID, "      [!] Gagal memuat Xiaomi MiMo untuk fallback R1: %v", errF)
 				} else {
@@ -586,9 +587,9 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				}
 				
 				// Fallback on-the-fly jika provider utama adalah Xiaomi dan dia gagal (token habis/error)
-				if (errAdv != nil || advice == nil) && primarySupervisorName == "Xiaomi MiMo" {
-					logger.Logf(session.ID, "      [!] %s gagal memberikan saran setelah 4 percobaan. Melakukan Fallback on-the-fly ke OpenRouter...\n", primarySupervisorName)
-					llmFallback, errFb := m.deps.LLMFactory.CreateClient(ctx, "openrouter")
+				if (errAdv != nil || advice == nil) && primarySupervisorName == roles.Supervisor {
+					logger.Logf(session.ID, "      [!] %s gagal memberikan saran. Fallback on-the-fly ke %s...\n", primarySupervisorName, roles.SupervisorFallback)
+					llmFallback, errFb := m.deps.LLMFactory.CreateClient(ctx, roles.SupervisorFallback)
 					if errFb == nil {
 						fallbackAgent := agent.NewScreeningAgent(llmFallback)
 						for retry := 0; retry < 3; retry++ {

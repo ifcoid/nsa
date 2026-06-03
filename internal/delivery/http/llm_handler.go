@@ -83,6 +83,26 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+// GetRoles mengembalikan pemetaan peran->provider (Model Routing).
+func (h *LLMHandler) GetRoles(w http.ResponseWriter, req *http.Request) {
+	roles := h.mongoRepo.GetLLMRoles(context.Background())
+	sendJSONResponse(w, http.StatusOK, roles)
+}
+
+// UpdateRoles menyimpan pemetaan peran->provider.
+func (h *LLMHandler) UpdateRoles(w http.ResponseWriter, req *http.Request) {
+	var roles model.LLMRoles
+	if err := json.NewDecoder(req.Body).Decode(&roles); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if err := h.mongoRepo.UpdateLLMRoles(context.Background(), &roles); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update LLM roles: "+err.Error())
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "LLM roles updated", "roles": roles})
+}
+
 // FetchModels mengambil daftar model langsung dari API Vendor menggunakan API Key yang diberikan
 func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 	provider := req.PathValue("id")

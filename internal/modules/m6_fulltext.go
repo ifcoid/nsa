@@ -54,26 +54,27 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	}
 
-	// 2. Siapkan LLM reviewer (mirror M5): R1 zhipu->xiaomi, R2 groq, supervisor xiaomi->openrouter.
-	llmR1, err := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
+	// 2. Siapkan LLM reviewer (config-driven via Model Routing): R1->fallback, R2, supervisor->fallback.
+	roles := m.deps.LLMFactory.Roles(ctx)
+	llmR1, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1)
 	if err != nil {
-		logger.Logf(session.ID, "   [INFO] Zhipu gagal (%v). Fallback awal ke Xiaomi...\n", err)
-		llmR1, err = m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider)
+		logger.Logf(session.ID, "   [INFO] R1 %s gagal (%v). Fallback ke %s...\n", roles.Reviewer1, err, roles.Reviewer1Fallback)
+		llmR1, err = m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
 		if err != nil {
-			return fmt.Errorf("Reviewer 1 (Zhipu/Xiaomi) gagal dimuat. Konfigurasi API dulu")
+			return fmt.Errorf("Reviewer 1 (%s/%s) gagal dimuat. Konfigurasi API dulu", roles.Reviewer1, roles.Reviewer1Fallback)
 		}
 	}
-	llmR2, err := m.deps.LLMFactory.CreateClient(ctx, "groq")
+	llmR2, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2)
 	if err != nil {
-		return fmt.Errorf("groq (Reviewer 2) belum dikonfigurasi: %w", err)
+		return fmt.Errorf("%s (Reviewer 2) belum dikonfigurasi: %w", roles.Reviewer2, err)
 	}
 	var supervisor *agent.ScreeningAgent
-	supName := "Xiaomi MiMo"
-	if llmSup, e := m.deps.LLMFactory.CreateClient(ctx, "xiaomi"); e == nil {
+	supName := roles.Supervisor
+	if llmSup, e := m.deps.LLMFactory.CreateClient(ctx, roles.Supervisor); e == nil {
 		supervisor = agent.NewScreeningAgent(llmSup)
-	} else if llmSup, e := m.deps.LLMFactory.CreateClient(ctx, "openrouter"); e == nil {
+	} else if llmSup, e := m.deps.LLMFactory.CreateClient(ctx, roles.SupervisorFallback); e == nil {
 		supervisor = agent.NewScreeningAgent(llmSup)
-		supName = "OpenRouter"
+		supName = roles.SupervisorFallback
 	} else {
 		return fmt.Errorf("AI Supervisor (Xiaomi/OpenRouter) gagal dimuat")
 	}
@@ -128,11 +129,11 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 			continue
 		}
 
-		// R1 (zhipu, lalu fallback r1FallbackProvider on-the-fly)
+		// R1 (primary, lalu fallback role on-the-fly)
 		res1, err1 := reviewWithRetry(ctx, scR1, opDefs, title, fulltext,
 			[]time.Duration{10 * time.Second, 30 * time.Second, 60 * time.Second}, session.ID, "R1")
 		if res1 == nil || err1 != nil {
-			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, r1FallbackProvider); e == nil {
+			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback); e == nil {
 				res1, err1 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, title, fulltext,
 					[]time.Duration{1 * time.Minute, 3 * time.Minute}, session.ID, "R1-fallback")
 			}

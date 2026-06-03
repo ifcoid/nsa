@@ -209,9 +209,10 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 		ftIndex = map[string]string{}
 	}
 
-	leadAg, err := m.agentWithFallback(ctx, "zhipu", r1FallbackProvider)
+	rp1, rf1 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
+	leadAg, err := m.agentWithFallback(ctx, rp1, rf1)
 	if err != nil {
-		return fmt.Errorf("extractor utama (zhipu/xiaomi) gagal: %w", err)
+		return fmt.Errorf("extractor utama (%s/%s) gagal: %w", rp1, rf1, err)
 	}
 
 	for i, p := range batch {
@@ -267,9 +268,10 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 	if ftIndex == nil {
 		ftIndex = map[string]string{}
 	}
-	verAg, err := m.agentWithFallback(ctx, "groq", "xiaomi")
+	vp, vf := m.deps.LLMFactory.RoleProviders(ctx, "reviewer2")
+	verAg, err := m.agentWithFallback(ctx, vp, vf)
 	if err != nil {
-		logger.Logf(session.ID, "   [WARN] Verifier (groq/xiaomi) gagal: %v. Lewati verifikasi.\n", err)
+		logger.Logf(session.ID, "   [WARN] Verifier (%s/%s) gagal: %v. Lewati verifikasi.\n", vp, vf, err)
 	}
 
 	disagree, checked, ambiguous := 0, 0, 0
