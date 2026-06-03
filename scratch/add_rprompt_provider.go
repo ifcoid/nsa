@@ -67,7 +67,7 @@ func main() {
 		ProviderName: "openai-compatible",
 		BaseURL:      "https://rprompt.ll.my.id/v1",
 		APIKey:       token,
-		DefaultModel: "gemini-2.5-flash",
+		DefaultModel: "sonnet",
 		IsActive:     true,
 		UpdatedAt:    time.Now(),
 	}
