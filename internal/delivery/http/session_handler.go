@@ -576,6 +576,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 									qTitle = t
 								}
 								
+								var qDOI string
 								if d, ok := payload["doi"].(string); ok && d != "" {
 									d = strings.TrimPrefix(d, "https://doi.org/")
 									d = strings.TrimPrefix(d, "http://doi.org/")
@@ -588,8 +589,11 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 									d = strings.ReplaceAll(d, "\ufb05", "ft")
 									d = strings.ReplaceAll(d, "\ufb06", "st")
 									qdrantDOIs[d] = true
-									qdrantPapers = append(qdrantPapers, QdrantPaper{DOI: d, Title: qTitle})
+									qDOI = d
 								}
+								
+								// Always add to qdrantPapers so title similarity can work even if DOI is empty
+								qdrantPapers = append(qdrantPapers, QdrantPaper{DOI: qDOI, Title: qTitle})
 							}
 						}
 					}
