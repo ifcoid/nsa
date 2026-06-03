@@ -2,6 +2,15 @@ package model
 
 import "time"
 
+// FoundationBriefing = output Modul 1 (Fondasi Teori + Aturan Global).
+// Hybrid: bagian teori di-generate LLM (disesuaikan topik), sisanya kanonik statik.
+type FoundationBriefing struct {
+	TopicContext        string `bson:"topic_context" json:"topic_context"`                 // topik mentah yang dipakai menyusun briefing
+	TheoryMarkdown      string `bson:"theory_markdown" json:"theory_markdown"`             // teori SLR (LLM, disesuaikan topik)
+	AIPracticeMarkdown  string `bson:"ai_practice_markdown" json:"ai_practice_markdown"`   // etika & kapabilitas GenAI (statik)
+	GlobalRulesMarkdown string `bson:"global_rules_markdown" json:"global_rules_markdown"` // aturan global SLR + CoWork (statik)
+}
+
 type SuggestedTopic struct {
 	Name       string `bson:"name" json:"name"`
 	Gap        string `bson:"gap" json:"gap"`
@@ -301,6 +310,7 @@ type DataMiningLog struct {
 type SLRSession struct {
 	ID                  string               `bson:"_id,omitempty" json:"id"`
 	Topic               string               `bson:"topic" json:"topic"`
+	Foundation          *FoundationBriefing  `bson:"foundation,omitempty" json:"foundation,omitempty"`
 	SuggestedTopics     []SuggestedTopic     `bson:"suggested_topics,omitempty" json:"suggested_topics,omitempty"`
 	SelectedTopic       *SuggestedTopic      `bson:"selected_topic,omitempty" json:"selected_topic,omitempty"`
 	PriorReviewsMatrix  *PriorReviewsMatrix  `bson:"prior_reviews_matrix,omitempty" json:"prior_reviews_matrix,omitempty"`

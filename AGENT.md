@@ -8,11 +8,17 @@
 > Format tiap modul: **Topik** _(langkah di dalamnya)_ → **Output**.
 > Koleksi MongoDB yang dipakai kode: `slr_sessions`, `slr_papers`, `slr_papers_post_dedup`, `slr_screening`, `users`, `papers`, `llm_providers`.
 
-## Modul 1 — Fondasi Teori + Aturan Global → briefing  📝 Planned (stub)
+## Modul 1 — Fondasi Teori + Aturan Global → briefing  ✅ Implemented
 
-> _Kode saat ini hanya stub: mencetak log briefing lalu langsung transisi ke Modul 2. Langkah-langkah di bawah adalah rencana materi, belum dieksekusi sistem._
+output: `foundation`
 
- Langkah :
+> **Hybrid briefing.** Bagian **teori SLR** (definisi, metodologi, PICO, kesesuaian topik) di-generate LLM (`gemini`) dan disesuaikan dengan topik sesi. Bagian **Etika & Kapabilitas AI** serta **Aturan Global SLR + CoWork** berupa teks kanonik statik (tidak di-generate, agar aturan baku tidak terdistorsi).
+>
+> **Alur status:** `M1_FOUNDATION` (susun briefing) → `M1_WAITING_APPROVAL` (jeda) → `M1_APPROVED` (lanjut ke `M2_STEP1_TOPIC_GAP`) / `M1_NEEDS_REVISION` + `feedback` (regenerate bagian teori).
+>
+> Tersimpan di `session.foundation`: `theory_markdown` (LLM), `ai_practice_markdown` (statik), `global_rules_markdown` (statik).
+
+ Materi yang dicakup briefing:
 
 ### 1. PENGENALAN SYSTEMATIC LITERATURE REVIEW (Teori Definisi, Tujuan, dan Jenis-jenis Literature Review)
 
@@ -23,6 +29,15 @@
 ### 4. KAPABILITAS LLM UNTUK PENELITIAN SLR
 
 ### 5. ATURAN GLOBAL SLR + COWORK (BERLAKU UNTUK SEMUA MODUL 2-9)
+
+> Catatan pemetaan: poin 1–2 (teori SLR & metodologi) → `theory_markdown` (LLM); poin 3–4 (etika & kapabilitas AI) → `ai_practice_markdown` (statik); poin 5 (aturan global) → `global_rules_markdown` (statik).
+
+Cara Mengujinya Nanti:
+
+1. Buat sesi baru (isi `topic`). Pipeline otomatis berpindah dari `INIT` → `M1_FOUNDATION` → menyusun briefing → berhenti di `M1_WAITING_APPROVAL`.
+2. Buka MongoDB Compass, temukan field `foundation` pada sesi Anda. Periksa `theory_markdown` (apakah teori SLR relevan dengan topik), `ai_practice_markdown`, dan `global_rules_markdown`.
+3. Jika SUDAH sesuai, ubah `status` menjadi `M1_APPROVED` (atau klik Approve di UI). Pipeline akan lanjut ke Modul 2 (`M2_STEP1_TOPIC_GAP`).
+4. Jika perlu disesuaikan, ubah `status` menjadi `M1_NEEDS_REVISION` dan isi `feedback` (mis. "fokuskan ilustrasi PICO ke populasi X"). Sistem akan men-generate ulang bagian teori dan kembali menjeda di `M1_WAITING_APPROVAL`. Bagian statik (aturan global & etika AI) tidak berubah.
 
 ## Modul 2 — Topik Penelitian (PICO) → pico_definitions  ✅ Implemented
 
