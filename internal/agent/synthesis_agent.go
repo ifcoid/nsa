@@ -69,11 +69,16 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	if err != nil {
 		return nil, fmt.Errorf("DecidePath LLM: %w", err)
 	}
-	var res model.SynthesisPathDecision
-	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
+	// criteria_check sering dikembalikan LLM sebagai objek -> terima fleksibel.
+	var p struct {
+		Verdict       string          `json:"verdict"`
+		CriteriaCheck json.RawMessage `json:"criteria_check"`
+		Rationale     string          `json:"rationale"`
+	}
+	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &p); err != nil {
 		return nil, fmt.Errorf("parse SynthesisPathDecision (%w). Raw: %s", err, raw)
 	}
-	return &res, nil
+	return &model.SynthesisPathDecision{Verdict: p.Verdict, CriteriaCheck: rawToString(p.CriteriaCheck), Rationale: p.Rationale}, nil
 }
 
 // ===== L2: Jalur A narrative synthesis =====
@@ -149,11 +154,22 @@ Keluarkan HANYA JSON MURNI tanpa markdown blok:
 	if err != nil {
 		return nil, fmt.Errorf("Grade LLM: %w", err)
 	}
-	var res model.GradeEvidence
-	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
+	// table_markdown/summary/statements bisa dikembalikan sebagai objek/array -> fleksibel.
+	var p struct {
+		TableMarkdown        json.RawMessage `json:"table_markdown"`
+		RobustnessVerdict    string          `json:"robustness_verdict"`
+		RobustnessSummary    json.RawMessage `json:"robustness_summary"`
+		ConfidenceStatements json.RawMessage `json:"confidence_statements"`
+	}
+	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &p); err != nil {
 		return nil, fmt.Errorf("parse GradeEvidence (%w). Raw: %s", err, raw)
 	}
-	return &res, nil
+	return &model.GradeEvidence{
+		TableMarkdown:        rawToString(p.TableMarkdown),
+		RobustnessVerdict:    p.RobustnessVerdict,
+		RobustnessSummary:    rawToString(p.RobustnessSummary),
+		ConfidenceStatements: rawToString(p.ConfidenceStatements),
+	}, nil
 }
 
 // ===== L4: interpretation package =====
