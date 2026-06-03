@@ -521,6 +521,11 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	_ = cursor.All(ctx, &papers)
 
 	syncedCount := 0
+	type QdrantPaper struct {
+		DOI   string
+		Title string
+	}
+	var qdrantPapers []QdrantPaper
 	qdrantDOIs := make(map[string]bool)
 	
 	if qdrantURL != "mock-mode" {
@@ -528,9 +533,9 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 
 		var nextOffset string
 		for {
-			reqBody := `{"limit": 5000, "with_payload": ["doi"]}`
+			reqBody := `{"limit": 5000, "with_payload": ["doi", "title"]}`
 			if nextOffset != "" {
-				reqBody = fmt.Sprintf(`{"limit": 5000, "with_payload": ["doi"], "offset": "%s"}`, nextOffset)
+				reqBody = fmt.Sprintf(`{"limit": 5000, "with_payload": ["doi", "title"], "offset": "%s"}`, nextOffset)
 			}
 			
 			reqQdrant, err := http.NewRequest("POST", fmt.Sprintf("%s/collections/scientific_articles/points/scroll", qdrantURL), strings.NewReader(reqBody))
@@ -566,6 +571,11 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 					for _, pt := range points {
 						if pMap, ok := pt.(map[string]interface{}); ok {
 							if payload, ok := pMap["payload"].(map[string]interface{}); ok {
+								var qTitle string
+								if t, ok := payload["title"].(string); ok {
+									qTitle = t
+								}
+								
 								if d, ok := payload["doi"].(string); ok && d != "" {
 									d = strings.TrimPrefix(d, "https://doi.org/")
 									d = strings.TrimPrefix(d, "http://doi.org/")
@@ -578,6 +588,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 									d = strings.ReplaceAll(d, "\ufb05", "ft")
 									d = strings.ReplaceAll(d, "\ufb06", "st")
 									qdrantDOIs[d] = true
+									qdrantPapers = append(qdrantPapers, QdrantPaper{DOI: d, Title: qTitle})
 								}
 							}
 						}
@@ -597,11 +608,22 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 		// Update MongoDB
 		for _, p := range papers {
 			var doi string
+			var title string
+			
 			if val, ok := p["doi"].(string); ok && val != "" {
 				doi = val
 			} else if val, ok := p["DOI"].(string); ok && val != "" {
 				doi = val
 			}
+			
+			if val, ok := p["title"].(string); ok && val != "" {
+				title = val
+			} else if val, ok := p["Title"].(string); ok && val != "" {
+				title = val
+			}
+
+			matched := false
+			newDOI := ""
 
 			if doi != "" {
 				doi = strings.TrimPrefix(doi, "https://doi.org/")
@@ -614,11 +636,37 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 				doi = strings.ReplaceAll(doi, "\ufb04", "ffl")
 				doi = strings.ReplaceAll(doi, "\ufb05", "ft")
 				doi = strings.ReplaceAll(doi, "\ufb06", "st")
+				
 				if qdrantDOIs[doi] {
-					update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339)}}
-					coll.UpdateByID(ctx, p["_id"], update)
-					syncedCount++
+					matched = true
 				}
+			}
+			
+			// Fallback: Match by title similarity if DOI didn't match
+			if !matched && title != "" {
+				for _, qp := range qdrantPapers {
+					if qp.Title != "" {
+						sim := similarityRatio(title, qp.Title)
+						if sim > 0.8 {
+							matched = true
+							newDOI = qp.DOI
+							break
+						}
+					}
+				}
+			}
+
+			if matched {
+				updateFields := bson.M{
+					"full_text_retrieved": true, 
+					"acquisition_date": time.Now().Format(time.RFC3339),
+				}
+				if newDOI != "" {
+					updateFields["doi"] = newDOI
+				}
+				update := bson.M{"$set": updateFields}
+				coll.UpdateByID(ctx, p["_id"], update)
+				syncedCount++
 			}
 		}
 	} else {
@@ -928,4 +976,46 @@ func (h *SessionHandler) recalculateAcquisitionLogSync(ctx context.Context, sess
 	}
 	session.AcquisitionLog = &log
 	_ = h.mongoRepo.UpdateSession(ctx, session)
+}
+
+func levenshtein(s1, s2 string) int {
+	lenS1 := len(s1)
+	lenS2 := len(s2)
+	matrix := make([][]int, lenS1+1)
+	for i := range matrix {
+		matrix[i] = make([]int, lenS2+1)
+		matrix[i][0] = i
+	}
+	for j := range matrix[0] {
+		matrix[0][j] = j
+	}
+	for i := 1; i <= lenS1; i++ {
+		for j := 1; j <= lenS2; j++ {
+			cost := 1
+			if s1[i-1] == s2[j-1] {
+				cost = 0
+			}
+			min1 := matrix[i-1][j] + 1
+			min2 := matrix[i][j-1] + 1
+			min3 := matrix[i-1][j-1] + cost
+			
+			min := min1
+			if min2 < min { min = min2 }
+			if min3 < min { min = min3 }
+			matrix[i][j] = min
+		}
+	}
+	return matrix[lenS1][lenS2]
+}
+
+func similarityRatio(s1, s2 string) float64 {
+	// Normalize strings for comparison
+	clean1 := strings.ToLower(strings.TrimSpace(s1))
+	clean2 := strings.ToLower(strings.TrimSpace(s2))
+	
+	dist := levenshtein(clean1, clean2)
+	maxLen := len(clean1)
+	if len(clean2) > maxLen { maxLen = len(clean2) }
+	if maxLen == 0 { return 1.0 }
+	return 1.0 - float64(dist)/float64(maxLen)
 }
