@@ -1137,6 +1137,19 @@ Input: `slr_extraction` + `synthesis_prep`/`qa_threshold` (M7) + research questi
 
 ---
 
-## Modul 8b / 9 (Bibliometric, Manuscript)  📝 Planned
+## Modul 8b — Bibliometric / SLNA (opsional) → slna_integration  ✅ Implemented
 
-Modul 8b (Bibliometric/SLNA, opsional) dan 9 (Manuscript Writing) masih **stub** di kode. Spesifikasi desain lengkap ada di **[ROADMAP.md](ROADMAP.md)**.
+Modul **opsional**: dipicu dari kartu M8 L4 (tombol "Jalankan Bibliometric SLNA") yang men-set status `M8B_INIT`; pada selesai → `M9_MANUSCRIPT`. VOSviewer dijalankan **manual oleh user**.
+
+- **L1 — Data prep + Thesaurus** (brain): kumpulkan keyword mentah dari `slr_screening` → AI bangun thesaurus format VOSviewer (`bibliometric_data` + log). HITL approve.
+- **L2 — 9-Parameter** (brain): tabel 9 parameter VOSviewer + justifikasi (siap-Methods) → status `M8B_STEP2_WAITING_VOSVIEWER`. User jalankan VOSviewer manual lalu **paste hasil** (nodes/edges/clusters/bridge/temporal) via `POST /api/sessions/{id}/m8b/vosviewer`.
+- **L3 — Cluster interpretation** (brain): klasifikasi **Tier 1–4** (kriteria kuantitatif) + bridge keywords + structural holes dari input user. HITL approve.
+- **L4 — SLNA integration** (brain): validasi tema lintas-method (CONVERGENT / SLR-ONLY / BIB-ONLY) + **convergent gaps** + `modul_bibliometric_summary` → Modul 9.
+
+**Alur:** `M8B_INIT → M8B_STEP1_THESAURUS → _WAITING_APPROVAL → _APPROVED → M8B_STEP2_PARAMS → _WAITING_VOSVIEWER → (submit) → M8B_STEP3_INTERPRET → _WAITING_APPROVAL → _APPROVED → M8B_STEP4_INTEGRATION → _WAITING_APPROVAL → _APPROVED → M9_MANUSCRIPT`.
+
+---
+
+## Modul 9 (Manuscript Writing)  📝 Planned
+
+Modul 9 (Manuscript Writing) masih **stub** di kode. Spesifikasi desain lengkap ada di **[ROADMAP.md](ROADMAP.md)**.

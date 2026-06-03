@@ -353,6 +353,12 @@ type SLRSession struct {
 	GradeEvidence         *GradeEvidence         `bson:"grade_evidence_table,omitempty" json:"grade_evidence_table,omitempty"`
 	InterpretationPackage *InterpretationPackage `bson:"interpretation_package,omitempty" json:"interpretation_package,omitempty"`
 	Modul8Summary         *Modul8Summary         `bson:"modul8_summary,omitempty" json:"modul8_summary,omitempty"`
+	BibliometricData      *BibliometricData      `bson:"bibliometric_data,omitempty" json:"bibliometric_data,omitempty"`
+	VOSViewerParams       *VOSViewerParams       `bson:"vosviewer_parameters,omitempty" json:"vosviewer_parameters,omitempty"`
+	BibliometricInput     string                 `bson:"bibliometric_input,omitempty" json:"bibliometric_input,omitempty"`
+	ClusterInterpretation *ClusterInterpretation `bson:"cluster_interpretation,omitempty" json:"cluster_interpretation,omitempty"`
+	SLNAIntegration       *SLNAIntegration       `bson:"slna_integration,omitempty" json:"slna_integration,omitempty"`
+	ModulBibliometricSummary *ModulBibliometricSummary `bson:"modul_bibliometric_summary,omitempty" json:"modul_bibliometric_summary,omitempty"`
 	InclusionCriteria     []string               `bson:"inclusion_criteria" json:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria" json:"exclusion_criteria"`
 	Status            string            `bson:"status" json:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"

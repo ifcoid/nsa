@@ -500,6 +500,40 @@ func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Reque
 	})
 }
 
+// SubmitVOSviewer menerima hasil VOSviewer yang di-paste user (Modul 8b L2 -> L3).
+func (h *SessionHandler) SubmitVOSviewer(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	var payload struct {
+		Data string `json:"data"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if strings.TrimSpace(payload.Data) == "" {
+		sendJSONError(w, http.StatusBadRequest, "Data VOSviewer kosong")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	session.BibliometricInput = payload.Data
+	session.Status = "M8B_STEP3_INTERPRET"
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal menyimpan input VOSviewer: "+err.Error())
+		return
+	}
+	h.pipeline.ExecuteAsync(ctx, session.ID)
+	sendJSONResponse(w, http.StatusOK, map[string]string{"message": "Input VOSviewer diterima, interpretasi cluster dimulai"})
+}
+
 // SyncQdrant mencocokkan DOI dari Qdrant ke MongoDB (Modul 6)
 func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")

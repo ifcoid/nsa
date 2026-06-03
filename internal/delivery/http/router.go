@@ -90,6 +90,9 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("POST /api/sessions/{id}/m6/mark-inaccessible", r.sessionHndlr.MarkInaccessible)
 	protected.HandleFunc("GET /api/sessions/{id}/m6/export-links", r.sessionHndlr.ExportM6Links)
 	protected.HandleFunc("GET /api/sessions/{id}/m6/papers", r.sessionHndlr.GetM6Papers)
+
+	// Modul 8b (Bibliometric/SLNA)
+	protected.HandleFunc("POST /api/sessions/{id}/m8b/vosviewer", r.sessionHndlr.SubmitVOSviewer)
 	
 	// LLM config endpoints
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
