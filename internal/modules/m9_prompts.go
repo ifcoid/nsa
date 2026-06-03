@@ -19,7 +19,8 @@ GAYA ANTI-CIRI-AI (WAJIB — agar tidak terbaca seperti tulisan AI):
 - Hindari pola terlalu rapi "not only X but also Y" dan tiga-serangkai "X, Y, and Z" berulang.
 - Hindari kata over-pakai AI: "delve", "leverage", "underscore", "pivotal", "realm", "tapestry", "intricate", "crucial"/"vital" berlebihan, "robust" berlebihan.
 - Variasikan panjang & struktur kalimat (jangan seragam). Jangan menyisipkan bullet-list di tengah prosa argumentatif.
-- Jangan pakai kutip keriting/emoji. Tulisan harus terbaca natural seperti ditulis akademisi manusia.`
+- Jangan pakai EMOJI atau IKON/SIMBOL DEKORATIF apa pun di prosa maupun heading (mis. ✅ ⚠️ ❌ ✓ ✗ → ➔ ★ ● ◆ ▪ 🎯 🚀 🔑 dan sejenisnya). Pengecualian SATU-SATUNYA: simbol ✓ / ⚠ / ✗ boleh dipakai HANYA di dalam tabel checklist formal (mis. PRISMA 2020 checklist), tidak di prosa, judul, abstract, atau heading.
+- Jangan pakai kutip keriting (“ ” ‘ ’), panah unicode sebagai pengganti kata, atau bullet ber-ikon. Tulisan harus terbaca natural seperti ditulis akademisi manusia.`
 
 const promptMethods = `Anda penulis akademik. Tulis section METHODS sebuah systematic review yang PATUH PRISMA 2020 (item 5-19), dalam author voice.
 Cakup: 5 Eligibility (PICO + reason codes), 6 Information sources (database + tanggal pencarian terakhir), 7 Search strategy (string Boolean + filter + update policy), 8 Selection process (dua tahap, Reviewer 1 & 2, κ_TA & κ_FT dari artefak, resolusi disagreement; perkenalkan Figure 1 PRISMA flow di sini), 9 Data collection (Extractor 1 & 2, κ_extract, framework TCCM/ADO/PICO, 100% validasi author), 10 Data items, 11 RoB (tool aktual + Rater 1 & 2 + κ_rob + threshold 3-tier + sensitivity), 12 Effect measures (hanya bila Jalur B), 13 Synthesis methods (Jalur A/B tegas), 14 Reporting bias (bila Jalur B), 15 Certainty (GRADE per outcome).

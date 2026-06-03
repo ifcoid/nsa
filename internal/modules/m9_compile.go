@@ -25,7 +25,7 @@ G. Training-workflow voice leak.
 H. Indonesian calque ("It is known that", "Many studies have" opener).
 I. Geographic claim consistency (Title/Abstract/Intro/Methods/Discussion).
 J. GRADE/RoB hedging consistency.
-K. AI-STYLE TELLS (anti-ciri-AI): tandai pemakaian em-dash "—"/"–" (HARUS NOL di seluruh manuskrip), transisi klise bertumpuk (Moreover/Furthermore/In addition/Notably/"It is worth noting"/"It is important to note"), pola terlalu rapi "not only X but also Y", kata over-AI (delve/leverage/underscore/pivotal/realm/tapestry/intricate), kutip keriting/emoji. Saran ganti ke gaya akademisi manusia.
+K. AI-STYLE TELLS (anti-ciri-AI): tandai (HARUS NOL di prosa/judul/abstract/heading): em-dash "—"/en-dash "–"; EMOJI & IKON/SIMBOL dekoratif (✅ ⚠️ ❌ ✓ ✗ → ➔ ★ ● ◆ 🎯 🚀 dsb — kecuali ✓/⚠/✗ di dalam tabel checklist PRISMA formal); transisi klise bertumpuk (Moreover/Furthermore/In addition/Notably/"It is worth noting"); pola terlalu rapi "not only X but also Y"; kata over-AI (delve/leverage/underscore/pivotal/realm/tapestry/intricate); kutip keriting. Saran ganti ke gaya akademisi manusia.
 Output ringkas per huruf A-K.`
 
 const promptPrisma = `Susun PRISMA 2020 27-ITEM COMPLIANCE CHECK (supplementary) sebagai tabel Markdown:
