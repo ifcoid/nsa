@@ -347,6 +347,12 @@ type SLRSession struct {
 	SensitivityAnalysis   *SensitivityAnalysis   `bson:"sensitivity_analysis,omitempty" json:"sensitivity_analysis,omitempty"`
 	SynthesisPrep         *SynthesisPrep         `bson:"synthesis_prep,omitempty" json:"synthesis_prep,omitempty"`
 	Modul7Summary         *Modul7Summary         `bson:"modul7_summary,omitempty" json:"modul7_summary,omitempty"`
+	DescriptiveAnalysis   *DescriptiveAnalysis   `bson:"descriptive_analysis,omitempty" json:"descriptive_analysis,omitempty"`
+	SynthesisPathDecision *SynthesisPathDecision `bson:"synthesis_path_decision,omitempty" json:"synthesis_path_decision,omitempty"`
+	SynthesisResults      *SynthesisResults      `bson:"synthesis_results,omitempty" json:"synthesis_results,omitempty"`
+	GradeEvidence         *GradeEvidence         `bson:"grade_evidence_table,omitempty" json:"grade_evidence_table,omitempty"`
+	InterpretationPackage *InterpretationPackage `bson:"interpretation_package,omitempty" json:"interpretation_package,omitempty"`
+	Modul8Summary         *Modul8Summary         `bson:"modul8_summary,omitempty" json:"modul8_summary,omitempty"`
 	InclusionCriteria     []string               `bson:"inclusion_criteria" json:"inclusion_criteria"`
 	ExclusionCriteria []string          `bson:"exclusion_criteria" json:"exclusion_criteria"`
 	Status            string            `bson:"status" json:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"

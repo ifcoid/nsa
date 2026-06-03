@@ -2,7 +2,7 @@
 
 > Dokumen ini memuat **spesifikasi desain** untuk modul/langkah yang **belum ada di kode** (masih stub atau belum dibuat). Dipisahkan dari [AGENT.md](AGENT.md) agar AGENT.md fokus pada alur yang sudah berjalan (Modul 2–5 + Modul 6 Langkah 1).
 >
-> Status saat ini di kode: Modul 6 & 7 **sudah diimplementasi** — lihat [AGENT.md](AGENT.md). Modul 8, 8b, 9 masih *stub* (log + transisi status).
+> Status saat ini di kode: Modul 6, 7 & 8 **sudah diimplementasi** — lihat [AGENT.md](AGENT.md). Modul 8b & 9 masih *stub* (log + transisi status). (Publish figur ke GitHub Pages: ditunda.)
 >
 > Saat sebuah langkah selesai diimplementasi, pindahkan spesifikasinya kembali ke AGENT.md dan ganti penanda menjadi ✅.
 
@@ -495,7 +495,9 @@ Konfirmasi 2 dokumen tersimpan di database.
 
 ---
 
-## Modul 8 — Analysis + Synthesis (A/B) → synthesis_results + figures  📝 Planned (stub)
+## Modul 8 — Analysis + Synthesis (A/B) → synthesis_results + figures  ✅ Implemented
+
+> **Sudah diimplementasi** (L1–L4) — lihat [AGENT.md](AGENT.md). Figur = SVG native Go (publish GitHub Pages ditunda). Spec rinci di bawah = referensi desain.
 
 BRIEF AWAL CONTEXT:
 

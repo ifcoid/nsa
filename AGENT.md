@@ -1124,8 +1124,19 @@ Input: paper **FINAL INCLUDED** dari M6 + RAG full-text Qdrant + PICO/RQ. Output
 
 ---
 
-## Modul 8 / 8b / 9 (Synthesis, Bibliometric, Manuscript)  📝 Planned
+## Modul 8 — Analysis + Synthesis (A/B) → synthesis_results + figures  ✅ Implemented
 
-Modul 8 (Analysis + Synthesis), 8b (Bibliometric/SLNA), dan 9 (Manuscript Writing) saat ini masih **stub** di kode (sekadar log + transisi status hingga `COMPLETED`).
+Input: `slr_extraction` + `synthesis_prep`/`qa_threshold` (M7) + research questions. Output di sesi: `descriptive_analysis` (+figur SVG), `synthesis_path_decision`, `synthesis_results`, `grade_evidence_table`, `interpretation_package`, `modul8_summary`.
 
-Spesifikasi desain lengkap ada di **[ROADMAP.md](ROADMAP.md)**.
+- **L1 — Descriptive + Heterogeneity**: distribusi design/tahun/geografis/kualitas dihitung di Go dari `slr_extraction` + **4 figur SVG native** (tanpa Python; disimpan inline & bisa dilihat di UI). Heterogeneity deep-dive via brain → verdict LOW/MODERATE/HIGH/VERY HIGH.
+- **L2 — Synthesis Path + Execution**: keputusan **Jalur A (narrative, default)** vs **Jalur B (meta-analysis)** via cek 5-kriteria. Jalur A → sintesis naratif/tematik per komponen framework + per RQ (anti bahasa meta). Jalur B → scaffold pelaporan + **skrip R/metafor forest plot** (statistik tetap di software eksternal sesuai spec).
+- **L3 — GRADE + Robustness**: grading 5 domain GRADE per outcome → tabel; robustness verdict (ROBUST/CONDITIONAL/NOT) + confidence statements.
+- **L4 — Interpretation**: `interpretation_package` (jawaban RQ, key findings, kontradiksi, dialog teori, gaps, limitations 3-tier) + `modul8_summary` → ke Modul 9.
+
+**Alur status:** `M8_SYNTHESIS → M8_STEP1_DESCRIPTIVE → _WAITING_APPROVAL → _APPROVED → M8_STEP2_SYNTHESIS → … → M8_STEP3_GRADE → … → M8_STEP4_INTERPRETATION → _WAITING_APPROVAL → _APPROVED → M9_MANUSCRIPT`. Tiap `_WAITING_APPROVAL` = gate HITL generik. Figur dipublikasikan ke GitHub Pages = **ditunda** (saat ini SVG disimpan di sesi).
+
+---
+
+## Modul 8b / 9 (Bibliometric, Manuscript)  📝 Planned
+
+Modul 8b (Bibliometric/SLNA, opsional) dan 9 (Manuscript Writing) masih **stub** di kode. Spesifikasi desain lengkap ada di **[ROADMAP.md](ROADMAP.md)**.
