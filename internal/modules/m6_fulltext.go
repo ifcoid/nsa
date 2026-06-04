@@ -169,7 +169,11 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 			}
 		}
 		if res1 == nil || err1 != nil {
-			return fmt.Errorf("R1 gagal merespons setelah fallback (%v). Batch terhenti", err1)
+			// Tahan-gagal: 1 paper yang gagal/timeout TIDAK mematikan batch — di-skip
+			// ke pending-manual (masuk antrian resolusi) dan loop lanjut.
+			logger.Logf(session.ID, "         [!] R1 gagal/timeout setelah fallback (%v). Paper di-skip -> pending manual.\n", err1)
+			m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], reviewerFailPending("R1", err1))
+			continue
 		}
 
 		time.Sleep(3 * time.Second)
@@ -178,7 +182,9 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		res2, err2 := reviewWithRetry(ctx, scR2, opDefs, title, fulltext,
 			[]time.Duration{1 * time.Minute, 3 * time.Minute, 5 * time.Minute, 10 * time.Minute}, session.ID, "R2")
 		if res2 == nil || err2 != nil {
-			return fmt.Errorf("R2 (groq) gagal merespons (%v). Batch terhenti", err2)
+			logger.Logf(session.ID, "         [!] R2 gagal/timeout (%v). Paper di-skip -> pending manual.\n", err2)
+			m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], reviewerFailPending("R2", err2))
+			continue
 		}
 
 		agreement := "DISAGREE"
@@ -299,6 +305,24 @@ func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, titl
 		}
 	}
 	return nil, err
+}
+
+// reviewerFailPending menandai paper sebagai pending-manual saat satu reviewer
+// gagal/timeout total (mis. tunnel rprompt hang). Paper masuk antrian resolusi,
+// bukan menghentikan batch — anti-halusinasi: tak ada keputusan tanpa review valid.
+func reviewerFailPending(which string, err error) map[string]interface{} {
+	note := fmt.Sprintf("Reviewer %s gagal/timeout: %v. Perlu keputusan manual.", which, err)
+	return map[string]interface{}{
+		"Screener_1_Decision_Full":    "UNCERTAIN",
+		"Screener_1_Reason_Code_Full": "REVIEWER-TIMEOUT",
+		"Screener_1_Notes_Full":       note,
+		"Screener_2_Decision_Full":    "UNCERTAIN",
+		"Screener_2_Reason_Code_Full": "REVIEWER-TIMEOUT",
+		"Screener_2_Notes_Full":       note,
+		"Agreement_Full":              "DISAGREE",
+		"Conflict_Resolution_Full":    "[PENDING_MANUAL] " + note,
+		"Batch_Evaluated_Full":        false,
+	}
 }
 
 func cohensKappa(total, bothInc, bothExc, r1IncR2Exc, r1ExcR2Inc int) float64 {
