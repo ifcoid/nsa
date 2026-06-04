@@ -281,7 +281,12 @@ func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, titl
 	var res *model.ScreeningPerspective
 	var err error
 	for i := 0; i <= len(delays); i++ {
-		res, err = ag.FullTextReviewPaper(ctx, opDefs, title, ft)
+		// Batas per-attempt 150s: mencegah panggilan yang HANG (mis. tunnel rprompt
+		// sonnet sesekali menggantung sampai timeout internal 9 menit) menguras ctx
+		// batch. Hang -> gagal cepat -> retry/fallback, batch tidak mati.
+		attemptCtx, cancel := context.WithTimeout(ctx, 150*time.Second)
+		res, err = ag.FullTextReviewPaper(attemptCtx, opDefs, title, ft)
+		cancel()
 		if err == nil && res != nil {
 			return res, nil
 		}
