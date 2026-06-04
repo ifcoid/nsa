@@ -106,7 +106,7 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		// bukan hanya Intro/Background.
 		queryText += " methods experimental setup study design participants dataset evaluation accuracy performance results metrics outcomes findings"
 		if v, ok, e := EmbedText(ctx, queryText); e != nil {
-			logger.Logf(session.ID, "   [WARN] Embedding query gagal (%v). Fallback ke konteks full-text penuh.\n", e)
+			logger.Logf(session.ID, "   [WARN] Embedding query gagal (%v). Fallback ke seleksi section-aware (urut chunk_index, tanpa ranking semantik).\n", e)
 		} else if ok && len(v) > 0 {
 			qvec = v
 			logger.Logf(session.ID, "   [RAG] Top-k semantik aktif (BGE-M3, dim %d) + section-aware (jamin Methods/Results).\n", len(v))
