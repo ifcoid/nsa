@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"google.golang.org/genai"
@@ -18,23 +19,29 @@ func NewGeminiClient(apiKey, model string) *GeminiClient {
 }
 
 func (g *GeminiClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
-	fmt.Printf("[API] Memanggil Gemini (%s) dengan Google Search Grounding...\n", g.Model)
-
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: g.APIKey})
 	if err != nil {
 		return "", fmt.Errorf("gagal inisialisasi Gemini Client: %w", err)
 	}
 
-	// Mengaktifkan GoogleSearchRetrieval
 	temp := float32(0.1)
 	config := &genai.GenerateContentConfig{
 		Temperature: &temp,
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{{Text: systemPrompt}},
 		},
-		Tools: []*genai.Tool{
-			{GoogleSearch: &genai.GoogleSearch{}},
-		},
+	}
+
+	// Google Search Grounding OPT-IN (default OFF). Untuk pipeline SLR, web-grounding
+	// tidak diinginkan: model harus menalar dari konteks RAG/ekstraksi yang diberikan,
+	// bukan mencari web (cegah kontaminasi & jaga output JSON terstruktur tetap bersih).
+	// Aktifkan hanya bila EMBED-independen flag GEMINI_GROUNDING=true.
+	grounding := strings.EqualFold(strings.TrimSpace(os.Getenv("GEMINI_GROUNDING")), "true")
+	if grounding {
+		fmt.Printf("[API] Memanggil Gemini (%s) + Google Search Grounding...\n", g.Model)
+		config.Tools = []*genai.Tool{{GoogleSearch: &genai.GoogleSearch{}}}
+	} else {
+		fmt.Printf("[API] Memanggil Gemini (%s)...\n", g.Model)
 	}
 
 	res, err := client.Models.GenerateContent(ctx, g.Model, genai.Text(userPrompt), config)

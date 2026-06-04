@@ -98,20 +98,24 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 	var qvec []float32
 	if rag != nil {
 		queryText := opDefs
-		if len(queryText) > 2000 {
-			queryText = queryText[:2000]
+		if len(queryText) > 1600 {
+			queryText = queryText[:1600]
 		}
+		// Perkaya query dengan istilah metode/hasil agar top-k mengangkat chunk
+		// pembawa keputusan (desain studi + metrik Outcome di Methods/Results),
+		// bukan hanya Intro/Background.
+		queryText += " methods experimental setup study design participants dataset evaluation accuracy performance results metrics outcomes findings"
 		if v, ok, e := EmbedText(ctx, queryText); e != nil {
 			logger.Logf(session.ID, "   [WARN] Embedding query gagal (%v). Fallback ke konteks full-text penuh.\n", e)
 		} else if ok && len(v) > 0 {
 			qvec = v
-			logger.Logf(session.ID, "   [RAG] Top-k semantik aktif (BGE-M3, dim %d): konteks per paper dipangkas ke chunk paling relevan.\n", len(v))
+			logger.Logf(session.ID, "   [RAG] Top-k semantik aktif (BGE-M3, dim %d) + section-aware (jamin Methods/Results).\n", len(v))
 		} else {
 			logger.Log(session.ID, "   [RAG] EMBED_ENDPOINT belum diset — pakai konteks full-text penuh (top-k nonaktif).")
 		}
 	}
-	const fulltextTopK = 8
-	const fulltextTopKChars = 8000
+	const fulltextTopK = 14
+	const fulltextTopKChars = 12000
 
 	fetchLimit := fulltextBatchSize - len(unevaluated)
 	papers, err := m.deps.MongoRepo.GetUnscreenedFullTextPapers(ctx, session.ID, fetchLimit)
@@ -126,11 +130,15 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		logger.Logf(session.ID, "      -> Full-text [%d/%d] DOI=%s\n", i+1, len(papers), doi)
 
 		fulltext := ""
-		if doi != "" && rag != nil {
-			if len(qvec) > 0 {
+		if rag != nil {
+			if doi != "" && rag.Has(doi) {
 				fulltext = rag.TopK(doi, qvec, fulltextTopK, fulltextTopKChars)
 			} else {
-				fulltext = rag.TopK(doi, nil, 0, maxFulltextChars)
+				// DOI kosong/tak cocok (mis. 4.5% chunk PEDE tanpa DOI) -> fallback judul.
+				fulltext = rag.TopKByTitle(title, qvec, fulltextTopK, fulltextTopKChars)
+				if fulltext != "" {
+					logger.Logf(session.ID, "         [RAG] DOI tak cocok; dipetakan via kemiripan judul.\n")
+				}
 			}
 		}
 
