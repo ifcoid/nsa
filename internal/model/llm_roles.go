@@ -18,13 +18,13 @@ type LLMRoles struct {
 func DefaultLLMRoles() LLMRoles {
 	return LLMRoles{
 		Reviewer1:          "zhipu",
-		Reviewer1Fallback:  "rprompt",
+		Reviewer1Fallback:  "rprompt1",
 		Reviewer2:          "groq",
 		Reviewer2Fallback:  "xiaomi",
 		Supervisor:         "xiaomi",
 		SupervisorFallback: "openrouter",
 		Brain:              "gemini",
-		BrainFallback:      "rprompt",
+		BrainFallback:      "rprompt1",
 	}
 }
 

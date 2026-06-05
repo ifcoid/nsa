@@ -1,6 +1,7 @@
 //go:build ignore
 
-// Upsert provider 'rprompt' (OpenAI-compatible) ke koleksi llm_providers.
+// Upsert provider 'rprompt1' (Claude Sonnet) dan 'rprompt2' (Gemini Pro) ke koleksi llm_providers.
+// Keduanya mengarah ke server rprompt yang sama tapi dengan model default berbeda.
 // Token dibaca dari ../rprompt/.env (API_TOKEN) agar rahasia tidak masuk repo.
 //
 // Jalankan: go run scratch/add_rprompt_provider.go
@@ -62,19 +63,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := &model.LLMConfig{
-		ID:           "rprompt",
+	baseURL := "https://rprompt.ll.my.id/v1"
+
+	// rprompt1: Claude Sonnet (untuk R1)
+	cfg1 := &model.LLMConfig{
+		ID:           "rprompt1",
 		ProviderName: "openai-compatible",
-		BaseURL:      "https://rprompt.ll.my.id/v1",
+		BaseURL:      baseURL,
 		APIKey:       token,
-		DefaultModel: "opus",
+		DefaultModel: "sonnet",
 		IsActive:     true,
 		UpdatedAt:    time.Now(),
 	}
-	if err := repo.UpdateLLMConfig(context.Background(), cfg); err != nil {
-		fmt.Printf("❌ Upsert gagal: %v\n", err)
+	if err := repo.UpdateLLMConfig(context.Background(), cfg1); err != nil {
+		fmt.Printf("❌ Upsert rprompt1 gagal: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Provider 'rprompt' di-upsert. base=%s model=%s key=%s…(panjang %d)\n",
-		cfg.BaseURL, cfg.DefaultModel, token[:4], len(token))
+	fmt.Printf("✅ Provider 'rprompt1' di-upsert. base=%s model=%s key=%s…(panjang %d)\n",
+		cfg1.BaseURL, cfg1.DefaultModel, token[:4], len(token))
+
+	// rprompt2: Gemini Pro (untuk R2)
+	cfg2 := &model.LLMConfig{
+		ID:           "rprompt2",
+		ProviderName: "openai-compatible",
+		BaseURL:      baseURL,
+		APIKey:       token,
+		DefaultModel: "gemini-2.5-pro",
+		IsActive:     true,
+		UpdatedAt:    time.Now(),
+	}
+	if err := repo.UpdateLLMConfig(context.Background(), cfg2); err != nil {
+		fmt.Printf("❌ Upsert rprompt2 gagal: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✅ Provider 'rprompt2' di-upsert. base=%s model=%s key=%s…(panjang %d)\n",
+		cfg2.BaseURL, cfg2.DefaultModel, token[:4], len(token))
 }
