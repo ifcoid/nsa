@@ -19,6 +19,9 @@ import (
 // repo publik ifcoid/pede (bisa di desktop maupun Chrome Android).
 const ColabEmbedURL = "https://colab.research.google.com/github/ifcoid/pede/blob/main/notebooks/embed_server_colab.ipynb"
 
+// ColabIngestURL membuka notebook PEDE (vektorisasi PDF -> Qdrant) di Google Colab.
+const ColabIngestURL = "https://colab.research.google.com/github/ifcoid/pede/blob/main/notebooks/pede_colab.ipynb"
+
 // webBaseURL untuk tautan "buka di web" pada pesan. Bisa dioverride via env.
 func webBaseURL() string {
 	if u := strings.TrimSpace(os.Getenv("WEB_BASE_URL")); u != "" {
@@ -78,7 +81,8 @@ func describe(status string) string {
 	case status == "M6_STEP2_WAITING_RESOLUTION":
 		return "🧪 Batch full-text screening selesai. Resolusi konflik / Setuju & Lanjut di web."
 	case status == "M6_STEP1_WAITING_SYNC":
-		return "🔗 Modul 6: sinkronisasi Qdrant siap. Tinjau & lanjut di web."
+		return "🔗 Modul 6 L1: akuisisi siap. Vektorisasi PDF → Qdrant lewat Colab PEDE: " + ColabIngestURL +
+			"\nSetelah selesai, tekan 'Sinkronkan dengan Qdrant' di web."
 	case status == "M5_STEP3_WAITING_RESOLUTION":
 		return "🧪 Batch screening abstrak selesai. Resolusi konflik di web."
 	case strings.HasSuffix(status, "_NEEDS_REVISION"):
