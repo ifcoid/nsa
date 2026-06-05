@@ -525,6 +525,21 @@ func (r *MongoRepository) UpdateLLMConfig(ctx context.Context, config *model.LLM
 	return err
 }
 
+// GetAllLLMConfigs mengambil semua konfigurasi LLM dari database
+func (r *MongoRepository) GetAllLLMConfigs(ctx context.Context) ([]model.LLMConfig, error) {
+	collection := r.client.Database(r.dbName).Collection("llm_providers")
+	var configs []model.LLMConfig
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	if err := cursor.All(ctx, &configs); err != nil {
+		return nil, err
+	}
+	return configs, nil
+}
+
 // GetLLMRoles mengambil pemetaan peran->provider (llm_roles), diisi default bila kosong/absen.
 func (r *MongoRepository) GetLLMRoles(ctx context.Context) *model.LLMRoles {
 	roles := model.DefaultLLMRoles()

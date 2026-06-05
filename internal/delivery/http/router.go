@@ -95,6 +95,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/vosviewer", r.sessionHndlr.SubmitVOSviewer)
 	
 	// LLM config endpoints
+	protected.HandleFunc("GET /api/llm/health", r.llmHndlr.CheckHealth)
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
 	protected.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
 	protected.HandleFunc("GET /api/llm/roles", r.llmHndlr.GetRoles)

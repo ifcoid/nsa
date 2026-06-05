@@ -345,3 +345,114 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 		"models":   models,
 	})
 }
+
+// CheckHealth mengecek status kesehatan dan kuota semua API LLM
+func (h *LLMHandler) CheckHealth(w http.ResponseWriter, req *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	configs, err := h.mongoRepo.GetAllLLMConfigs(ctx)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch LLM configs")
+		return
+	}
+
+	type HealthResult struct {
+		Provider string `json:"provider"`
+		Status   string `json:"status"` // "ALIVE", "UNAUTHORIZED", "QUOTA_EXCEEDED", "ERROR"
+		Message  string `json:"message"`
+	}
+
+	results := make([]HealthResult, len(configs))
+	errCh := make(chan struct {
+		index int
+		res   HealthResult
+	}, len(configs))
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	for i, cfg := range configs {
+		go func(idx int, c model.LLMConfig) {
+			res := HealthResult{Provider: c.ID, Status: "ERROR", Message: "Timeout or unknown error"}
+			
+			if c.APIKey == "" {
+				res.Status = "UNAUTHORIZED"
+				res.Message = "API Key kosong"
+				errCh <- struct {
+					index int
+					res   HealthResult
+				}{idx, res}
+				return
+			}
+
+			// Tentukan URL pengecekan (biasanya /v1/models)
+			var url string
+			reqMethod := "GET"
+			
+			if strings.HasPrefix(c.ProviderName, "gemini") || c.ProviderName == "gemini" {
+				url = fmt.Sprintf("%s/models?key=%s", c.BaseURL, c.APIKey)
+			} else if c.ProviderName == "claude" {
+				url = "https://api.anthropic.com/v1/models"
+			} else if c.ProviderName == "cohere" {
+				url = "https://api.cohere.com/v1/models"
+			} else {
+				// Default OpenAI-compatible
+				baseURL := c.BaseURL
+				if baseURL == "" {
+					baseURL = "https://api.openai.com/v1"
+				}
+				baseURL = strings.TrimSuffix(baseURL, "/")
+				url = baseURL + "/models"
+			}
+
+			httpReq, _ := http.NewRequestWithContext(ctx, reqMethod, url, nil)
+			
+			// Set headers
+			if c.ProviderName == "claude" {
+				httpReq.Header.Set("x-api-key", c.APIKey)
+				httpReq.Header.Set("anthropic-version", "2023-06-01")
+			} else if c.ProviderName == "cohere" {
+				httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
+			} else if c.ProviderName != "gemini" {
+				httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
+			}
+			httpReq.Header.Set("Accept", "application/json")
+
+			resp, err := client.Do(httpReq)
+			if err != nil {
+				res.Message = err.Error()
+			} else {
+				defer resp.Body.Close()
+				if resp.StatusCode == 200 {
+					res.Status = "ALIVE"
+					res.Message = "API Sehat"
+				} else if resp.StatusCode == 401 || resp.StatusCode == 403 {
+					res.Status = "UNAUTHORIZED"
+					res.Message = "API Key tidak valid (401/403)"
+				} else if resp.StatusCode == 429 {
+					res.Status = "QUOTA_EXCEEDED"
+					res.Message = "Kuota habis / Rate limit (429)"
+				} else {
+					res.Status = "ERROR"
+					res.Message = fmt.Sprintf("HTTP %d", resp.StatusCode)
+				}
+			}
+
+			errCh <- struct {
+				index int
+				res   HealthResult
+			}{idx, res}
+
+		}(i, cfg)
+	}
+
+	for i := 0; i < len(configs); i++ {
+		r := <-errCh
+		results[r.index] = r.res
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"health": results,
+	})
+}
+
