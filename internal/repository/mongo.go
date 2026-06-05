@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"nsa/internal/model"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -54,6 +55,44 @@ func (r *MongoRepository) GetSession(ctx context.Context, sessionID string) (*mo
 		return nil, err
 	}
 	return &session, nil
+}
+
+// ListResumableSessions mengembalikan ID sesi yang berstatus "sedang jalan"
+// (bukan gate WAITING, bukan ERROR/NEEDS_REVISION, bukan terminal/INIT/DONE) —
+// yaitu sesi yang worker-nya terputus saat mesin mati, untuk auto-resume saat startup.
+func (r *MongoRepository) ListResumableSessions(ctx context.Context) ([]string, error) {
+	collection := r.client.Database(r.dbName).Collection("slr_sessions")
+	cur, err := collection.Find(ctx, bson.M{}, options.Find().SetProjection(bson.M{"_id": 1, "status": 1}))
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	var ids []string
+	for cur.Next(ctx) {
+		var doc struct {
+			ID     string `bson:"_id"`
+			Status string `bson:"status"`
+		}
+		if cur.Decode(&doc) != nil {
+			continue
+		}
+		if isResumableStatus(doc.Status) {
+			ids = append(ids, doc.ID)
+		}
+	}
+	return ids, nil
+}
+
+func isResumableStatus(status string) bool {
+	if status == "" || status == "INIT" || status == "COMPLETED" {
+		return false
+	}
+	for _, terminal := range []string{"WAITING", "NEEDS_REVISION", "ERROR", "DONE"} {
+		if strings.Contains(status, terminal) {
+			return false
+		}
+	}
+	return true
 }
 
 // UpdateSession memperbarui kriteria, PICO, atau status alur kerja (INIT -> WAITING_APPROVAL, dll)

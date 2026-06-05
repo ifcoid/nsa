@@ -72,6 +72,10 @@ func main() {
 	// 5. Inisialisasi HTTP Router
 	router := httpapi.NewRouter(mongoRepo, pipeline)
 
+	// Auto-resume: lanjutkan sesi yang berstatus "sedang jalan" (mis. worker terputus
+	// karena deploy/restart mesin fly) tanpa perlu klik Resume manual di web.
+	go pipeline.ResumeInProgress(context.Background())
+
 	// 6. Jalankan Web Server
 	port := os.Getenv("PORT")
 	if port == "" {

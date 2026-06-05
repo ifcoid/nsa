@@ -160,3 +160,22 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 	}()
 }
 
+// ResumeInProgress melanjutkan otomatis sesi yang berstatus "sedang jalan" saat
+// startup (mis. setelah deploy/restart mesin fly). Menutup celah perlu klik Resume
+// manual: worker yang terputus dilanjutkan dari progres terakhir (tersimpan di DB).
+func (p *SLRPipeline) ResumeInProgress(ctx context.Context) {
+	ids, err := p.mongoRepo.ListResumableSessions(ctx)
+	if err != nil {
+		logger.Logf("system", "[Startup] Gagal memindai sesi untuk auto-resume: %v\n", err)
+		return
+	}
+	if len(ids) == 0 {
+		logger.Log("system", "[Startup] Tak ada sesi 'sedang jalan' — tak perlu auto-resume.")
+		return
+	}
+	for _, id := range ids {
+		logger.Logf(id, "[Startup] Auto-resume sesi (status sedang jalan) setelah restart.\n")
+		p.ExecuteAsync(context.Background(), id)
+	}
+}
+
