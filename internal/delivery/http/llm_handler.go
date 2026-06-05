@@ -67,6 +67,8 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 			config.BaseURL = "https://open.bigmodel.cn/api/paas/v4"
 		} else if payload.Provider == "xiaomi" {
 			config.BaseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
+		} else if payload.Provider == "rprompt" {
+			config.BaseURL = "https://rprompt.ll.my.id/v1"
 		}
 	}
 	config.UpdatedAt = time.Now()
@@ -266,7 +268,7 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
-	default: // groq, zhipu (OpenAI compatible)
+	default: // groq, zhipu, rprompt, dll (OpenAI compatible)
 		baseURL := payload.BaseURL
 		if baseURL == "" {
 			if provider == "groq" {
@@ -277,6 +279,8 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 				baseURL = "https://openrouter.ai/api/v1"
 			} else if provider == "xiaomi" {
 				baseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
+			} else if provider == "rprompt" {
+				baseURL = "https://rprompt.ll.my.id/v1"
 			} else {
 				sendJSONError(w, http.StatusBadRequest, "Base URL is required for this provider")
 				return

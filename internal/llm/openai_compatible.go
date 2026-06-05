@@ -8,9 +8,27 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// requestTimeout adalah batas per-attempt untuk satu panggilan LLM. Default GENEROUS
+// (45 menit) karena model besar (opus) menyusun section manuskrip panjang bisa lama
+// (draft → verifikasi → guardrail → verifikasi lagi; bisa 30-60 menit). Streaming SSE
+// menjaga koneksi tetap hidup sepanjang itu (hindari Cloudflare 524). Bisa diubah via
+// env LLM_REQUEST_TIMEOUT_MINUTES tanpa redeploy kode.
+// Catatan: screening tetap 60s karena dibungkus ctx pendek oleh reviewWithRetry
+// (min(60s, timeout ini) = 60s), jadi nilai besar ini hanya berlaku untuk generasi.
+func requestTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("LLM_REQUEST_TIMEOUT_MINUTES")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return time.Duration(n) * time.Minute
+		}
+	}
+	return 60 * time.Minute
+}
 
 // OpenAICompatibleClient adalah adapter universal untuk API berbasis standar OpenAI.
 // Memakai STREAMING (SSE) agar koneksi tetap hidup pada generasi panjang — penting untuk
@@ -69,7 +87,7 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, systemPrompt, use
 	var lastErr error
 
 	for i := 0; i < maxRetries; i++ {
-		reqCtx, cancel := context.WithTimeout(ctx, 9*time.Minute)
+		reqCtx, cancel := context.WithTimeout(ctx, requestTimeout())
 		req, err := http.NewRequestWithContext(reqCtx, "POST", url, bytes.NewBuffer(jsonPayload))
 		if err != nil {
 			cancel()
