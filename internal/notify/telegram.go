@@ -15,6 +15,10 @@ import (
 	"time"
 )
 
+// ColabEmbedURL membuka notebook server embedding langsung di Google Colab dari
+// repo publik ifcoid/pede (bisa di desktop maupun Chrome Android).
+const ColabEmbedURL = "https://colab.research.google.com/github/ifcoid/pede/blob/main/notebooks/embed_server_colab.ipynb"
+
 // webBaseURL untuk tautan "buka di web" pada pesan. Bisa dioverride via env.
 func webBaseURL() string {
 	if u := strings.TrimSpace(os.Getenv("WEB_BASE_URL")); u != "" {
@@ -68,7 +72,9 @@ func describe(status string) string {
 	case status == "COMPLETED":
 		return "🎉 Pipeline SELESAI — manuskrip final siap diunduh (.md/.tex/.bib)."
 	case status == "M6_STEP2_WAITING_EMBED":
-		return "⏸️ Screening dijeda: endpoint embedding (BGE-M3) mati. Nyalakan Colab lalu masukkan endpoint baru di web."
+		return "⏸️ Screening dijeda: endpoint embedding (BGE-M3) mati.\n" +
+			"▶️ Nyalakan Colab (bisa di Chrome Android): " + ColabEmbedURL + "\n" +
+			"Lalu Run all → salin EMBED_ENDPOINT → masukkan di web."
 	case status == "M6_STEP2_WAITING_RESOLUTION":
 		return "🧪 Batch full-text screening selesai. Resolusi konflik / Setuju & Lanjut di web."
 	case status == "M6_STEP1_WAITING_SYNC":
