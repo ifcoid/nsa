@@ -176,33 +176,35 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 			continue
 		}
 
-		// R1 (primary, 1 retry cepat lalu langsung fallback ke cohere bila hang).
+		// R1: percobaan cepat primary -> fallback GIGIH (cohere andal). Tidak men-skip
+		// paper: kalau benar-benar mentok, batch DIJEDA (return error) supaya bisa
+		// di-Resume & paper yang SAMA dicoba ulang — screening tetap runut/lengkap.
 		res1, err1 := reviewWithRetry(ctx, scR1, opDefs, title, fulltext,
-			[]time.Duration{8 * time.Second}, session.ID, "R1", roles.Reviewer1)
+			[]time.Duration{8 * time.Second, 20 * time.Second}, session.ID, "R1", roles.Reviewer1)
 		if res1 == nil || err1 != nil {
 			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback); e == nil {
 				res1, err1 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, title, fulltext,
-					[]time.Duration{10 * time.Second, 30 * time.Second}, session.ID, "R1-fallback", roles.Reviewer1Fallback)
+					[]time.Duration{15 * time.Second, 30 * time.Second, 60 * time.Second, 120 * time.Second}, session.ID, "R1-fallback", roles.Reviewer1Fallback)
 			}
 		}
 		if res1 == nil || err1 != nil {
-			// Tahan-gagal: 1 paper yang gagal/timeout TIDAK mematikan batch — di-skip
-			// ke pending-manual (masuk antrian resolusi) dan loop lanjut.
-			logger.Logf(session.ID, "         [!] R1 gagal/timeout setelah fallback (%v). Paper di-skip -> pending manual.\n", err1)
-			m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], reviewerFailPending("R1", err1))
-			continue
+			return fmt.Errorf("R1 (%s/%s) gagal setelah retry panjang pada paper %s: %w. Batch DIJEDA — provider mungkin sedang down; Resume untuk lanjut paper yang sama (tak ada paper di-skip, progres tersimpan)", roles.Reviewer1, roles.Reviewer1Fallback, doi, err1)
 		}
 
 		time.Sleep(3 * time.Second)
 
-		// R2 — backoff pendek (recovery cepat dari hiccup; provider tak lagi rate-limited
-		// harian seperti era groq, jadi tak perlu tunggu menit-menit).
+		// R2: percobaan primary -> fallback gigih (kini R2 PUNYA fallback). Sama: tak
+		// men-skip; mentok total -> batch dijeda & resumable.
 		res2, err2 := reviewWithRetry(ctx, scR2, opDefs, title, fulltext,
-			[]time.Duration{10 * time.Second, 30 * time.Second, 60 * time.Second}, session.ID, "R2", roles.Reviewer2)
+			[]time.Duration{10 * time.Second, 30 * time.Second}, session.ID, "R2", roles.Reviewer2)
 		if res2 == nil || err2 != nil {
-			logger.Logf(session.ID, "         [!] R2 gagal/timeout (%v). Paper di-skip -> pending manual.\n", err2)
-			m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], reviewerFailPending("R2", err2))
-			continue
+			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2Fallback); e == nil {
+				res2, err2 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, title, fulltext,
+					[]time.Duration{15 * time.Second, 30 * time.Second, 60 * time.Second, 120 * time.Second}, session.ID, "R2-fallback", roles.Reviewer2Fallback)
+			}
+		}
+		if res2 == nil || err2 != nil {
+			return fmt.Errorf("R2 (%s/%s) gagal setelah retry panjang pada paper %s: %w. Batch DIJEDA — Resume untuk lanjut (tak ada paper di-skip, progres tersimpan)", roles.Reviewer2, roles.Reviewer2Fallback, doi, err2)
 		}
 
 		agreement := "DISAGREE"
@@ -358,24 +360,6 @@ func clipErr(s string) string {
 		return s[:200] + "…"
 	}
 	return s
-}
-
-// reviewerFailPending menandai paper sebagai pending-manual saat satu reviewer
-// gagal/timeout total (mis. tunnel rprompt hang). Paper masuk antrian resolusi,
-// bukan menghentikan batch — anti-halusinasi: tak ada keputusan tanpa review valid.
-func reviewerFailPending(which string, err error) map[string]interface{} {
-	note := fmt.Sprintf("Reviewer %s gagal/timeout: %v. Perlu keputusan manual.", which, err)
-	return map[string]interface{}{
-		"Screener_1_Decision_Full":    "UNCERTAIN",
-		"Screener_1_Reason_Code_Full": "REVIEWER-TIMEOUT",
-		"Screener_1_Notes_Full":       note,
-		"Screener_2_Decision_Full":    "UNCERTAIN",
-		"Screener_2_Reason_Code_Full": "REVIEWER-TIMEOUT",
-		"Screener_2_Notes_Full":       note,
-		"Agreement_Full":              "DISAGREE",
-		"Conflict_Resolution_Full":    "[PENDING_MANUAL] " + note,
-		"Batch_Evaluated_Full":        false,
-	}
 }
 
 func cohensKappa(total, bothInc, bothExc, r1IncR2Exc, r1ExcR2Inc int) float64 {

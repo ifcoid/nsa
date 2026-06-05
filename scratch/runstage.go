@@ -66,7 +66,7 @@ func main() {
 	factory := llm.NewLLMFactory(repo)
 	pipeline := orchestrator.NewSLRPipeline(repo, factory)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
 	start := time.Now()
 

@@ -104,7 +104,7 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 	go func() {
 		// Gunakan background context baru agar tidak ter-cancel saat request HTTP selesai
 		// Beri timeout panjang karena panggilan LLM bisa memakan waktu
-		asyncCtx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+		asyncCtx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 		
 		defer func() {
 			cancel()
