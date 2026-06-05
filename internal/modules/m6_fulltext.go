@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -105,13 +106,28 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		// pembawa keputusan (desain studi + metrik Outcome di Methods/Results),
 		// bukan hanya Intro/Background.
 		queryText += " methods experimental setup study design participants dataset evaluation accuracy performance results metrics outcomes findings"
-		if v, ok, e := EmbedText(ctx, queryText); e != nil {
-			logger.Logf(session.ID, "   [WARN] Embedding query gagal (%v). Fallback ke seleksi section-aware (urut chunk_index, tanpa ranking semantik).\n", e)
-		} else if ok && len(v) > 0 {
+
+		// Resolusi endpoint embedding: utamakan embed_config DB (bisa diubah via web),
+		// fallback ke env. TANPA endpoint hidup, screening DI-PAUSE (HITL) — TIDAK
+		// auto-degrade ke section-aware tanpa sepengetahuan user.
+		ec := m.deps.MongoRepo.GetEmbedConfig(ctx)
+		endpoint, key, emodel := ec.Endpoint, ec.APIKey, ec.Model
+		if strings.TrimSpace(endpoint) == "" {
+			endpoint, key, emodel = os.Getenv("EMBED_ENDPOINT"), os.Getenv("EMBED_API_KEY"), os.Getenv("EMBED_MODEL")
+		}
+		v, ok, e := EmbedWith(ctx, queryText, endpoint, key, emodel)
+		if ok && e == nil && len(v) > 0 {
 			qvec = v
 			logger.Logf(session.ID, "   [RAG] Top-k semantik aktif (BGE-M3, dim %d) + section-aware (jamin Methods/Results).\n", len(v))
 		} else {
-			logger.Log(session.ID, "   [RAG] EMBED_ENDPOINT belum diset — pakai konteks full-text penuh (top-k nonaktif).")
+			reason := "Endpoint embedding belum diset. Nyalakan Colab (embed_server_colab.ipynb) lalu masukkan endpoint via web."
+			if strings.TrimSpace(endpoint) != "" {
+				reason = fmt.Sprintf("Endpoint embedding (%s) tak merespons: %v. Restart Colab & masukkan endpoint baru via web.", endpoint, e)
+			}
+			logger.Logf(session.ID, "   [PAUSE] %s\n", reason)
+			session.Status = "M6_STEP2_WAITING_EMBED"
+			session.EmbedError = reason
+			return m.deps.MongoRepo.UpdateSession(ctx, session)
 		}
 	}
 	const fulltextTopK = 14

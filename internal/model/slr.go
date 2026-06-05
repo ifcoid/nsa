@@ -366,6 +366,7 @@ type SLRSession struct {
 	Status            string            `bson:"status" json:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
 	Feedback          string            `bson:"feedback" json:"feedback"` // Catatan dari manusia jika butuh revisi
 	SystemError       string            `bson:"system_error" json:"system_error"` // Pesan error dari mesin/pipeline
+	EmbedError        string            `bson:"embed_error,omitempty" json:"embed_error,omitempty"` // alasan pause di M6_STEP2_WAITING_EMBED (endpoint embedding mati)
 	UpdatedAt         time.Time         `bson:"updated_at" json:"updated_at"`
 }
 

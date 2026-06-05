@@ -207,8 +207,12 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 		} else if session.Status == "M6_STEP2_WAITING_RESOLUTION" {
 			// Lanjut batch full-text berikutnya / evaluasi
 			session.Status = "M6_STEP2_FULLTEXT_SCREENING"
+		} else if session.Status == "M6_STEP2_WAITING_EMBED" {
+			// User sudah memasukkan endpoint embedding baru (via /api/embed-config) -> lanjut.
+			session.Status = "M6_STEP2_FULLTEXT_SCREENING"
+			session.EmbedError = ""
 		}
-		
+
 		// Custom data handling untuk M2_STEP1
 		if err == nil && session.Status == "M2_STEP1_APPROVED" {
 			if selected, ok := updateData["selected_topic"]; ok {

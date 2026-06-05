@@ -525,6 +525,32 @@ func (r *MongoRepository) UpdateGitHubConfig(ctx context.Context, cfg *model.Git
 	return err
 }
 
+// GetEmbedConfig mengambil konfigurasi endpoint embedding (runtime, _id="default").
+func (r *MongoRepository) GetEmbedConfig(ctx context.Context) *model.EmbedConfig {
+	var cfg model.EmbedConfig
+	err := r.client.Database(r.dbName).Collection("embed_config").
+		FindOne(ctx, bson.M{"_id": "default"}).Decode(&cfg)
+	if err != nil {
+		def := &model.EmbedConfig{}
+		def.Defaults()
+		return def
+	}
+	cfg.Defaults()
+	return &cfg
+}
+
+// UpdateEmbedConfig menyimpan endpoint embedding (upsert, _id="default").
+func (r *MongoRepository) UpdateEmbedConfig(ctx context.Context, cfg *model.EmbedConfig) error {
+	cfg.ID = "default"
+	cfg.Defaults()
+	cfg.UpdatedAt = time.Now()
+	filter := bson.M{"_id": "default"}
+	update := bson.M{"$set": cfg}
+	opts := options.Update().SetUpsert(true)
+	_, err := r.client.Database(r.dbName).Collection("embed_config").UpdateOne(ctx, filter, update, opts)
+	return err
+}
+
 // UpdateLLMRoles menyimpan pemetaan peran->provider (upsert, _id="default").
 func (r *MongoRepository) UpdateLLMRoles(ctx context.Context, roles *model.LLMRoles) error {
 	roles.ID = "default"

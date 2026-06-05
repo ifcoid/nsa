@@ -108,6 +108,31 @@ func (h *LLMHandler) UpdateGitHubConfig(w http.ResponseWriter, req *http.Request
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "GitHub config updated"})
 }
 
+// GetEmbedConfig mengembalikan konfigurasi endpoint embedding (api_key disembunyikan).
+func (h *LLMHandler) GetEmbedConfig(w http.ResponseWriter, req *http.Request) {
+	cfg := h.mongoRepo.GetEmbedConfig(context.Background())
+	keySet := cfg.APIKey != ""
+	cfg.APIKey = ""
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"config": cfg, "key_set": keySet})
+}
+
+// UpdateEmbedConfig menyimpan endpoint embedding (runtime). api_key kosong -> pertahankan lama.
+func (h *LLMHandler) UpdateEmbedConfig(w http.ResponseWriter, req *http.Request) {
+	var cfg model.EmbedConfig
+	if err := json.NewDecoder(req.Body).Decode(&cfg); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if cfg.APIKey == "" {
+		cfg.APIKey = h.mongoRepo.GetEmbedConfig(context.Background()).APIKey // preserve
+	}
+	if err := h.mongoRepo.UpdateEmbedConfig(context.Background(), &cfg); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update embed config: "+err.Error())
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "Embed config updated"})
+}
+
 // GetRoles mengembalikan pemetaan peran->provider (Model Routing).
 func (h *LLMHandler) GetRoles(w http.ResponseWriter, req *http.Request) {
 	roles := h.mongoRepo.GetLLMRoles(context.Background())

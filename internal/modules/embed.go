@@ -25,15 +25,21 @@ import (
 // available=false bila EMBED_ENDPOINT kosong; caller harus fallback ke konteks
 // penuh/terpotong (bukan error).
 func EmbedText(ctx context.Context, text string) (vec []float32, available bool, err error) {
-	base := strings.TrimRight(strings.TrimSpace(os.Getenv("EMBED_ENDPOINT")), "/ ")
+	return EmbedWith(ctx, text, os.Getenv("EMBED_ENDPOINT"), os.Getenv("EMBED_API_KEY"), os.Getenv("EMBED_MODEL"))
+}
+
+// EmbedWith sama seperti EmbedText namun memakai konfigurasi endpoint eksplisit
+// (dari embed_config DB yang bisa diubah runtime via web), bukan env.
+func EmbedWith(ctx context.Context, text, endpoint, apiKey, model string) (vec []float32, available bool, err error) {
+	base := strings.TrimRight(strings.TrimSpace(endpoint), "/ ")
 	if base == "" {
 		return nil, false, nil
 	}
-	model := strings.TrimSpace(os.Getenv("EMBED_MODEL"))
+	model = strings.TrimSpace(model)
 	if model == "" {
 		model = "BAAI/bge-m3"
 	}
-	key := strings.TrimSpace(os.Getenv("EMBED_API_KEY"))
+	key := strings.TrimSpace(apiKey)
 
 	reqBody, _ := json.Marshal(map[string]interface{}{
 		"model": model,
