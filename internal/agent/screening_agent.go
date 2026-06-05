@@ -159,6 +159,7 @@ Berikut adalah SCREENER BRIEFING yang WAJIB Anda patuhi:
 Tugas Anda adalah meninjau Title, Abstract, dan Keywords dari paper yang diberikan.
 
 Keluarkan HANYA JSON MURNI tanpa blok markdown dengan struktur berikut:
+(PENTING: Semua value HARUS berupa string biasa, dilarang menggunakan nested object atau array!)
 {
   "strict": "Perspektif jika Anda bersikap STRICT (bias EXCLUDE)",
   "liberal": "Perspektif jika Anda bersikap LIBERAL (bias INCLUDE)",
@@ -205,6 +206,7 @@ REASON CODES (12; pakai PERSIS salah satu jika EXCLUDE):
 Analisis tiap artikel: (1) STUDY DESIGN dari bagian Methods, (2) POPULATION vs WHAT COUNTS, (3) INTERVENTION/EXPOSURE, (4) OUTCOME + alat ukur, (5) RED FLAGS metodologis untuk QA Modul 7 (sample kecil tanpa power analysis? confounder tak ditangani? follow-up kurang? missing data tak dilaporkan?).
 
 Keluarkan HANYA JSON MURNI tanpa blok markdown:
+(PENTING: Semua value HARUS berupa string biasa, dilarang menggunakan nested object atau array!)
 {
   "strict": "Perspektif STRICT (bias EXCLUDE) dengan kutipan dari full-text",
   "liberal": "Perspektif LIBERAL (bias INCLUDE) dengan kutipan dari full-text",
