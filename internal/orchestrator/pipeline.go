@@ -10,6 +10,7 @@ import (
 	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/modules"
+	"nsa/internal/notify"
 	"nsa/internal/repository"
 )
 
@@ -132,6 +133,7 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 						session.Status = session.Status + "_ERROR"
 						_ = p.mongoRepo.UpdateSession(asyncCtx, session)
 					}
+					notify.Telegram(notify.GateMessage(sessionID, session.Status))
 				}
 				break
 			}
@@ -143,11 +145,12 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 			}
 
 			// Berhenti looping jika butuh interaksi manusia, sedang error, atau sudah selesai
-			if strings.Contains(session.Status, "WAITING") || 
-			   strings.Contains(session.Status, "NEEDS_REVISION") || 
-			   strings.Contains(session.Status, "ERROR") || 
-			   (strings.Contains(session.Status, "DONE") && session.Status != "M5_DONE") || 
+			if strings.Contains(session.Status, "WAITING") ||
+			   strings.Contains(session.Status, "NEEDS_REVISION") ||
+			   strings.Contains(session.Status, "ERROR") ||
+			   (strings.Contains(session.Status, "DONE") && session.Status != "M5_DONE") ||
 			   session.Status == "COMPLETED" {
+				notify.Telegram(notify.GateMessage(sessionID, session.Status))
 				break
 			}
 			
