@@ -159,13 +159,13 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 			continue
 		}
 
-		// R1 (primary, lalu fallback role on-the-fly)
+		// R1 (primary, 1 retry cepat lalu langsung fallback ke cohere bila hang).
 		res1, err1 := reviewWithRetry(ctx, scR1, opDefs, title, fulltext,
-			[]time.Duration{10 * time.Second, 30 * time.Second, 60 * time.Second}, session.ID, "R1")
+			[]time.Duration{8 * time.Second}, session.ID, "R1")
 		if res1 == nil || err1 != nil {
 			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback); e == nil {
 				res1, err1 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, title, fulltext,
-					[]time.Duration{1 * time.Minute, 3 * time.Minute}, session.ID, "R1-fallback")
+					[]time.Duration{10 * time.Second, 30 * time.Second}, session.ID, "R1-fallback")
 			}
 		}
 		if res1 == nil || err1 != nil {
@@ -288,10 +288,10 @@ func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, titl
 	var res *model.ScreeningPerspective
 	var err error
 	for i := 0; i <= len(delays); i++ {
-		// Batas per-attempt 150s: mencegah panggilan yang HANG (mis. tunnel rprompt
-		// sonnet sesekali menggantung sampai timeout internal 9 menit) menguras ctx
-		// batch. Hang -> gagal cepat -> retry/fallback, batch tidak mati.
-		attemptCtx, cancel := context.WithTimeout(ctx, 150*time.Second)
+		// Batas per-attempt 60s: panggilan normal ~10-20s; kalau HANG (tunnel rprompt
+		// sonnet/gemini sesekali menggantung), gagal cepat (60s) -> retry/fallback,
+		// bukan nunggu 150s/9 menit yang menguras ctx batch.
+		attemptCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		res, err = ag.FullTextReviewPaper(attemptCtx, opDefs, title, ft)
 		cancel()
 		if err == nil && res != nil {
