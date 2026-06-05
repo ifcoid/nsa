@@ -224,6 +224,7 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 			var advice *agent.ResolutionAdvice
 			var errAdv error
 			for retry := 0; retry < 3; retry++ {
+				logger.Logf(session.ID, "         [Supervisor] Sedang menghubungi API %s (Attempt #%d)... Mohon tunggu.\n", supName, retry+1)
 				advice, errAdv = supervisor.AnalyzeDisagreement(ctx, opDefs, title, ftSnippet, notes1, notes2)
 				if errAdv == nil && advice != nil {
 					break
