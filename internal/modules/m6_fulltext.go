@@ -78,6 +78,7 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 
 	scR1 := agent.NewScreeningAgent(llmR1)
 	scR2 := agent.NewScreeningAgent(llmR2)
+	logger.Logf(session.ID, "   [Reviewer] R1=%s (fb %s) | R2=%s | Supervisor=%s\n", roles.Reviewer1, roles.Reviewer1Fallback, roles.Reviewer2, supName)
 
 	opDefs := m.operationalDefsContext(session)
 
@@ -177,11 +178,11 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 
 		// R1 (primary, 1 retry cepat lalu langsung fallback ke cohere bila hang).
 		res1, err1 := reviewWithRetry(ctx, scR1, opDefs, title, fulltext,
-			[]time.Duration{8 * time.Second}, session.ID, "R1")
+			[]time.Duration{8 * time.Second}, session.ID, "R1", roles.Reviewer1)
 		if res1 == nil || err1 != nil {
 			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback); e == nil {
 				res1, err1 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, title, fulltext,
-					[]time.Duration{10 * time.Second, 30 * time.Second}, session.ID, "R1-fallback")
+					[]time.Duration{10 * time.Second, 30 * time.Second}, session.ID, "R1-fallback", roles.Reviewer1Fallback)
 			}
 		}
 		if res1 == nil || err1 != nil {
@@ -197,7 +198,7 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		// R2 — backoff pendek (recovery cepat dari hiccup; provider tak lagi rate-limited
 		// harian seperti era groq, jadi tak perlu tunggu menit-menit).
 		res2, err2 := reviewWithRetry(ctx, scR2, opDefs, title, fulltext,
-			[]time.Duration{10 * time.Second, 30 * time.Second, 60 * time.Second}, session.ID, "R2")
+			[]time.Duration{10 * time.Second, 30 * time.Second, 60 * time.Second}, session.ID, "R2", roles.Reviewer2)
 		if res2 == nil || err2 != nil {
 			logger.Logf(session.ID, "         [!] R2 gagal/timeout (%v). Paper di-skip -> pending manual.\n", err2)
 			m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], reviewerFailPending("R2", err2))
@@ -300,28 +301,63 @@ func (m *M6Acquisition) evaluateFullTextBatch(ctx context.Context, session *mode
 }
 
 // reviewWithRetry mencoba FullTextReviewPaper dengan exponential backoff + jitter.
-func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, title, ft string, delays []time.Duration, sessionID, tag string) (*model.ScreeningPerspective, error) {
+// Log diperjelas: tag peran, PROVIDER, lama waktu, dan KLASIFIKASI sebab gagal
+// (TIMEOUT / rate-limit / respons-rusak) agar mudah didiagnosis dari UI.
+func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, title, ft string, delays []time.Duration, sessionID, tag, provider string) (*model.ScreeningPerspective, error) {
 	var res *model.ScreeningPerspective
 	var err error
 	for i := 0; i <= len(delays); i++ {
 		// Batas per-attempt 60s: panggilan normal ~10-20s; kalau HANG (tunnel rprompt
 		// sonnet/gemini sesekali menggantung), gagal cepat (60s) -> retry/fallback,
 		// bukan nunggu 150s/9 menit yang menguras ctx batch.
+		start := time.Now()
 		attemptCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		res, err = ag.FullTextReviewPaper(attemptCtx, opDefs, title, ft)
 		cancel()
+		took := time.Since(start)
 		if err == nil && res != nil {
 			return res, nil
 		}
+		cause := reviewErrCause(err, took)
 		if i < len(delays) {
 			base := delays[i]
 			jitter := time.Duration((rand.Float64()*0.4 - 0.2) * float64(base))
 			d := base + jitter
-			logger.Logf(sessionID, "         [%s retry %d] err: %v. tunggu %v...", tag, i+1, err, d)
+			logger.Logf(sessionID, "         [%s=%s gagal #%d, %s] %s. retry dalam %v...", tag, provider, i+1, took.Round(time.Second), cause, d.Round(time.Second))
 			time.Sleep(d)
+		} else {
+			logger.Logf(sessionID, "         [%s=%s gagal #%d, %s] %s (percobaan habis).", tag, provider, i+1, took.Round(time.Second), cause)
 		}
 	}
 	return nil, err
+}
+
+// reviewErrCause mengklasifikasi error LLM menjadi sebab yang mudah dibaca manusia.
+func reviewErrCause(err error, took time.Duration) string {
+	if err == nil {
+		return ""
+	}
+	s := err.Error()
+	switch {
+	case strings.Contains(s, "context deadline exceeded"), strings.Contains(s, "context canceled"):
+		return fmt.Sprintf("TIMEOUT — provider tak merespons dalam %s (tunnel/proxy hang? Claude/Gemini tak sempat menjawab; bukan error model)", took.Round(time.Second))
+	case strings.Contains(s, "429"), strings.Contains(s, "rate limit"), strings.Contains(s, "quota"), strings.Contains(s, "速率"):
+		return "RATE-LIMIT/QUOTA (429): " + clipErr(s)
+	case strings.Contains(s, "parsing JSON"), strings.Contains(s, "empty response"), strings.Contains(s, "malformed"):
+		return "RESPONS TAK VALID — provider balas kosong/rusak: " + clipErr(s)
+	case strings.Contains(s, "5") && strings.Contains(s, "HTTP"):
+		return "HTTP 5xx (server provider): " + clipErr(s)
+	default:
+		return clipErr(s)
+	}
+}
+
+func clipErr(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len(s) > 200 {
+		return s[:200] + "…"
+	}
+	return s
 }
 
 // reviewerFailPending menandai paper sebagai pending-manual saat satu reviewer
