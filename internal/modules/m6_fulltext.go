@@ -228,12 +228,41 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 				if errAdv == nil && advice != nil {
 					break
 				}
-				time.Sleep(time.Duration(retry+1) * time.Minute)
+				errDetail := "(nil)"
+				if errAdv != nil {
+					errDetail = errAdv.Error()
+				}
+				logger.Logf(session.ID, "         [Supervisor gagal #%d] provider=%s error: %s\n", retry+1, supName, clipErr(errDetail))
+				if retry < 2 {
+					wait := time.Duration(retry+1) * time.Minute
+					logger.Logf(session.ID, "         [Supervisor] retry dalam %v...\n", wait)
+					time.Sleep(wait)
+				}
 			}
 			if errAdv == nil && advice != nil {
 				conflictRes = fmt.Sprintf("[AI_SUGGESTION: %s] %s", advice.Advice, advice.Analysis)
 			} else {
-				conflictRes = "[AI_SUGGESTION: ERROR] Supervisor gagal merespons."
+				// Simpan hasil R1/R2 yang sudah di-screen (jangan buang) lalu HALT.
+				errDetail := "(nil)"
+				if errAdv != nil {
+					errDetail = errAdv.Error()
+				}
+				logger.Logf(session.ID, "         [HALT] Supervisor (%s) gagal setelah 3 percobaan. Error terakhir: %s\n", supName, clipErr(errDetail))
+				logger.Log(session.ID, "         [HALT] Menyimpan hasil R1/R2 paper ini, lalu BATCH DIJEDA. Resume untuk lanjut.")
+
+				m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], map[string]interface{}{
+					"Screener_1_Decision_Full":    res1.Recommend,
+					"Screener_1_Reason_Code_Full": res1.ReasonCode,
+					"Screener_1_Notes_Full":       notes1,
+					"Screener_2_Decision_Full":    res2.Recommend,
+					"Screener_2_Reason_Code_Full": res2.ReasonCode,
+					"Screener_2_Notes_Full":       notes2,
+					"Agreement_Full":              agreement,
+					"Conflict_Resolution_Full":    fmt.Sprintf("[PENDING_SUPERVISOR] %s gagal: %s", supName, clipErr(errDetail)),
+					"Batch_Evaluated_Full":        false,
+				})
+
+				return fmt.Errorf("Supervisor (%s) gagal setelah 3 percobaan pada paper %s: %s. Batch DIJEDA — cek API key/koneksi Supervisor, lalu Resume", supName, doi, clipErr(errDetail))
 			}
 		}
 
