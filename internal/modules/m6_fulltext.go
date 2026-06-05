@@ -178,9 +178,10 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 
 		time.Sleep(3 * time.Second)
 
-		// R2 (groq)
+		// R2 — backoff pendek (recovery cepat dari hiccup; provider tak lagi rate-limited
+		// harian seperti era groq, jadi tak perlu tunggu menit-menit).
 		res2, err2 := reviewWithRetry(ctx, scR2, opDefs, title, fulltext,
-			[]time.Duration{1 * time.Minute, 3 * time.Minute, 5 * time.Minute, 10 * time.Minute}, session.ID, "R2")
+			[]time.Duration{10 * time.Second, 30 * time.Second, 60 * time.Second}, session.ID, "R2")
 		if res2 == nil || err2 != nil {
 			logger.Logf(session.ID, "         [!] R2 gagal/timeout (%v). Paper di-skip -> pending manual.\n", err2)
 			m.deps.MongoRepo.UpdateScreeningPaper(ctx, p["_id"], reviewerFailPending("R2", err2))
