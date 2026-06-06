@@ -175,14 +175,24 @@ func buildSensitivity(docs []bson.M, threshold float64) *model.SensitivityAnalys
 		verdict = "SENSITIVE"
 	}
 
+	reasoning := ""
+	switch verdict {
+	case "ROBUST":
+		reasoning = "Perubahan threshold (±10%) tidak memengaruhi jumlah studi yang lolos secara signifikan. Ini menunjukkan bahwa kesimpulan (pool) riset Anda kuat dan tidak mudah bias oleh penentuan batas kualitas metodologis."
+	case "CONDITIONALLY ROBUST":
+		reasoning = "Terdapat sedikit fluktuasi pada jumlah studi ketika threshold diubah, namun masih dalam batas wajar. Hasil akhir tetap dapat diandalkan dengan mempertimbangkan batasan tersebut."
+	case "SENSITIVE":
+		reasoning = "Perubahan batas kualitas mengeksklusi proporsi studi yang sangat besar (lebih dari 30%). Ini mengindikasikan bahwa hasil akhir riset sangat bergantung penuh pada batas kualitas (cutoff) yang Anda pilih."
+	}
+
 	sc := []model.SensitivityScenario{
 		{Name: "Baseline", Threshold: fmt.Sprintf("%.0f%%", threshold), NIncluded: base, Findings: "set studi acuan"},
 		{Name: "Ketat", Threshold: fmt.Sprintf("%.0f%%", threshold+10), NIncluded: strict, Findings: fmt.Sprintf("%+d studi vs baseline", strict-base)},
 		{Name: "Longgar", Threshold: fmt.Sprintf("%.0f%%", threshold-10), NIncluded: loose, Findings: fmt.Sprintf("%+d studi vs baseline", loose-base)},
 	}
 	md := fmt.Sprintf("## Sensitivity Analysis\n\n| Skenario | Threshold | n included | Catatan |\n|---|---|---|---|\n"+
-		"| Baseline | %.0f%% | %d | acuan |\n| Ketat | %.0f%% | %d | %+d |\n| Longgar | %.0f%% | %d | %+d |\n\n**Verdict:** %s",
-		threshold, base, threshold+10, strict, strict-base, threshold-10, loose, loose-base, verdict)
+		"| Baseline | %.0f%% | %d | acuan |\n| Ketat | %.0f%% | %d | %+d |\n| Longgar | %.0f%% | %d | %+d |\n\n**Verdict:** %s\n\n**Penjelasan (xAI):** %s",
+		threshold, base, threshold+10, strict, strict-base, threshold-10, loose, loose-base, verdict, reasoning)
 	return &model.SensitivityAnalysis{Scenarios: sc, Verdict: verdict, Markdown: md}
 }
 
