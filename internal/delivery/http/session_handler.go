@@ -623,8 +623,25 @@ func (h *SessionHandler) ResolveExtractionManual(w http.ResponseWriter, req *htt
 		return
 	}
 	if res.ModifiedCount == 0 {
-		sendJSONError(w, http.StatusNotFound, "Extraction not found or field key not present")
-		return
+		filterPush := bson.M{"_id": objID, "session_id": id}
+		updatePush := bson.M{
+			"$push": bson.M{
+				"fields": bson.M{
+					"key": payload.FieldKey,
+					"value": payload.ResolvedValue,
+					"evidence": "Manual Resolution",
+					"status": "REPORTED",
+				},
+			},
+			"$pull": bson.M{
+				"ambiguous": payload.FieldKey,
+			},
+		}
+		_, errUpdate2 := coll.UpdateOne(ctx, filterPush, updatePush)
+		if errUpdate2 != nil {
+			sendJSONError(w, http.StatusInternalServerError, "Gagal menambahkan field manual ke DB: "+errUpdate2.Error())
+			return
+		}
 	}
 
 	sendJSONResponse(w, http.StatusOK, map[string]string{
@@ -725,10 +742,32 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 		},
 	}
 	
-	_, errUpdate := coll.UpdateOne(ctx, filter, update)
+	res, errUpdate := coll.UpdateOne(ctx, filter, update)
 	if errUpdate != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Gagal menyimpan resolusi ke DB: "+errUpdate.Error())
 		return
+	}
+
+	if res.ModifiedCount == 0 {
+		filterPush := bson.M{"_id": objID, "session_id": id}
+		updatePush := bson.M{
+			"$push": bson.M{
+				"fields": bson.M{
+					"key": payload.FieldKey,
+					"value": resField.Value,
+					"evidence": resField.Evidence,
+					"status": resField.Status,
+				},
+			},
+			"$pull": bson.M{
+				"ambiguous": payload.FieldKey,
+			},
+		}
+		_, errUpdate2 := coll.UpdateOne(ctx, filterPush, updatePush)
+		if errUpdate2 != nil {
+			sendJSONError(w, http.StatusInternalServerError, "Gagal menambahkan field ke DB: "+errUpdate2.Error())
+			return
+		}
 	}
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
