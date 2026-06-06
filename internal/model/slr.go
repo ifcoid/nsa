@@ -438,16 +438,26 @@ type ExtractionLog struct {
 	ExtractionKappa  float64 `bson:"extraction_kappa,omitempty" json:"extraction_kappa,omitempty"`
 }
 
+// QAKappaDetails = transparansi detail kesepakatan R1 dan R2.
+type QAKappaDetails struct {
+	TotalRated   int `bson:"total_rated" json:"total_rated"`
+	BothPass     int `bson:"both_pass" json:"both_pass"`
+	BothFail     int `bson:"both_fail" json:"both_fail"`
+	R1PassR2Fail int `bson:"r1_pass_r2_fail" json:"r1_pass_r2_fail"`
+	R1FailR2Pass int `bson:"r1_fail_r2_pass" json:"r1_fail_r2_pass"`
+}
+
 // QAThresholdJustification = output L3 (tool + threshold 3-lapis + kappa).
 type QAThresholdJustification struct {
-	Tool             string  `bson:"tool" json:"tool"`
-	ToolJustification string `bson:"tool_justification" json:"tool_justification"`
-	Threshold        float64 `bson:"threshold" json:"threshold"`
-	LayerLiterature  string  `bson:"layer_literature" json:"layer_literature"`
-	LayerDeveloper   string  `bson:"layer_developer" json:"layer_developer"`
-	LayerFeasibility string  `bson:"layer_feasibility" json:"layer_feasibility"`
-	Categorization   string  `bson:"categorization" json:"categorization"`
-	Kappa            float64 `bson:"kappa" json:"kappa"`
+	Tool             string          `bson:"tool" json:"tool"`
+	ToolJustification string         `bson:"tool_justification" json:"tool_justification"`
+	Threshold        float64         `bson:"threshold" json:"threshold"`
+	LayerLiterature  string          `bson:"layer_literature" json:"layer_literature"`
+	LayerDeveloper   string          `bson:"layer_developer" json:"layer_developer"`
+	LayerFeasibility string          `bson:"layer_feasibility" json:"layer_feasibility"`
+	Categorization   string          `bson:"categorization" json:"categorization"`
+	Kappa            float64         `bson:"kappa" json:"kappa"`
+	KappaDetails     *QAKappaDetails `bson:"kappa_details,omitempty" json:"kappa_details,omitempty"`
 }
 
 type SensitivityScenario struct {

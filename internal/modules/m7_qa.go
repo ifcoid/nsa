@@ -102,8 +102,9 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 	// Fase 3b + 4: kappa + sensitivity (semua sudah dirating).
 	logger.Log(session.ID, "   [Langkah 7.3] Hitung kappa QA + sensitivity analysis...")
 	rated := m.allRated(ctx, session)
-	kappa := qaKappa(rated)
+	kappa, details := qaKappa(rated)
 	session.QAThreshold.Kappa = kappa
+	session.QAThreshold.KappaDetails = details
 	session.SensitivityAnalysis = buildSensitivity(rated, session.QAThreshold.Threshold)
 
 	logger.Logf(session.ID, "   [System] QA kappa %.3f; sensitivity verdict %s.\n", kappa, session.SensitivityAnalysis.Verdict)
@@ -129,7 +130,7 @@ func categoryFor(score, threshold float64) string {
 }
 
 // qaKappa: Cohen's kappa 2-kelas (pass=HIGH/MODERATE, fail=LOW) atas keputusan R1 vs R2.
-func qaKappa(docs []bson.M) float64 {
+func qaKappa(docs []bson.M) (float64, *model.QAKappaDetails) {
 	var total, bothPass, bothFail, r1PassR2Fail, r1FailR2Pass int
 	pass := func(cat string) bool { return cat == "HIGH" || cat == "MODERATE" }
 	for _, p := range docs {
@@ -150,7 +151,14 @@ func qaKappa(docs []bson.M) float64 {
 			r1FailR2Pass++
 		}
 	}
-	return cohensKappa(total, bothPass, bothFail, r1PassR2Fail, r1FailR2Pass)
+	details := &model.QAKappaDetails{
+		TotalRated:   total,
+		BothPass:     bothPass,
+		BothFail:     bothFail,
+		R1PassR2Fail: r1PassR2Fail,
+		R1FailR2Pass: r1FailR2Pass,
+	}
+	return cohensKappa(total, bothPass, bothFail, r1PassR2Fail, r1FailR2Pass), details
 }
 
 func buildSensitivity(docs []bson.M, threshold float64) *model.SensitivityAnalysis {
