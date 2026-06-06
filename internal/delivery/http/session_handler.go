@@ -275,6 +275,8 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 			if len(session.ScreeningResultsLog) > 0 {
 				session.ScreeningResultsLog = session.ScreeningResultsLog[:len(session.ScreeningResultsLog)-1]
 			}
+		} else if payload.TargetStatus == "M7_STEP3_QA" {
+			h.mongoRepo.ResetQAErrors(ctx, session.ID)
 		}
 	} else if session.Status == "M2_STEP1_WAITING_APPROVAL" {
 		session.Status = "M2_STEP1_NEEDS_REVISION"

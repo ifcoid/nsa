@@ -615,3 +615,18 @@ func (r *MongoRepository) UpdateLLMRoles(ctx context.Context, roles *model.LLMRo
 	_, err := r.client.Database(r.dbName).Collection("llm_roles").UpdateOne(ctx, filter, update, opts)
 	return err
 }
+
+// ResetQAErrors mereset status qa_rated menjadi false untuk dokumen yang error agar dievaluasi ulang
+func (r *MongoRepository) ResetQAErrors(ctx context.Context, sessionID string) error {
+	filter := bson.M{
+		"session_id": sessionID,
+		"qa_final_category": "ERROR",
+	}
+	update := bson.M{
+		"$set": bson.M{
+			"qa_rated": false,
+		},
+	}
+	_, err := r.GetExtractionCollection().UpdateMany(ctx, filter, update)
+	return err
+}
