@@ -79,6 +79,24 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 				s1, e1 := r1.AppraiseQuality(ctx, tool, cat, title, ft)
 				time.Sleep(3 * time.Second)
 				s2, e2 := r2.AppraiseQuality(ctx, tool, cat, title, ft)
+				
+				isFatal := false
+				var fatalMsg string
+				if e1 != nil && strings.Contains(e1.Error(), "provider merespons dengan error") {
+					isFatal = true
+					fatalMsg = e1.Error()
+				} else if e2 != nil && strings.Contains(e2.Error(), "provider merespons dengan error") {
+					isFatal = true
+					fatalMsg = e2.Error()
+				}
+
+				if isFatal {
+					session.Status = "M7_STEP3_NEEDS_REVISION"
+					session.SystemError = fatalMsg
+					logger.Logf(session.ID, "      [FATAL] %s\n", fatalMsg)
+					return m.deps.MongoRepo.UpdateSession(ctx, session)
+				}
+
 				if e1 != nil || e2 != nil || s1 == nil || s2 == nil {
 					upd["qa_final_category"] = "ERROR"
 					upd["qa_total_score"] = 0

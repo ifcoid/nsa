@@ -62,6 +62,9 @@ type streamChunk struct {
 			Content string `json:"content"`
 		} `json:"delta"`
 	} `json:"choices"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
 }
 
 func (c *OpenAICompatibleClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
@@ -125,6 +128,11 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, systemPrompt, use
 			content, perr := readSSE(resp.Body)
 			resp.Body.Close()
 			cancel()
+			
+			if strings.HasPrefix(strings.TrimSpace(content), "[error]") {
+				return "", fmt.Errorf("provider merespons dengan error: %s", content)
+			}
+
 			if perr == nil && strings.TrimSpace(content) != "" {
 				return content, nil
 			}
@@ -164,6 +172,9 @@ func readSSE(body io.Reader) (string, error) {
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			continue // lewati keepalive/komentar non-JSON
+		}
+		if chunk.Error != nil && chunk.Error.Message != "" {
+			return sb.String(), fmt.Errorf("error dari provider di tengah stream: %s", chunk.Error.Message)
 		}
 		for _, ch := range chunk.Choices {
 			sb.WriteString(ch.Delta.Content)
