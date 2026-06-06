@@ -104,8 +104,10 @@ func (s *MCPServer) handleGetPending(ctx context.Context, request mcp.CallToolRe
 	var output string
 	for i, p := range papers {
 		idStr := ""
-		if oid, ok := p["_id"]; ok {
-			idStr = fmt.Sprintf("%v", oid)
+		if oid, ok := p["_id"].(primitive.ObjectID); ok {
+			idStr = oid.Hex()
+		} else if val, ok := p["_id"]; ok {
+			idStr = fmt.Sprintf("%v", val)
 		}
 		
 		output += fmt.Sprintf("=== Kasus %d ===\nPaper ID: %s\nJudul: %s\nAbstrak: %s\nR1 Decision: %v\nR1 Notes: %v\nR2 Decision: %v\nR2 Notes: %v\n\n",
@@ -141,15 +143,29 @@ func (s *MCPServer) handleSubmitResolution(ctx context.Context, request mcp.Call
 		return mcp.NewToolResultError("reasoning is required"), nil
 	}
 
-	// First try screening resolution
-	err := s.repo.UpdateScreeningPaperResolution(ctx, sessionID, paperID, decision, "hitl_mcp: "+reasoning)
-	if err != nil {
-		// If error (or not found), try full-text resolution
-		err = s.repo.UpdateScreeningPaperResolutionFull(ctx, sessionID, paperID, decision, "hitl_mcp: "+reasoning)
-		if err != nil {
-			log.Printf("MCP resolve error: %v", err)
-			return mcp.NewToolResultError(fmt.Sprintf("Gagal menyimpan resolusi: %v", err)), nil
+	// Determine if this is a Full-Text (Modul 6) conflict
+	isFullText := false
+	fullPapers, _ := s.repo.GetDisagreedFullTextPapers(ctx, sessionID)
+	for _, p := range fullPapers {
+		if oid, ok := p["_id"].(primitive.ObjectID); ok && oid.Hex() == paperID {
+			isFullText = true
+			break
+		} else if val, ok := p["_id"]; ok && fmt.Sprintf("%v", val) == paperID {
+			isFullText = true
+			break
 		}
+	}
+
+	var err error
+	if isFullText {
+		err = s.repo.UpdateScreeningPaperResolutionFull(ctx, sessionID, paperID, decision, "hitl_mcp: "+reasoning)
+	} else {
+		err = s.repo.UpdateScreeningPaperResolution(ctx, sessionID, paperID, decision, "hitl_mcp: "+reasoning)
+	}
+
+	if err != nil {
+		log.Printf("MCP resolve error: %v", err)
+		return mcp.NewToolResultError(fmt.Sprintf("Gagal menyimpan resolusi: %v", err)), nil
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Resolusi %s berhasil disimpan untuk paper %s.", decision, paperID)), nil
