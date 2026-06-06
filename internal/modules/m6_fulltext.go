@@ -339,11 +339,10 @@ func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, titl
 	var res *model.ScreeningPerspective
 	var err error
 	for i := 0; i <= len(delays); i++ {
-		// Batas per-attempt 60s: panggilan normal ~10-20s; kalau HANG (tunnel rprompt
-		// sonnet/gemini sesekali menggantung), gagal cepat (60s) -> retry/fallback,
-		// bukan nunggu 150s/9 menit yang menguras ctx batch.
+		// Batas per-attempt dinaikkan menjadi 15 menit untuk model besar (mis. Claude/Gemini)
+		// saat memproses full text panjang beserta reasoning-nya agar tidak keburu timeout.
 		start := time.Now()
-		attemptCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		attemptCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 		res, err = ag.FullTextReviewPaper(attemptCtx, opDefs, title, ft)
 		cancel()
 		took := time.Since(start)
