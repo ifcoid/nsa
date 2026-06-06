@@ -177,11 +177,11 @@ Keluarkan HANYA JSON MURNI tanpa blok markdown dengan struktur berikut:
 	}
 
 	cleanJSON := CleanJSONResponse(rawResponse)
-	var result model.ScreeningPerspective
-	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
+	result, err := parseLooseScreeningPerspective([]byte(cleanJSON))
+	if err != nil {
 		return nil, fmt.Errorf("gagal parsing JSON BatchReviewPaper (%w). Raw: %s", err, rawResponse)
 	}
-	return &result, nil
+	return result, nil
 }
 
 // FullTextReviewPaper melakukan screening tahap FULL-TEXT (Modul 6 L2) berbasis RAG.
@@ -224,11 +224,51 @@ Keluarkan HANYA JSON MURNI tanpa blok markdown:
 	}
 
 	cleanJSON := CleanJSONResponse(rawResponse)
-	var result model.ScreeningPerspective
-	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
+	result, err := parseLooseScreeningPerspective([]byte(cleanJSON))
+	if err != nil {
 		return nil, fmt.Errorf("gagal parsing JSON FullTextReviewPaper (%w). Raw: %s", err, rawResponse)
 	}
-	return &result, nil
+	return result, nil
+}
+
+type looseScreeningPerspective struct {
+	PaperID    string      `json:"paper_id"`
+	Title      string      `json:"title"`
+	Strict     interface{} `json:"strict"`
+	Liberal    interface{} `json:"liberal"`
+	Recommend  string      `json:"recommend"`
+	ReasonCode string      `json:"reason_code"`
+	Evidence   interface{} `json:"evidence"`
+	Confidence string      `json:"confidence"`
+}
+
+func parseLooseScreeningPerspective(cleanJSON []byte) (*model.ScreeningPerspective, error) {
+	var loose looseScreeningPerspective
+	if err := json.Unmarshal(cleanJSON, &loose); err != nil {
+		return nil, err
+	}
+
+	stringify := func(v interface{}) string {
+		if v == nil {
+			return ""
+		}
+		if s, ok := v.(string); ok {
+			return s
+		}
+		b, _ := json.Marshal(v)
+		return string(b)
+	}
+
+	return &model.ScreeningPerspective{
+		PaperID:    loose.PaperID,
+		Title:      loose.Title,
+		Strict:     stringify(loose.Strict),
+		Liberal:    stringify(loose.Liberal),
+		Recommend:  loose.Recommend,
+		ReasonCode: loose.ReasonCode,
+		Evidence:   stringify(loose.Evidence),
+		Confidence: loose.Confidence,
+	}, nil
 }
 
 type ResolutionAdvice struct {
