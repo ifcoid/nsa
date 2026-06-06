@@ -565,8 +565,8 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				agreement = "AGREE"
 			}
 
-			notes1 := fmt.Sprintf("Strict: %s | Liberal: %s | Evidence: %s", res1.Strict, res1.Liberal, res1.Evidence)
-			notes2 := fmt.Sprintf("Strict: %s | Liberal: %s | Evidence: %s", res2.Strict, res2.Liberal, res2.Evidence)
+			notes1 := fmt.Sprintf("Decision: %s | Strict: %s | Liberal: %s | Evidence: %s", res1.Recommend, res1.Strict, res1.Liberal, res1.Evidence)
+			notes2 := fmt.Sprintf("Decision: %s | Strict: %s | Liberal: %s | Evidence: %s", res2.Recommend, res2.Strict, res2.Liberal, res2.Evidence)
 
 			conflictRes := ""
 			if agreement == "DISAGREE" || res1.Recommend == "UNCERTAIN" || res2.Recommend == "UNCERTAIN" {
