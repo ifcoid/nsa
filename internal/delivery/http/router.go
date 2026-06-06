@@ -94,6 +94,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("POST /api/sessions/{id}/import-data", r.sessionHndlr.ImportData)
 	protected.HandleFunc("GET /api/sessions/{id}/disagreements", r.sessionHndlr.GetDisagreements)
 	protected.HandleFunc("POST /api/sessions/{id}/resolve-conflicts", r.sessionHndlr.ResolveConflicts)
+	protected.HandleFunc("GET /api/sessions/{id}/extractions", r.sessionHndlr.GetExtractions)
 
 	// Modul 6 (Full-Text Acquisition)
 	protected.HandleFunc("POST /api/sessions/{id}/m6/sync-qdrant", r.sessionHndlr.SyncQdrant)

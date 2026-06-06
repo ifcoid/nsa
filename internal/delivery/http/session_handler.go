@@ -500,7 +500,42 @@ func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Reque
 	h.pipeline.ExecuteAsync(ctx, session.ID)
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"message": "Resolusi konflik berhasil disimpan",
+		"message": "Resolusi konflik tersimpan",
+		"status":  session.Status,
+	})
+}
+
+// GetExtractions mengembalikan daftar hasil ekstraksi Modul 7
+func (h *SessionHandler) GetExtractions(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	ctx := context.Background()
+	coll := h.mongoRepo.GetExtractionCollection()
+	cur, err := coll.Find(ctx, bson.M{"session_id": id})
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to get extractions: "+err.Error())
+		return
+	}
+
+	var results []bson.M
+	if err := cur.All(ctx, &results); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to decode extractions: "+err.Error())
+		return
+	}
+
+	// Ubah ObjectID menjadi string untuk mempermudah JSON marshalling
+	for i := range results {
+		if oid, ok := results[i]["_id"].(primitive.ObjectID); ok {
+			results[i]["_id"] = oid.Hex()
+		}
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"extractions": results,
 	})
 }
 
