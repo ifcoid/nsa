@@ -95,6 +95,9 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("GET /api/sessions/{id}/disagreements", r.sessionHndlr.GetDisagreements)
 	protected.HandleFunc("POST /api/sessions/{id}/resolve-conflicts", r.sessionHndlr.ResolveConflicts)
 	protected.HandleFunc("GET /api/sessions/{id}/extractions", r.sessionHndlr.GetExtractions)
+	protected.HandleFunc("GET /api/sessions/{id}/extractions/ambiguous", r.sessionHndlr.GetAmbiguousExtractions)
+	protected.HandleFunc("PUT /api/sessions/{id}/extractions/{ext_id}/resolve", r.sessionHndlr.ResolveExtractionManual)
+	protected.HandleFunc("POST /api/sessions/{id}/extractions/{ext_id}/auto-resolve", r.sessionHndlr.ResolveExtractionAuto)
 
 	// Modul 6 (Full-Text Acquisition)
 	protected.HandleFunc("POST /api/sessions/{id}/m6/sync-qdrant", r.sessionHndlr.SyncQdrant)

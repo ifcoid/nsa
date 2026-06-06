@@ -50,6 +50,10 @@ func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory) 
 	}
 }
 
+func (p *SLRPipeline) GetLLMFactory() *llm.LLMFactory {
+	return p.llmFactory
+}
+
 func (p *SLRPipeline) Execute(ctx context.Context, sessionID string) error {
 	// 1. Ambil state sesi riset dari MongoDB
 	session, err := p.mongoRepo.GetSession(ctx, sessionID)

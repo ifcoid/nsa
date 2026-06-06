@@ -137,6 +137,43 @@ Keluarkan HANYA JSON MURNI:
 	return &res, nil
 }
 
+// AutoResolveField = LLM membaca ulang fulltext untuk menyimpulkan SATU field yang spesifik secara konklusif.
+func (a *ExtractionAgent) AutoResolveField(ctx context.Context, opDefs, title, fulltext, fieldKey string) (*ExtractedField, error) {
+	systemPrompt := fmt.Sprintf(`Anda AI Penengah Resolusi Ambiguitas untuk Systematic Literature Review.
+Sebelumnya, ekstraksi data untuk atribut/kolom berikut dinilai AMBIGU. 
+Tugas Anda: Baca ulang teks, hilangkan ambiguitas, dan berikan satu jawaban yang TEGAS (konklusif).
+
+TARGET FIELD YANG HARUS DIRESOLUSI: "%s"
+
+OPERATIONAL DEFINITIONS:
+%s
+
+ATURAN ANTI-HALUSINASI (WAJIB):
+- Simpulkan HANYA dari full-text yang diberikan.
+- Berikan kutipan kalimat pendukung di "evidence".
+- Jika benar-benar tidak ada di teks, tulis value "[NOT REPORTED]" dan status "NOT_REPORTED". Dilarang mereka-reka.
+- Jika ada informasi, status WAJIB "REPORTED". Jangan membuat status AMBIGUOUS lagi.
+
+Keluarkan HANYA JSON MURNI tanpa markdown:
+{
+  "key": "%s",
+  "value": "Nilai yang konklusif / pasti",
+  "evidence": "Intro p.2: ...",
+  "status": "REPORTED"
+}`, fieldKey, opDefs, fieldKey)
+
+	userPrompt := fmt.Sprintf("Title: %s\n\n=== FULL-TEXT (RAG) ===\n%s", title, fulltext)
+	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("AutoResolveField LLM: %w", err)
+	}
+	var res ExtractedField
+	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
+		return nil, fmt.Errorf("parse AutoResolveField (%w). Raw: %s", err, raw)
+	}
+	return &res, nil
+}
+
 // ===== L3: Quality appraisal =====
 
 func (a *ExtractionAgent) SelectQATool(ctx context.Context, designBreakdown string) (*model.QAThresholdJustification, error) {

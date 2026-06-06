@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"nsa/internal/agent"
 	"nsa/internal/model"
+	"nsa/internal/modules"
 	"nsa/internal/orchestrator"
 	"nsa/internal/parser"
 	"nsa/internal/repository"
@@ -536,6 +538,203 @@ func (h *SessionHandler) GetExtractions(w http.ResponseWriter, r *http.Request) 
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"extractions": results,
+	})
+}
+
+// GetAmbiguousExtractions mengembalikan data ekstraksi yang masih memiliki ambiguitas
+func (h *SessionHandler) GetAmbiguousExtractions(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	ctx := context.Background()
+	coll := h.mongoRepo.GetExtractionCollection()
+	// Filter where "ambiguous" array is not empty
+	filter := bson.M{
+		"session_id": id,
+		"ambiguous":  bson.M{"$exists": true, "$ne": bson.A{}},
+	}
+	cur, err := coll.Find(ctx, filter)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to get ambiguous extractions: "+err.Error())
+		return
+	}
+
+	var results []bson.M
+	if err := cur.All(ctx, &results); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to decode ambiguous extractions: "+err.Error())
+		return
+	}
+
+	for i := range results {
+		if oid, ok := results[i]["_id"].(primitive.ObjectID); ok {
+			results[i]["_id"] = oid.Hex()
+		}
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"extractions": results,
+	})
+}
+
+// ResolveExtractionManual menyimpan nilai resolusi manual dari user
+func (h *SessionHandler) ResolveExtractionManual(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	extID := req.PathValue("ext_id")
+	if id == "" || extID == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID and Ext ID are required")
+		return
+	}
+
+	var payload struct {
+		FieldKey      string `json:"field_key"`
+		ResolvedValue string `json:"resolved_value"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	ctx := context.Background()
+	coll := h.mongoRepo.GetExtractionCollection()
+	
+	objID, err := primitive.ObjectIDFromHex(extID)
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid Ext ID format")
+		return
+	}
+
+	filter := bson.M{"_id": objID, "session_id": id, "fields.key": payload.FieldKey}
+	update := bson.M{
+		"$set": bson.M{
+			"fields.$.value": payload.ResolvedValue,
+			"fields.$.status": "REPORTED",
+		},
+		"$pull": bson.M{
+			"ambiguous": payload.FieldKey,
+		},
+	}
+	
+	res, err := coll.UpdateOne(ctx, filter, update)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update extraction: "+err.Error())
+		return
+	}
+	if res.ModifiedCount == 0 {
+		sendJSONError(w, http.StatusNotFound, "Extraction not found or field key not present")
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]string{
+		"message": "Field resolusi manual tersimpan",
+	})
+}
+
+// ResolveExtractionAuto memanggil LLM untuk meresolusi field secara otomatis
+func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	extID := req.PathValue("ext_id")
+	if id == "" || extID == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID and Ext ID are required")
+		return
+	}
+
+	var payload struct {
+		FieldKey string `json:"field_key"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	coll := h.mongoRepo.GetExtractionCollection()
+	objID, err := primitive.ObjectIDFromHex(extID)
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid Ext ID format")
+		return
+	}
+
+	var extDoc bson.M
+	if err := coll.FindOne(ctx, bson.M{"_id": objID, "session_id": id}).Decode(&extDoc); err != nil {
+		sendJSONError(w, http.StatusNotFound, "Extraction not found")
+		return
+	}
+
+	var title, doi string
+	if t, ok := extDoc["Title"].(string); ok { title = t } else if t, ok := extDoc["title"].(string); ok { title = t }
+	if d, ok := extDoc["DOI"].(string); ok { doi = d } else if d, ok := extDoc["doi"].(string); ok { doi = d }
+
+	// Normalize DOI and get from FT index
+	doi = strings.TrimPrefix(doi, "https://doi.org/")
+	doi = strings.TrimPrefix(doi, "http://doi.org/")
+	doi = strings.ToLower(strings.TrimSpace(doi))
+
+	// Setup opDefs
+	opDefs := "(operational definitions tidak tersedia)"
+	if session.PICODefinitions != nil {
+		b, _ := json.Marshal(session.PICODefinitions)
+		opDefs = string(b)
+	}
+
+	ftIndex, _, _ := modules.BuildFulltextIndex(ctx)
+	if ftIndex == nil {
+		ftIndex = map[string]string{}
+	}
+	ft := ftIndex[doi]
+
+	if ft == "" {
+		sendJSONError(w, http.StatusUnprocessableEntity, "Full-text tidak ditemukan di Qdrant, tidak bisa auto-resolve.")
+		return
+	}
+
+	rp1, _ := h.pipeline.GetLLMFactory().RoleProviders(ctx, "reviewer1")
+	p, errP := h.pipeline.GetLLMFactory().CreateClient(ctx, rp1)
+	if errP != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal inisiasi LLM: "+errP.Error())
+		return
+	}
+	
+	// Create extraction agent
+	ag := agent.NewExtractionAgent(p) // simple no fallback for auto-resolve or just use primary
+
+	resField, errLLM := ag.AutoResolveField(ctx, opDefs, title, ft, payload.FieldKey)
+	if errLLM != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal memproses LLM: "+errLLM.Error())
+		return
+	}
+
+	// Update DB
+	filter := bson.M{"_id": objID, "session_id": id, "fields.key": payload.FieldKey}
+	update := bson.M{
+		"$set": bson.M{
+			"fields.$.value": resField.Value,
+			"fields.$.evidence": resField.Evidence,
+			"fields.$.status": resField.Status,
+		},
+		"$pull": bson.M{
+			"ambiguous": payload.FieldKey,
+		},
+	}
+	
+	_, errUpdate := coll.UpdateOne(ctx, filter, update)
+	if errUpdate != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal menyimpan resolusi ke DB: "+errUpdate.Error())
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": "Field auto-resolve berhasil",
+		"resolved_value": resField.Value,
+		"evidence": resField.Evidence,
 	})
 }
 
