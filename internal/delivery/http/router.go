@@ -7,6 +7,8 @@ import (
 	"nsa/internal/delivery/http/middleware"
 	"nsa/internal/orchestrator"
 	"nsa/internal/repository"
+	nsamcp "nsa/internal/delivery/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
 type Router struct {
@@ -14,6 +16,7 @@ type Router struct {
 	sessionHndlr *SessionHandler
 	llmHndlr     *LLMHandler
 	authHndlr    *AuthHandler
+	sseServer    *mcpserver.SSEServer
 }
 
 func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLRPipeline) *Router {
@@ -24,11 +27,18 @@ func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLR
 
 	authHandler := NewAuthHandler(mongoRepo)
 
+	mcpSrv := nsamcp.NewMCPServer(mongoRepo)
+	sseServer := mcpserver.NewSSEServer(mcpSrv.MCPServer,
+		mcpserver.WithSSEEndpoint("/api/mcp/sse"),
+		mcpserver.WithMessageEndpoint("/api/mcp/messages"),
+	)
+
 	r := &Router{
 		mux:          mux,
 		sessionHndlr: sessionHandler,
 		llmHndlr:     llmHandler,
 		authHndlr:    authHandler,
+		sseServer:    sseServer,
 	}
 
 	r.registerRoutes()
@@ -98,6 +108,10 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("GET /api/llm/health", r.llmHndlr.CheckHealth)
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
 	protected.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
+
+	// MCP (Server-Sent Events) Endpoints (Publicly accessible for the agent)
+	r.mux.Handle("GET /api/mcp/sse", r.sseServer.SSEHandler())
+	r.mux.Handle("POST /api/mcp/messages", r.sseServer.MessageHandler())
 	protected.HandleFunc("GET /api/llm/roles", r.llmHndlr.GetRoles)
 	protected.HandleFunc("PUT /api/llm/roles", r.llmHndlr.UpdateRoles)
 	protected.HandleFunc("GET /api/github/config", r.llmHndlr.GetGitHubConfig)
