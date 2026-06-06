@@ -7,6 +7,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"nsa/internal/repository"
 )
