@@ -1,0 +1,55 @@
+name: Compile and Publish Binaries
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22' # Sesuaikan dengan versi Go Anda
+          cache: true
+
+      - name: Compile for Multiple Architectures
+        run: |
+          mkdir -p dist
+          # Windows
+          GOOS=windows GOARCH=amd64 go build -o dist/if-slr-windows-amd64.exe ./cmd/app
+          # Linux
+          GOOS=linux GOARCH=amd64 go build -o dist/if-slr-linux-amd64 ./cmd/app
+          # macOS Intel
+          GOOS=darwin GOARCH=amd64 go build -o dist/if-slr-darwin-amd64 ./cmd/app
+          # macOS Apple Silicon (M1/M2/M3)
+          GOOS=darwin GOARCH=arm64 go build -o dist/if-slr-darwin-arm64 ./cmd/app
+
+      - name: Checkout Download Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ifcoid/download
+          token: ${{ secrets.GH_PAT }}
+          path: download-repo
+
+      - name: Commit and Push Binaries
+        run: |
+          # Buat folder khusus jika belum ada
+          mkdir -p download-repo/backend-binaries
+          
+          # Salin hasil kompilasi
+          cp dist/* download-repo/backend-binaries/
+          
+          # Masuk ke direktori download-repo dan push
+          cd download-repo
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git pull origin main || true
+          git add backend-binaries/
+          git commit -m "Update SLR backend binaries (commit: ${{ github.sha }})" || echo "No changes to commit"
+          git push origin main
