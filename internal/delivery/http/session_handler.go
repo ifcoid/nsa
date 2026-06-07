@@ -1340,7 +1340,7 @@ func (h *SessionHandler) ResetModul7(w http.ResponseWriter, req *http.Request) {
 	session.SensitivityAnalysis = nil
 	session.SynthesisPrep = nil
 	session.Modul7Summary = nil
-	session.Status = "M6_STEP2_EXTRACTION_WAITING" // so it triggers M7 from start
+	session.Status = "M7_STEP3_QA" // so it triggers QA loop from start
 
 	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to update session")
