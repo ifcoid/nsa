@@ -101,6 +101,7 @@ func (r *Router) registerRoutes() {
 
 	// Modul 6 (Full-Text Acquisition)
 	protected.HandleFunc("POST /api/sessions/{id}/m6/sync-qdrant", r.sessionHndlr.SyncQdrant)
+	protected.HandleFunc("DELETE /api/sessions/{id}/m6/qdrant/paper", r.sessionHndlr.DeleteQdrantPaper)
 	protected.HandleFunc("POST /api/sessions/{id}/m6/mark-inaccessible", r.sessionHndlr.MarkInaccessible)
 	protected.HandleFunc("GET /api/sessions/{id}/m6/export-links", r.sessionHndlr.ExportM6Links)
 	protected.HandleFunc("GET /api/sessions/{id}/m6/papers", r.sessionHndlr.GetM6Papers)

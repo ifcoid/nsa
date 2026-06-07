@@ -509,6 +509,117 @@ func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Reque
 	})
 }
 
+// DeleteQdrantPaper menghapus vektor dari Qdrant berdasarkan DOI dan mereset status MongoDB
+func (h *SessionHandler) DeleteQdrantPaper(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	var payload struct {
+		DOI   string `json:"doi"`
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+
+	if payload.DOI == "" && payload.Title == "" {
+		sendJSONError(w, http.StatusBadRequest, "DOI atau Title wajib diisi")
+		return
+	}
+
+	// 1. Panggil API Qdrant Delete
+	qdrantURL := os.Getenv("QDRANT_URL")
+	qdrantKey := os.Getenv("QDRANT_API_KEY")
+	if qdrantURL != "" {
+		var filterKey string
+		var filterValue string
+		if payload.DOI != "" && payload.DOI != "-" {
+			filterKey = "doi"
+			filterValue = payload.DOI
+		} else {
+			filterKey = "title"
+			filterValue = payload.Title
+		}
+
+		deleteBody := map[string]interface{}{
+			"filter": map[string]interface{}{
+				"must": []map[string]interface{}{
+					{
+						"key": filterKey,
+						"match": map[string]interface{}{
+							"value": filterValue,
+						},
+					},
+				},
+			},
+		}
+
+		bodyBytes, _ := json.Marshal(deleteBody)
+		reqQdrant, err := http.NewRequest("POST", fmt.Sprintf("%s/collections/scientific_articles/points/delete", qdrantURL), bytes.NewReader(bodyBytes))
+		if err == nil {
+			reqQdrant.Header.Set("Content-Type", "application/json")
+			if qdrantKey != "" {
+				reqQdrant.Header.Set("api-key", qdrantKey)
+			}
+			client := &http.Client{Timeout: 10 * time.Second}
+			resp, err := client.Do(reqQdrant)
+			if err == nil {
+				defer resp.Body.Close()
+			}
+		}
+	}
+
+	// 2. Update MongoDB slr_papers
+	ctx := context.Background()
+	collPapers := h.mongoRepo.GetPaperCollection()
+	
+	filter := bson.M{"session_id": id}
+	if payload.DOI != "" && payload.DOI != "-" {
+		// handle http and https doi as well
+		doiClean := strings.TrimPrefix(payload.DOI, "https://doi.org/")
+		doiClean = strings.TrimPrefix(doiClean, "http://doi.org/")
+		filter["DOI"] = bson.M{"$regex": primitive.Regex{Pattern: "(?i)" + regexp.QuoteMeta(doiClean)}}
+	} else {
+		filter["Title"] = bson.M{"$regex": primitive.Regex{Pattern: "(?i)" + regexp.QuoteMeta(payload.Title)}}
+	}
+
+	updPapers := bson.M{
+		"$set": bson.M{
+			"full_text_retrieved": false,
+		},
+	}
+	_, _ = collPapers.UpdateMany(ctx, filter, updPapers)
+
+	// 3. Update MongoDB slr_extractions (Reset QA)
+	collExt := h.mongoRepo.GetExtractionCollection()
+	updExt := bson.M{
+		"$set": bson.M{
+			"qa_rated": false,
+		},
+		"$unset": bson.M{
+			"qa_total_score":    "",
+			"qa_final_category": "",
+			"qa_r1_score":       "",
+			"qa_r1_category":    "",
+			"qa_r1_reasoning":   "",
+			"qa_r1_evidence":    "",
+			"qa_r2_score":       "",
+			"qa_r2_category":    "",
+			"qa_r2_reasoning":   "",
+			"qa_r2_evidence":    "",
+		},
+	}
+	_, _ = collExt.UpdateMany(ctx, filter, updExt)
+
+	sendJSONResponse(w, http.StatusOK, map[string]string{
+		"message": "Berhasil menghapus data dari Qdrant dan mereset status MongoDB.",
+	})
+}
+
 // GetExtractions mengembalikan daftar hasil ekstraksi Modul 7
 func (h *SessionHandler) GetExtractions(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
