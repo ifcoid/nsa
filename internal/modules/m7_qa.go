@@ -104,8 +104,12 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 					avg := (s1.TotalScore + s2.TotalScore) / 2
 					upd["qa_r1_score"] = s1.TotalScore
 					upd["qa_r1_category"] = s1.Category
+					upd["qa_r1_reasoning"] = s1.Reasoning
+					upd["qa_r1_evidence"] = s1.Evidence
 					upd["qa_r2_score"] = s2.TotalScore
 					upd["qa_r2_category"] = s2.Category
+					upd["qa_r2_reasoning"] = s2.Reasoning
+					upd["qa_r2_evidence"] = s2.Evidence
 					upd["qa_total_score"] = avg
 					upd["qa_final_category"] = categoryFor(avg, thr)
 				}

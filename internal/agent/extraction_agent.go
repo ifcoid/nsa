@@ -213,6 +213,8 @@ type QAResult struct {
 	TotalScore   float64 `json:"total_score"` // 0-100
 	Category     string  `json:"category"`    // HIGH / MODERATE / LOW
 	ItemsSummary string  `json:"items_summary"`
+	Reasoning    string  `json:"reasoning"`   // Penjelasan logis mengapa paper ini mendapat skor/kategori tersebut
+	Evidence     string  `json:"evidence"`    // Bukti atau kutipan dari teks yang mendukung
 }
 
 func (a *ExtractionAgent) AppraiseQuality(ctx context.Context, tool, categorization, title, fulltext string) (*QAResult, error) {
@@ -224,7 +226,7 @@ ATURAN: nilai HANYA dari full-text (konteks RAG). Skor 0-100 (dinormalisasi).
 Tetapkan category sesuai ambang.
 
 Keluarkan HANYA JSON MURNI tanpa markdown:
-{ "total_score": 78, "category": "MODERATE", "items_summary": "ringkas penilaian per item utama" }`, tool, categorization)
+{ "total_score": 78, "category": "MODERATE", "items_summary": "ringkas penilaian per item utama", "reasoning": "alasan skor dan kategori", "evidence": "kutipan bukti teks" }`, tool, categorization)
 
 	userPrompt := fmt.Sprintf("Title: %s\n\n=== FULL-TEXT (RAG) ===\n%s", title, fulltext)
 	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
