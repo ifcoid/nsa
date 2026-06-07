@@ -105,6 +105,9 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("GET /api/sessions/{id}/m6/export-links", r.sessionHndlr.ExportM6Links)
 	protected.HandleFunc("GET /api/sessions/{id}/m6/papers", r.sessionHndlr.GetM6Papers)
 
+	// Modul 7 Reset
+	protected.HandleFunc("POST /api/sessions/{id}/reset-m7", r.sessionHndlr.ResetModul7)
+
 	// Modul 8b (Bibliometric/SLNA)
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/vosviewer", r.sessionHndlr.SubmitVOSviewer)
 	

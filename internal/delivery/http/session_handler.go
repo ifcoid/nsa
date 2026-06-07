@@ -1320,6 +1320,63 @@ func (h *SessionHandler) recalculateAcquisitionLogSync(ctx context.Context, sess
 	_ = h.mongoRepo.UpdateSession(ctx, session)
 }
 
+// ResetModul7 mengembalikan sesi ke M6_STEP2_EXTRACTION_WAITING dan mereset QA data.
+func (h *SessionHandler) ResetModul7(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Reset fields in SLRSession
+	session.QAThreshold = nil
+	session.SensitivityAnalysis = nil
+	session.SynthesisPrep = nil
+	session.Modul7Summary = nil
+	session.Status = "M6_STEP2_EXTRACTION_WAITING" // so it triggers M7 from start
+
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update session")
+		return
+	}
+
+	// Reset paper QA fields
+	coll := h.mongoRepo.GetExtractionCollection()
+	upd := bson.M{
+		"$unset": bson.M{
+			"qa_rated":          "",
+			"qa_total_score":    "",
+			"qa_final_category": "",
+			"qa_r1_score":       "",
+			"qa_r1_category":    "",
+			"qa_r1_reasoning":   "",
+			"qa_r1_evidence":    "",
+			"qa_r2_score":       "",
+			"qa_r2_category":    "",
+			"qa_r2_reasoning":   "",
+			"qa_r2_evidence":    "",
+		},
+	}
+	_, err = coll.UpdateMany(ctx, bson.M{"session_id": id}, upd)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to reset extraction QA fields")
+		return
+	}
+
+	// Trigger pipeline
+	h.pipeline.ExecuteAsync(ctx, id)
+
+	sendJSONResponse(w, http.StatusOK, map[string]string{"message": "Modul 7 direset!"})
+}
+
+// ===== Utility Functions =====
 func levenshtein(s1, s2 string) int {
 	lenS1 := len(s1)
 	lenS2 := len(s2)
