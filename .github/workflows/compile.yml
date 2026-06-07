@@ -21,14 +21,17 @@ jobs:
       - name: Compile for Multiple Architectures
         run: |
           mkdir -p dist
+          # Menggunakan -trimpath untuk menyembunyikan path direktori asli Anda
+          # Menggunakan -ldflags="-s -w -buildid=" untuk membuang tabel simbol dan informasi debug (mencegah reverse engineering nama fungsi/variabel)
+          
           # Windows
-          GOOS=windows GOARCH=amd64 go build -o dist/if-slr-windows-amd64.exe ./cmd/app
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o dist/if-slr-windows-amd64.exe ./cmd/app
           # Linux
-          GOOS=linux GOARCH=amd64 go build -o dist/if-slr-linux-amd64 ./cmd/app
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o dist/if-slr-linux-amd64 ./cmd/app
           # macOS Intel
-          GOOS=darwin GOARCH=amd64 go build -o dist/if-slr-darwin-amd64 ./cmd/app
+          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o dist/if-slr-darwin-amd64 ./cmd/app
           # macOS Apple Silicon (M1/M2/M3)
-          GOOS=darwin GOARCH=arm64 go build -o dist/if-slr-darwin-arm64 ./cmd/app
+          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -buildid=" -o dist/if-slr-darwin-arm64 ./cmd/app
 
       - name: Checkout Download Repository
         uses: actions/checkout@v4
