@@ -441,9 +441,8 @@ func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.
 	logger.Log(session.ID, "   [Langkah 7.5] Ekstraksi Knowledge Graph (Neo4j) berjalan...")
 
 	if m.deps.Neo4jRepo == nil {
-		logger.Log(session.ID, "   [WARN] Kredensial Neo4j tidak diset. Melewati langkah Graph Extraction.")
-		session.Status = "M7_STEP5_WAITING_APPROVAL"
-		return m.deps.MongoRepo.UpdateSession(ctx, session)
+		logger.Log(session.ID, "   [ERROR] Kredensial Neo4j AuraDB belum diset di file .env (NEO4JURI, NEO4JUSER, NEO4JPASSWORD). Silakan lengkapi dan restart server.")
+		return fmt.Errorf("kredensial Neo4j AuraDB belum diset")
 	}
 
 	collExt := m.deps.MongoRepo.GetExtractionCollection()
