@@ -56,9 +56,9 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 
 	var nextOffset string
 	for {
-		reqBody := `{"limit": 2000, "with_payload": ["doi", "content", "chunk_index"]}`
+		reqBody := `{"limit": 2000, "with_payload": ["doi", "title", "content", "chunk_index"]}`
 		if nextOffset != "" {
-			reqBody = fmt.Sprintf(`{"limit": 2000, "with_payload": ["doi", "content", "chunk_index"], "offset": "%s"}`, nextOffset)
+			reqBody = fmt.Sprintf(`{"limit": 2000, "with_payload": ["doi", "title", "content", "chunk_index"], "offset": "%s"}`, nextOffset)
 		}
 
 		req, e := http.NewRequestWithContext(ctx, "POST",
@@ -101,22 +101,31 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 				continue
 			}
 			doi, _ := payload["doi"].(string)
-			if doi == "" {
-				continue // tanpa DOI tak bisa dipetakan balik ke MongoDB
+			title, _ := payload["title"].(string)
+
+			nd := normalizeDOIForRAG(doi)
+			var key string
+			if nd != "" {
+				key = nd
+			} else if nt := normTitle(title); nt != "" {
+				key = "title:" + nt
+			} else {
+				continue // tak ada DOI maupun title -> tak bisa dipetakan
 			}
+
 			content, _ := payload["content"].(string)
 			if content == "" {
 				continue
 			}
-			nd := normalizeDOIForRAG(doi)
+
 			var idx float64
 			if ci, ok := payload["chunk_index"].(float64); ok {
 				idx = ci
 			} else {
-				idx = counter[nd]
-				counter[nd]++
+				idx = counter[key]
+				counter[key]++
 			}
-			raw[nd] = append(raw[nd], ragChunk{idx: idx, content: content})
+			raw[key] = append(raw[key], ragChunk{idx: idx, content: content})
 		}
 
 		offsetVal, has := result["next_page_offset"]

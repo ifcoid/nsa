@@ -69,7 +69,15 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 
 		for i, p := range batch {
 			title := getStr(p, "Title")
-			ft := ftIndex[normalizeDOIForRAG(getStr(p, "DOI", "doi"))]
+			doi := getStr(p, "DOI", "doi")
+			
+			var ft string
+			if nd := normalizeDOIForRAG(doi); nd != "" && ftIndex[nd] != "" {
+				ft = ftIndex[nd]
+			} else if nt := normTitle(title); nt != "" && ftIndex["title:"+nt] != "" {
+				ft = ftIndex["title:"+nt]
+			}
+			
 			logger.Logf(session.ID, "      -> QA [%d/%d] %s\n", i+1, len(batch), getStr(p, "DOI", "doi"))
 			upd := bson.M{"qa_rated": true}
 			if ft == "" {

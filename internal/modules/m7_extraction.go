@@ -233,10 +233,16 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 
 	for i, p := range batch {
 		title := getStr(p, "Title")
-		doi := normalizeDOIForRAG(getStr(p, "DOI", "doi"))
+		doi := getStr(p, "DOI", "doi")
 		logger.Logf(session.ID, "      -> Extract [%d/%d] %s\n", i+1, len(batch), doi)
 
-		ft := ftIndex[doi]
+		var ft string
+		if nd := normalizeDOIForRAG(doi); nd != "" && ftIndex[nd] != "" {
+			ft = ftIndex[nd]
+		} else if nt := normTitle(title); nt != "" && ftIndex["title:"+nt] != "" {
+			ft = ftIndex["title:"+nt]
+		}
+
 		update := bson.M{"extracted": true}
 		if ft == "" {
 			update["coverage"] = "NO_FULLTEXT_RAG"
