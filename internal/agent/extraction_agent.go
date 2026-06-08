@@ -181,6 +181,7 @@ func (a *ExtractionAgent) SelectQATool(ctx context.Context, designBreakdown stri
 Pilih TOOL critical appraisal berdasarkan distribusi study design, lalu tetapkan THRESHOLD dengan justifikasi 3-lapis.
 
 Panduan tool:
+- Machine Learning / AI / Computational Models: CLAIM, TRIPOD-AI, PROBAST-AI, atau ML Reproducibility Checklist.
 - 1 design dominan >70%: RCT->Cochrane RoB 2/Jadad; Observational->NOS; Qualitative->CASP/JBI; SLR->AMSTAR 2.
 - Lintas-desain: MMAT / JBI set / Kmet (score dinormalisasi 0-100%).
 - Sangat heterogen: kombinasi (NOS + CASP), normalisasi 0-100%.
