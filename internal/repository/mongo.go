@@ -620,7 +620,7 @@ func (r *MongoRepository) UpdateLLMRoles(ctx context.Context, roles *model.LLMRo
 func (r *MongoRepository) ResetQAErrors(ctx context.Context, sessionID string) error {
 	filter := bson.M{
 		"session_id": sessionID,
-		"qa_final_category": "ERROR",
+		"qa_final_category": bson.M{"$in": []string{"ERROR", "UNRATED"}},
 	}
 	update := bson.M{
 		"$set": bson.M{
