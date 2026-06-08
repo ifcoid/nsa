@@ -104,13 +104,10 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 			title, _ := payload["title"].(string)
 
 			nd := normalizeDOIForRAG(doi)
-			var key string
-			if nd != "" {
-				key = nd
-			} else if nt := normTitle(title); nt != "" {
-				key = "title:" + nt
-			} else {
-				continue // tak ada DOI maupun title -> tak bisa dipetakan
+			nt := normTitle(title)
+
+			if nd == "" && nt == "" {
+				continue
 			}
 
 			content, _ := payload["content"].(string)
@@ -121,11 +118,26 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 			var idx float64
 			if ci, ok := payload["chunk_index"].(float64); ok {
 				idx = ci
-			} else {
-				idx = counter[key]
-				counter[key]++
 			}
-			raw[key] = append(raw[key], ragChunk{idx: idx, content: content})
+
+			if nd != "" {
+				i := idx
+				if i == 0 {
+					i = counter[nd]
+					counter[nd]++
+				}
+				raw[nd] = append(raw[nd], ragChunk{idx: i, content: content})
+			}
+			
+			if nt != "" {
+				key := "title:" + nt
+				i := idx
+				if i == 0 {
+					i = counter[key]
+					counter[key]++
+				}
+				raw[key] = append(raw[key], ragChunk{idx: i, content: content})
+			}
 		}
 
 		offsetVal, has := result["next_page_offset"]
