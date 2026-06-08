@@ -1,12 +1,14 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -575,7 +577,7 @@ func (h *SessionHandler) DeleteQdrantPaper(w http.ResponseWriter, req *http.Requ
 
 	// 2. Update MongoDB slr_papers
 	ctx := context.Background()
-	collPapers := h.mongoRepo.GetPaperCollection()
+	collPapers := h.mongoRepo.GetPapersCollection()
 	
 	filter := bson.M{"session_id": id}
 	if payload.DOI != "" && payload.DOI != "-" {
