@@ -218,16 +218,17 @@ type QAResult struct {
 	Evidence     string  `json:"evidence"`    // Bukti atau kutipan dari teks yang mendukung
 }
 
-func (a *ExtractionAgent) AppraiseQuality(ctx context.Context, tool, categorization, title, fulltext string) (*QAResult, error) {
+func (a *ExtractionAgent) AppraiseQuality(ctx context.Context, tool, categorization, justification, title, fulltext string) (*QAResult, error) {
 	systemPrompt := fmt.Sprintf(`Anda penilai kualitas (rater) Systematic Literature Review.
 Nilai kualitas metodologis artikel memakai tool: %s.
+Detail/Framework/Justifikasi tool: %s
 Kategorisasi ambang: %s
 
 ATURAN: nilai HANYA dari full-text (konteks RAG). Skor 0-100 (dinormalisasi).
 Tetapkan category sesuai ambang.
 
 Keluarkan HANYA JSON MURNI tanpa markdown:
-{ "total_score": 78, "category": "MODERATE", "items_summary": "ringkas penilaian per item utama", "reasoning": "alasan skor dan kategori", "evidence": "kutipan bukti teks" }`, tool, categorization)
+{ "total_score": 78, "category": "MODERATE", "items_summary": "ringkas penilaian per item utama", "reasoning": "alasan skor dan kategori", "evidence": "kutipan bukti teks" }`, tool, justification, categorization)
 
 	userPrompt := fmt.Sprintf("Title: %s\n\n=== FULL-TEXT (RAG) ===\n%s", title, fulltext)
 	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)

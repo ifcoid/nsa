@@ -84,9 +84,10 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 				upd["qa_final_category"] = "UNRATED"
 				upd["qa_total_score"] = 0
 			} else {
-				s1, e1 := r1.AppraiseQuality(ctx, tool, cat, title, ft)
+				justification := session.QAThreshold.ToolJustification
+				s1, e1 := r1.AppraiseQuality(ctx, tool, cat, justification, title, ft)
 				time.Sleep(3 * time.Second)
-				s2, e2 := r2.AppraiseQuality(ctx, tool, cat, title, ft)
+				s2, e2 := r2.AppraiseQuality(ctx, tool, cat, justification, title, ft)
 				
 				isFatal := false
 				var fatalMsg string
