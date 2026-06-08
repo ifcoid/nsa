@@ -63,6 +63,27 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		if err != nil {
 			return fmt.Errorf("QA Rater 2 (%s/%s) gagal: %w", qp2, qf2, err)
 		}
+
+		var r1Model, r2Model string
+		cfg1, _ := m.deps.MongoRepo.GetLLMConfig(ctx, qp1)
+		if cfg1 != nil {
+			r1Model = cfg1.ProviderName
+			if cfg1.DefaultModel != "" {
+				r1Model += " (" + cfg1.DefaultModel + ")"
+			}
+		} else {
+			r1Model = qp1
+		}
+
+		cfg2, _ := m.deps.MongoRepo.GetLLMConfig(ctx, qp2)
+		if cfg2 != nil {
+			r2Model = cfg2.ProviderName
+			if cfg2.DefaultModel != "" {
+				r2Model += " (" + cfg2.DefaultModel + ")"
+			}
+		} else {
+			r2Model = qp2
+		}
 		tool := session.QAThreshold.Tool
 		cat := session.QAThreshold.Categorization
 		thr := session.QAThreshold.Threshold
@@ -115,10 +136,12 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 					upd["qa_r1_category"] = s1.Category
 					upd["qa_r1_reasoning"] = s1.Reasoning
 					upd["qa_r1_evidence"] = s1.Evidence
+					upd["qa_r1_model"] = r1Model
 					upd["qa_r2_score"] = s2.TotalScore
 					upd["qa_r2_category"] = s2.Category
 					upd["qa_r2_reasoning"] = s2.Reasoning
 					upd["qa_r2_evidence"] = s2.Evidence
+					upd["qa_r2_model"] = r2Model
 					upd["qa_total_score"] = avg
 					upd["qa_final_category"] = categoryFor(avg, thr)
 				}
