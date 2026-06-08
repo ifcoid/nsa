@@ -67,12 +67,35 @@ Dan seketika itu pula Anda bisa me-reset dan memulai eksperimen topik SLR Anda m
 
 ## Konfigurasi (Environment Variables)
 
-Aplikasi ini sangat portabel dan mengikuti prinsip *12-Factor App*. Penggunaan file `.env` bersifat **opsional**. Jika Anda menjalankan aplikasi ini di komputer lokal tanpa melakukan konfigurasi apa pun, sistem akan cerdas mengambil nilai bawaan (*default*) berikut:
+Aplikasi ini sangat portabel dan mengikuti prinsip *12-Factor App*. Penggunaan file `.env` bersifat **opsional**. Anda dapat dengan mudah menimpa nilai bawaan ini dengan membuat file `.env` di folder utama aplikasi, atau dengan mendefinisikannya langsung di variabel sistem operasi (*OS Environment Variables*) saat memindahkan (*deploy*) aplikasi ke server produksi atau layanan Cloud (seperti Fly.io).
 
-- `MONGO_URI` = `mongodb://localhost:27017`
-- `DB_NAME` = `slr_agentic_db`
+Berikut adalah daftar lengkap variabel *environment* yang dikenali sistem beserta peranannya:
 
-Anda dapat dengan mudah menimpa nilai bawaan ini dengan membuat file `.env` atau mendefinisikannya langsung di variabel sistem operasi (*OS Environment Variables*) saat Anda memindahkan (*deploy*) aplikasi ke server produksi atau layanan Cloud.
+### 1. Database (MongoDB) - *Wajib*
+- `MONGO_URI`: Alamat server MongoDB (Contoh: `mongodb+srv://...` atau bawaannya `mongodb://localhost:27017`).
+- `DB_NAME`: Nama database yang digunakan (Bawaan: `slr_agentic_db`).
+
+### 2. Knowledge Graph (Neo4j/AuraDB) - *Neuro-Symbolic AI*
+- `NEO4JURI`: URI koneksi server Neo4j/AuraDB (Contoh: `neo4j+s://[ID].databases.neo4j.io`).
+- `NEO4JUSER`: *Username* untuk otentikasi Neo4j.
+- `NEO4JPASSWORD`: *Password* untuk otentikasi Neo4j.
+
+### 3. Vector Database (Qdrant) - *RAG*
+- `QDRANT_ENDPOINT`: URL endpoint server Qdrant Anda (Contoh: `https://...cloud.qdrant.io`).
+- `QDRANT_API_KEY`: Kunci API otentikasi Qdrant.
+
+### 4. Embedding Server
+- `EMBED_ENDPOINT`: URL endpoint server model *embedding* teks (Contoh: BAAI/bge-m3 via *cloudflared*).
+- `EMBED_API_KEY`: Kunci API server *embedding*.
+- `EMBED_MODEL`: Nama spesifik model *embedding* (Contoh: `BAAI/bge-m3`).
+
+### 5. Notifikasi Telegram
+- `TELEGRAM_BOT_TOKEN`: Token otentikasi dari BotFather.
+- `CHAT_ID`: ID percakapan pribadi/grup untuk menerima laporan (*alert*) status dari backend.
+
+### 6. Lain-lain
+- `PORT`: *Port* server API berjalan (Bawaan: `50607`).
+- `SESSION_ID`: (Opsional) Injeksi ID Sesi riset di mode *development/seed*.
 
 ## Release
 
