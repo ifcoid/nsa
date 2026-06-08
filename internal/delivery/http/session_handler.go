@@ -1477,6 +1477,16 @@ func (h *SessionHandler) ResetModul7(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Explicitly unset omitempty fields so they are truly removed from the database
+	_, _ = h.mongoRepo.GetSessionCollection().UpdateOne(ctx, bson.M{"_id": session.ID}, bson.M{
+		"$unset": bson.M{
+			"qa_threshold_justification": "",
+			"sensitivity_analysis":       "",
+			"synthesis_prep":             "",
+			"modul7_summary":             "",
+		},
+	})
+
 	// Reset paper QA fields
 	coll := h.mongoRepo.GetExtractionCollection()
 	upd := bson.M{
