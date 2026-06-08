@@ -35,11 +35,15 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 			return err
 		}
 		session.QAThreshold = qt
-		logger.Logf(session.ID, "   [System] QA tool: %s, threshold %.0f%%.\n", qt.Tool, qt.Threshold)
+		session.Status = "M7_STEP3_WAITING_APPROVAL"
+		logger.Logf(session.ID, "   [System] QA tool: %s, threshold %.0f%%. Menunggu persetujuan user.\n", qt.Tool, qt.Threshold)
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	}
 
 	// Fase 3: dual-rater QA per paper (batch).
+	if session.Status == "M7_STEP3_WAITING_APPROVAL" {
+		return nil // Pause until approved
+	}
 	cur, err := coll.Find(ctx, bson.M{"session_id": session.ID, "qa_rated": bson.M{"$ne": true}},
 		options.Find().SetLimit(int64(qaBatchSize)))
 	if err != nil {
