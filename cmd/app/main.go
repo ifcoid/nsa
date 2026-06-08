@@ -65,11 +65,28 @@ func main() {
 	// 3. Inisialisasi LLM Factory (Penyedia Otak AI Dinamis)
 	llmFactory := llm.NewLLMFactory(mongoRepo)
 
-	// 4. Inisialisasi Main Orchestrator (State Machine Pipeline)
-	// Kita perbarui pipeline agar menerima factory dinamis
-	pipeline := orchestrator.NewSLRPipeline(mongoRepo, llmFactory)
+	// 4. Inisialisasi Neo4j (Opsional, untuk Knowledge Graph / GraphRAG)
+	neo4jURI := os.Getenv("NEO4JURI") // sesuai file .env user
+	neo4jUser := os.Getenv("NEO4JUSER")
+	neo4jPass := os.Getenv("NEO4JPASSWORD")
+	
+	var neo4jRepo *repository.Neo4jRepository
+	if neo4jURI != "" {
+		var err error
+		neo4jRepo, err = repository.NewNeo4jRepository(neo4jURI, neo4jUser, neo4jPass)
+		if err != nil {
+			log.Printf("⚠️  Info: Gagal terhubung ke Neo4j: %v", err)
+		} else {
+			fmt.Println("✅ Berhasil terhubung ke Neo4j (GraphRAG Ready).")
+			defer neo4jRepo.Close(ctx)
+		}
+	}
 
-	// 5. Inisialisasi HTTP Router
+	// 5. Inisialisasi Main Orchestrator (State Machine Pipeline)
+	// Kita perbarui pipeline agar menerima factory dinamis dan neo4j
+	pipeline := orchestrator.NewSLRPipeline(mongoRepo, llmFactory, neo4jRepo)
+
+	// 6. Inisialisasi HTTP Router
 	router := httpapi.NewRouter(mongoRepo, pipeline)
 
 	// Auto-resume: lanjutkan sesi yang berstatus "sedang jalan" (mis. worker terputus

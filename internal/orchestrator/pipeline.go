@@ -22,9 +22,10 @@ type SLRPipeline struct {
 	mu            sync.Mutex
 }
 
-func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory) *SLRPipeline {
+func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory, neo4jRepo *repository.Neo4jRepository) *SLRPipeline {
 	deps := &modules.ModuleDeps{
 		MongoRepo:  mongo,
+		Neo4jRepo:  neo4jRepo,
 		LLMFactory: factory,
 	}
 

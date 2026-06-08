@@ -97,8 +97,21 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 		session.Status = "M7_STEP4_SYNTHESIS_PREP"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	case "M7_STEP4_APPROVED":
+		session.Status = "M7_STEP5_GRAPH_EXTRACTION"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	// ---- L5: Knowledge Graph Extraction (Neuro-Symbolic / GraphRAG) ----
+	case "M7_STEP5_GRAPH_EXTRACTION":
+		return m.runGraphExtractionL5(ctx, session)
+	case "M7_STEP5_WAITING_APPROVAL":
+		logger.Log(session.ID, "   [System] Tinjau hasil ekstraksi Knowledge Graph Neo4j. Approve untuk lanjut ke Modul 8.")
+		return nil
+	case "M7_STEP5_NEEDS_REVISION":
+		session.Feedback = ""
+		session.Status = "M7_STEP5_GRAPH_EXTRACTION"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	case "M7_STEP5_APPROVED":
 		session.Status = "M8_SYNTHESIS"
-		logger.Log(session.ID, "   [System] Modul 7 SELESAI. Lanjut ke Modul 8 (Analysis + Synthesis).")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	default:
@@ -393,4 +406,148 @@ func countNotReported(fields []agent.ExtractedField) int {
 		}
 	}
 	return n
+}
+
+// ---- L5: Graph Extraction (Neo4j) ----
+type ExtractedNode struct {
+	ID    string                 `json:"id"`
+	Label string                 `json:"label"`
+	Props map[string]interface{} `json:"props"`
+}
+
+type ExtractedEdge struct {
+	SourceID    string                 `json:"source_id"`
+	SourceLabel string                 `json:"source_label"`
+	TargetID    string                 `json:"target_id"`
+	TargetLabel string                 `json:"target_label"`
+	Type        string                 `json:"type"`
+	Props       map[string]interface{} `json:"props"`
+}
+
+type GraphExtractionResponse struct {
+	Nodes []ExtractedNode `json:"nodes"`
+	Edges []ExtractedEdge `json:"edges"`
+}
+
+func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.SLRSession) error {
+	logger.Log(session.ID, "   [Langkah 7.5] Ekstraksi Knowledge Graph (Neo4j) berjalan...")
+
+	if m.deps.Neo4jRepo == nil {
+		logger.Log(session.ID, "   [WARN] Kredensial Neo4j tidak diset. Melewati langkah Graph Extraction.")
+		session.Status = "M7_STEP5_WAITING_APPROVAL"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	}
+
+	collExt := m.deps.MongoRepo.GetExtractionCollection()
+	filter := bson.M{
+		"session_id": session.ID,
+		"extracted":  true,
+		"qa_rated":   true,
+		"graph_extracted": bson.M{"$ne": true},
+	}
+	opts := options.Find().SetLimit(int64(extractionBatchSize))
+
+	cursor, err := collExt.Find(ctx, filter, opts)
+	if err != nil {
+		return fmt.Errorf("find unextracted graph papers: %w", err)
+	}
+	var papers []map[string]interface{}
+	if err := cursor.All(ctx, &papers); err != nil {
+		return fmt.Errorf("cursor all: %w", err)
+	}
+
+	if len(papers) == 0 {
+		logger.Log(session.ID, "   [Langkah 7.5] Seluruh ekstraksi Knowledge Graph selesai.")
+		session.Status = "M7_STEP5_WAITING_APPROVAL"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	}
+
+	logger.Logf(session.ID, "   [Graph] Memproses batch %d dokumen untuk GraphRAG...\n", len(papers))
+
+	brain, err := m.deps.LLMFactory.GetDefaultLLM(ctx)
+	if err != nil {
+		return fmt.Errorf("llm init: %w", err)
+	}
+
+	for _, p := range papers {
+		objID := p["_id"]
+		title, _ := p["Title"].(string)
+		if title == "" {
+			title, _ = p["title"].(string)
+		}
+		doi, _ := p["DOI"].(string)
+		if doi == "" {
+			doi, _ = p["doi"].(string)
+		}
+		
+		fields, _ := json.Marshal(p["m7_fields"])
+		
+		sysPrompt := `Anda adalah ahli neuro-symbolic AI yang bertugas membangun Knowledge Graph dari literatur ilmiah.
+Tugas Anda adalah membaca hasil ekstraksi sebuah paper, dan mengubahnya menjadi Nodes (simpul) dan Edges (relasi).
+ATURAN NODES:
+- Wajib sertakan minimal node Paper.
+  Node Paper: Label "Paper", ID (DOI atau Title yang di-slug), Props minimal {title, doi}.
+- Buat Nodes untuk Entitas penting: "Author", "Method", "Dataset", "Metric", "Conclusion".
+- Gunakan ID yang sangat konsisten untuk entitas yang sama (contoh: id="dataset-adni", label="Dataset", props={name: "ADNI"}).
+
+ATURAN EDGES:
+- Hubungkan Paper dengan entitas lain.
+- Tipe Relasi valid contohnya: WRITTEN_BY, USES_METHOD, USES_DATASET, EVALUATES_METRIC, CONCLUDES.
+- Tiap edge butuh source_id, target_id, source_label, target_label, type, dan props.
+
+Hanya keluarkan JSON utuh dengan format:
+{
+  "nodes": [{"id":"...", "label":"...", "props":{}}],
+  "edges": [{"source_id":"...", "source_label":"...", "target_id":"...", "target_label":"...", "type":"...", "props":{}}]
+}
+Jangan ada tambahan teks markdown (tanpa ` + "```json" + ` ... ` + "```" + `) atau penjelasan.`
+
+		userPrompt := fmt.Sprintf("Ekstrak graf dari paper berikut:\nJudul: %s\nDOI: %s\nHasil Ekstraksi:\n%s", title, doi, string(fields))
+
+		respText, err := brain.GenerateJSON(ctx, sysPrompt, userPrompt)
+		if err != nil {
+			logger.Logf(session.ID, "      [!] Gagal memanggil LLM untuk paper %s: %v\n", title, err)
+			continue
+		}
+
+		var gResp GraphExtractionResponse
+		if err := json.Unmarshal([]byte(respText), &gResp); err != nil {
+			logger.Logf(session.ID, "      [!] Gagal mem-parsing JSON Graph untuk paper %s. Output LLM:\n%s\n", title, respText)
+			continue
+		}
+
+		// Convert ke struktur Neo4jRepository
+		var rNodes []repository.GraphNode
+		var rEdges []repository.GraphEdge
+
+		for _, n := range gResp.Nodes {
+			if n.Props == nil {
+				n.Props = make(map[string]interface{})
+			}
+			n.Props["id"] = n.ID
+			rNodes = append(rNodes, repository.GraphNode{
+				Label:      n.Label,
+				Properties: n.Props,
+			})
+		}
+		for _, e := range gResp.Edges {
+			rEdges = append(rEdges, repository.GraphEdge{
+				SourceNode: repository.GraphNode{Label: e.SourceLabel, Properties: map[string]interface{}{"id": e.SourceID}},
+				TargetNode: repository.GraphNode{Label: e.TargetLabel, Properties: map[string]interface{}{"id": e.TargetID}},
+				Type:       e.Type,
+				Properties: e.Props,
+			})
+		}
+
+		err = m.deps.Neo4jRepo.SaveKnowledgeGraph(ctx, rNodes, rEdges)
+		if err != nil {
+			logger.Logf(session.ID, "      [!] Gagal menyimpan Knowledge Graph Neo4j untuk paper %s: %v\n", title, err)
+			continue
+		}
+
+		_, _ = collExt.UpdateByID(ctx, objID, bson.M{"$set": bson.M{"graph_extracted": true}})
+		logger.Logf(session.ID, "      [+] Sukses menyimpan ke Neo4j: %s (%d nodes, %d edges)\n", title, len(rNodes), len(rEdges))
+	}
+
+	return nil
 }
