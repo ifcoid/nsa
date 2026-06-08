@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -13,6 +14,7 @@ import (
 	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
+	"nsa/internal/repository"
 )
 
 type M7Extraction struct {
@@ -464,7 +466,8 @@ func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.
 
 	logger.Logf(session.ID, "   [Graph] Memproses batch %d dokumen untuk GraphRAG...\n", len(papers))
 
-	brain, err := m.deps.LLMFactory.GetDefaultLLM(ctx)
+	rp1, _ := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
+	brain, err := m.deps.LLMFactory.CreateClient(ctx, rp1)
 	if err != nil {
 		return fmt.Errorf("llm init: %w", err)
 	}
@@ -504,10 +507,21 @@ Jangan ada tambahan teks markdown (tanpa ` + "```json" + ` ... ` + "```" + `) at
 
 		userPrompt := fmt.Sprintf("Ekstrak graf dari paper berikut:\nJudul: %s\nDOI: %s\nHasil Ekstraksi:\n%s", title, doi, string(fields))
 
-		respText, err := brain.GenerateJSON(ctx, sysPrompt, userPrompt)
+		respText, err := brain.Generate(ctx, sysPrompt, userPrompt)
 		if err != nil {
 			logger.Logf(session.ID, "      [!] Gagal memanggil LLM untuk paper %s: %v\n", title, err)
 			continue
+		}
+
+		// Bersihkan markdown markdown block jika ada
+		respText = strings.TrimSpace(respText)
+		if strings.HasPrefix(respText, "```json") {
+			respText = strings.TrimPrefix(respText, "```json")
+			respText = strings.TrimSuffix(respText, "```")
+		}
+		if strings.HasPrefix(respText, "```") {
+			respText = strings.TrimPrefix(respText, "```")
+			respText = strings.TrimSuffix(respText, "```")
 		}
 
 		var gResp GraphExtractionResponse
