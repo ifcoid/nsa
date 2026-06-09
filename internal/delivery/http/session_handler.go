@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"nsa/internal/agent"
+	"nsa/internal/logger"
 	"nsa/internal/model"
 	"nsa/internal/modules"
 	"nsa/internal/orchestrator"
@@ -824,7 +825,9 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 	ft := ftIndex[doi]
 
 	if ft == "" {
-		sendJSONError(w, http.StatusUnprocessableEntity, "Full-text tidak ditemukan di Qdrant, AI tidak bisa membaca paper ini. Silakan baca manual PDF-nya dan gunakan tombol 'Simpan (Manual)', atau jalankan ulang Colab Modul 6 untuk mengimpor paper ini.")
+		errMsg := fmt.Sprintf("Full-text tidak ditemukan di Qdrant, AI tidak bisa membaca paper ini.\n\nJudul: %s\n\nSilakan baca manual PDF-nya dan gunakan tombol 'Simpan (Manual)', atau jalankan ulang Colab Modul 6 untuk mengimpor paper ini.", title)
+		logger.Logf(id, "⚠️ [Auto-Resolve] Full-text tidak ditemukan untuk paper: '%s' (DOI: %s). Anda perlu mengimpor PDF-nya via Modul 6 jika ingin memakai fitur Auto-Resolve.", title, doi)
+		sendJSONError(w, http.StatusUnprocessableEntity, errMsg)
 		return
 	}
 
