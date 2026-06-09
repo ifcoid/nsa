@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"nsa/internal/llm"
 	"nsa/internal/model"
 )
@@ -56,8 +57,88 @@ Pastikan mengembalikan tepat 3 saran topik berbeda. Output HANYA array JSON murn
 	var suggestions []model.SuggestedTopic
 	err = json.Unmarshal([]byte(cleaned), &suggestions)
 	if err != nil {
+		// FALLBACK: Coba parsing format teks/markdown manual jika LLM keras kepala tidak mau JSON
+		parsed, parseErr := a.parseMarkdownResponse(response)
+		if parseErr == nil && len(parsed) > 0 {
+			return parsed, nil
+		}
 		return nil, fmt.Errorf("gagal parsing JSON dari LLM (%w). Raw response: %s", err, response)
 	}
 
 	return suggestions, nil
+}
+
+// parseMarkdownResponse mengekstrak data dari respons teks manual yang tidak berformat JSON
+func (a *GapAgent) parseMarkdownResponse(text string) ([]model.SuggestedTopic, error) {
+	var topics []model.SuggestedTopic
+	
+	// Pisahkan per topik menggunakan delimiter "---" atau pemisah yang umum
+	blocks := strings.Split(text, "---")
+	if len(blocks) < 2 {
+		// Coba pisahkan berdasarkan kemunculan "Judul:" atau "**Judul"
+		blocks = strings.Split(strings.ReplaceAll(text, "**Judul", "Judul"), "Judul:")
+		// Hapus elemen pertama jika kosong
+		if len(blocks) > 0 && strings.TrimSpace(blocks[0]) == "" {
+			blocks = blocks[1:]
+		}
+	}
+	
+	for _, block := range blocks {
+		block = strings.TrimSpace(block)
+		if block == "" {
+			continue
+		}
+		
+		topic := model.SuggestedTopic{}
+		lines := strings.Split(block, "\n")
+		
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			lineLower := strings.ToLower(line)
+			
+			// Hapus karakter markdown tebal
+			line = strings.ReplaceAll(line, "**", "")
+			line = strings.ReplaceAll(line, "*", "")
+			
+			if strings.HasPrefix(lineLower, "judul:") {
+				topic.Name = strings.TrimSpace(line[6:])
+			} else if !strings.Contains(lineLower, ":") && topic.Name == "" && len(line) > 10 {
+				// Terkadang baris pertama langsung judul
+				topic.Name = line
+			} else if strings.HasPrefix(lineLower, "gap:") {
+				topic.Gap = strings.TrimSpace(line[4:])
+			} else if strings.HasPrefix(lineLower, "alasan klasifikasi") {
+				idx := strings.Index(line, ":")
+				if idx != -1 {
+					topic.TypeReason = strings.TrimSpace(line[idx+1:])
+					if strings.Contains(lineLower, "tipe a") { topic.Type = "TIPE A" }
+					if strings.Contains(lineLower, "tipe b") { topic.Type = "TIPE B" }
+					if strings.Contains(lineLower, "tipe c") { topic.Type = "TIPE C" }
+				}
+			} else if strings.HasPrefix(lineLower, "bukti") || strings.HasPrefix(lineLower, "konteks") {
+				idx := strings.Index(line, ":")
+				if idx != -1 {
+					topic.Evidence = strings.TrimSpace(line[idx+1:])
+				}
+			} else if strings.HasPrefix(lineLower, "pentingnya") {
+				idx := strings.Index(line, ":")
+				if idx != -1 {
+					topic.Importance = strings.TrimSpace(line[idx+1:])
+				}
+			}
+		}
+		
+		if topic.Name != "" && topic.Gap != "" {
+			if topic.Type == "" {
+				topic.Type = "TIPE A" // fallback default
+			}
+			topic.References = []string{"Disintesis dari literatur"} // placeholder
+			topics = append(topics, topic)
+		}
+	}
+	
+	if len(topics) == 0 {
+		return nil, fmt.Errorf("tidak ada topik yang bisa diekstrak dari markdown")
+	}
+	return topics, nil
 }
