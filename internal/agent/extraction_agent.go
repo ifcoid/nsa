@@ -50,6 +50,8 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
 		return nil, fmt.Errorf("parse FrameworkSelection (%w). Raw: %s", err, raw)
 	}
+	res.SystemPrompt = systemPrompt
+	res.UserPrompt = userPrompt
 	return &res, nil
 }
 

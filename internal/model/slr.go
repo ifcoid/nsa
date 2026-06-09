@@ -421,11 +421,12 @@ type FrameworkColumn struct {
 	Desc     string `bson:"desc" json:"desc"`
 }
 
-// FrameworkSelection = output L1 (framework_selection).
 type FrameworkSelection struct {
 	Framework     string            `bson:"framework" json:"framework"` // TCCM / ADO / PICO / CUSTOM
 	Justification string            `bson:"justification" json:"justification"`
 	Columns       []FrameworkColumn `bson:"columns" json:"columns"`
+	SystemPrompt  string            `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
+	UserPrompt    string            `bson:"user_prompt,omitempty" json:"user_prompt,omitempty"`
 }
 
 // ExtractionLog = log L2 (progress + verifikasi spot-check).
