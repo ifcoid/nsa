@@ -1447,23 +1447,34 @@ func (h *SessionHandler) ResetModul7(w http.ResponseWriter, req *http.Request) {
 		sendJSONError(w, http.StatusNotFound, "Session not found")
 		return
 	}
-
-	// Reset fields in SLRSession
-	session.QAThreshold = nil
-	session.SensitivityAnalysis = nil
-	session.SynthesisPrep = nil
-	session.Modul7Summary = nil
-	session.Status = "M7_STEP3_QA" // so it triggers QA loop from start
-
-	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
-		sendJSONError(w, http.StatusInternalServerError, "Failed to update session")
+	// Unset fields in SLRSession and revert status
+	sessionColl := h.mongoRepo.GetSessionCollection()
+	_, err = sessionColl.UpdateOne(ctx, bson.M{"_id": id}, bson.M{
+		"$unset": bson.M{
+			"extraction_framework":       "",
+			"extraction_log":             "",
+			"qa_threshold":               "",
+			"qa_threshold_justification": "",
+			"sensitivity_analysis":       "",
+			"synthesis_prep":             "",
+			"modul7_summary":             "",
+		},
+		"$set": bson.M{
+			"status": "M6_COMPLETE",
+		},
+	})
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to reset session status and fields")
 		return
 	}
 
-	// Reset paper QA fields
+	// Reset paper QA and Extraction fields
 	coll := h.mongoRepo.GetExtractionCollection()
 	upd := bson.M{
 		"$unset": bson.M{
+			"extracted":         "",
+			"verified":          "",
+			"extracted_data":    "",
 			"qa_rated":          "",
 			"qa_total_score":    "",
 			"qa_final_category": "",
@@ -1471,15 +1482,17 @@ func (h *SessionHandler) ResetModul7(w http.ResponseWriter, req *http.Request) {
 			"qa_r1_category":    "",
 			"qa_r1_reasoning":   "",
 			"qa_r1_evidence":    "",
+			"qa_r1_model":       "",
 			"qa_r2_score":       "",
 			"qa_r2_category":    "",
 			"qa_r2_reasoning":   "",
 			"qa_r2_evidence":    "",
+			"qa_r2_model":       "",
 		},
 	}
 	_, err = coll.UpdateMany(ctx, bson.M{"session_id": id}, upd)
 	if err != nil {
-		sendJSONError(w, http.StatusInternalServerError, "Failed to reset extraction QA fields")
+		sendJSONError(w, http.StatusInternalServerError, "Failed to reset extraction and QA fields")
 		return
 	}
 
