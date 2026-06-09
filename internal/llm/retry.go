@@ -20,6 +20,16 @@ func NewRetryingClient(primary, fallback LLMClient) LLMClient {
 	return &retryingClient{primary: primary, fallback: fallback}
 }
 
+func (c *retryingClient) ModelName() string {
+	if c.primary != nil {
+		return c.primary.ModelName()
+	}
+	if c.fallback != nil {
+		return c.fallback.ModelName()
+	}
+	return "unknown"
+}
+
 func (c *retryingClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	if c.primary == nil && c.fallback != nil {
 		return generateWithBackoff(ctx, c.fallback, systemPrompt, userPrompt, []time.Duration{5 * time.Second, 20 * time.Second})

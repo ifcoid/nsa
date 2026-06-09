@@ -18,6 +18,10 @@ func NewGeminiClient(apiKey, model string) *GeminiClient {
 	return &GeminiClient{APIKey: apiKey, Model: model}
 }
 
+func (g *GeminiClient) ModelName() string {
+	return "gemini/" + g.Model
+}
+
 func (g *GeminiClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: g.APIKey})
 	if err != nil {

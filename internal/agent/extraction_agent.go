@@ -21,25 +21,35 @@ func NewExtractionAgent(client llm.LLMClient) *ExtractionAgent {
 // ===== L1: Framework recommendation + extraction template =====
 
 func (a *ExtractionAgent) RecommendFramework(ctx context.Context, pico, rqs, designBreakdown string) (*model.FrameworkSelection, error) {
-	systemPrompt := `Anda adalah metodolog Systematic Literature Review.
-Pilih FRAMEWORK ekstraksi paling sesuai lalu turunkan TEMPLATE kolom ekstraksi.
+	systemPrompt := `Anda adalah ahli metodologi Systematic Literature Review (SLR) di bidang Artificial Intelligence, Machine Learning, dan Computer Science.
+Tugas Anda:
+Pilih satu FRAMEWORK ekstraksi dan sintesis yang **paling sesuai** untuk topik ini, lalu buat TEMPLATE kolom ekstraksi data.
 
-Opsi framework:
-- TCCM (Theory-Context-Characteristics-Methodology): management/social science; gap Tipe C; RQ "bagaimana konsep X beroperasi di konteks Y".
-- ADO (Antecedents-Decisions-Outcomes): decision/consumer/organizational; RQ "apa pemicu, keputusan, hasil"; studi causal/process.
-- PICO-BASED: health/medical/intervention; RQ efektivitas intervensi; studi eksperimental/kuasi.
-- TEMA (Technical-Evaluation-Methodology-Applicability): computer science/engineering; sistem teknis, performa algoritma.
-- D-A-V-E-C (Dataset-Architecture-Validation-Efficiency-Context): AI/Machine Learning/Deep Learning; fokus pada arsitektur model, dataset, komputasi.
-- CUSTOM: tidak ada yang fit (wajib justifikasi).
+Opsi framework yang tersedia:
+- TCCM (Theory-Context-Characteristics-Methodology)
+- ADO (Antecedents-Decisions-Outcomes)
+- PICO-BASED
+- TEMA (Technical-Evaluation-Methodology-Applicability): computer science/engineering; fokus sistem teknis dan performa algoritma.
+- D-A-V-E-C (Dataset-Architecture-Validation-Efficiency-Context): khusus AI/ML/Deep Learning; sangat fokus pada arsitektur model, dataset, validasi, dan komputasi.
+- CUSTOM: jika tidak ada yang benar-benar fit (wajib justifikasi kuat).
 
-Turunkan kolom template dari framework terpilih. Sertakan kolom Meta (ID, Author, Year, Journal, DOI), kolom inti framework (beri category T/C/Ch/M atau A/D/O dst), Key_Findings (Output), Quality_Score (QA), Notes (Manual).
+Instruksi:
+1. Pilih framework yang paling cocok dengan karakter studi.
+2. Berikan justification yang kuat dan siap dipakai di bagian Methods SLR (3-5 kalimat).
+3. Buat daftar kolom ekstraksi yang lengkap dan terstruktur.
+4. Wajib menyertakan kolom Meta: ID, Author, Year, Title, Journal/Conference, DOI.
+5. Kolom inti sesuai framework yang dipilih (beri label kategori seperti T/C/Ch/M atau D/A/V/E/C dll.).
+6. Tambahkan kolom: Key_Findings, Quality_Score (dari appraisal), Limitations, Notes.
 
-Keluarkan HANYA JSON MURNI tanpa markdown:
+Keluarkan **HANYA JSON MURNI** tanpa penjelasan apapun, tanpa markdown, tanpa code block. 
+
+Contoh output yang diharapkan:
 {
-  "framework": "TCCM",
-  "justification": "3-4 kalimat alasan, siap dipakai di Methods",
+  "framework": "D-A-V-E-C",
+  "justification": "Topik ini sangat teknis dan berfokus pada pengembangan model AI...",
   "columns": [
-    {"key": "Theory", "category": "T", "desc": "Teori/framework studi (nama + ref)"}
+    {"key": "id", "category": "Meta", "desc": "Nomor urut studi"},
+    {"key": "dataset", "category": "D", "desc": "Dataset yang digunakan beserta jumlah subjek dan karakteristiknya"}
   ]
 }`
 	userPrompt := fmt.Sprintf("=== PICO DEFINITIONS ===\n%s\n\n=== RESEARCH QUESTIONS ===\n%s\n\n=== STUDY DESIGN BREAKDOWN ===\n%s", pico, rqs, designBreakdown)
@@ -54,6 +64,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	}
 	res.SystemPrompt = systemPrompt
 	res.UserPrompt = userPrompt
+	res.ModelUsed = a.client.ModelName()
 	return &res, nil
 }
 
@@ -218,8 +229,8 @@ type QAResult struct {
 	TotalScore   float64 `json:"total_score"` // 0-100
 	Category     string  `json:"category"`    // HIGH / MODERATE / LOW
 	ItemsSummary string  `json:"items_summary"`
-	Reasoning    string  `json:"reasoning"`   // Penjelasan logis mengapa paper ini mendapat skor/kategori tersebut
-	Evidence     string  `json:"evidence"`    // Bukti atau kutipan dari teks yang mendukung
+	Reasoning    string  `json:"reasoning"` // Penjelasan logis mengapa paper ini mendapat skor/kategori tersebut
+	Evidence     string  `json:"evidence"`  // Bukti atau kutipan dari teks yang mendukung
 }
 
 func (a *ExtractionAgent) AppraiseQuality(ctx context.Context, tool, categorization, justification, title, fulltext string) (*QAResult, error) {

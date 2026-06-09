@@ -14,6 +14,10 @@ func NewClaudeClient(token, model string) *ClaudeClient {
 	return &ClaudeClient{AuthToken: token, Model: model}
 }
 
+func (c *ClaudeClient) ModelName() string {
+	return "claude/" + c.Model
+}
+
 func (c *ClaudeClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	// -> Di sini logika asli menggunakan HTTP Client / SDK Anthropic
 	fmt.Printf("[API] Memanggil Claude (%s)...\n", c.Model)

@@ -43,6 +43,10 @@ func NewOpenAICompatibleClient(apiKey, baseURL, model string) *OpenAICompatibleC
 	return &OpenAICompatibleClient{APIKey: apiKey, BaseURL: baseURL, Model: model}
 }
 
+func (c *OpenAICompatibleClient) ModelName() string {
+	return "openai/" + c.Model
+}
+
 type openAIMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

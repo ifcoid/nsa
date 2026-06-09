@@ -28,6 +28,10 @@ func NewCohereClient(apiKey, defaultModel string) *CohereClient {
 	}
 }
 
+func (c *CohereClient) ModelName() string {
+	return "cohere/" + c.DefaultModel
+}
+
 // Generate melakukan pemanggilan API ke endpoint Cohere v2
 func (c *CohereClient) Generate(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	// Format payload Cohere v2

@@ -427,6 +427,7 @@ type FrameworkSelection struct {
 	Columns       []FrameworkColumn `bson:"columns" json:"columns"`
 	SystemPrompt  string            `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 	UserPrompt    string            `bson:"user_prompt,omitempty" json:"user_prompt,omitempty"`
+	ModelUsed     string            `bson:"model_used,omitempty" json:"model_used,omitempty"`
 }
 
 // ExtractionLog = log L2 (progress + verifikasi spot-check).
