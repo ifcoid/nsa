@@ -889,6 +889,7 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 		"message": "Field auto-resolve berhasil",
 		"resolved_value": resField.Value,
 		"evidence": resField.Evidence,
+		"model_used": ag.ModelName(),
 	})
 }
 

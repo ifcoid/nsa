@@ -260,6 +260,7 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 				update["ambiguous"] = res.Ambiguous
 				update["coverage"] = res.Coverage
 				update["nr_count"] = countNotReported(res.Fields)
+				update["model_extraction"] = leadAg.ModelName()
 			}
 			time.Sleep(5 * time.Second)
 		}
@@ -330,12 +331,47 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 	} else if rate >= 5 {
 		nrNote = "5-15%: refine protocol, re-do subset yang di-flag."
 	}
+	rp1, _ := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
+	colsJSON := "[]"
+	if session.FrameworkSelection != nil {
+		b, _ := json.Marshal(session.FrameworkSelection.Columns)
+		colsJSON = string(b)
+	}
+	systemPrompt := fmt.Sprintf(`Anda Extractor utama untuk Systematic Literature Review.
+Ekstrak data per kolom TEMPLATE dari FULL-TEXT artikel (konteks RAG).
+
+TEMPLATE KOLOM (JSON):
+%s
+
+OPERATIONAL DEFINITIONS:
+%s
+
+ATURAN ANTI-HALUSINASI (WAJIB):
+- Simpulkan HANYA dari full-text yang diberikan. Dilarang memakai pengetahuan luar.
+- Per field: kutip kalimat pendukung + section ref di "evidence" (mis. "Methods p.5: We surveyed 234...").
+- Jika tidak ada di teks: value "[NOT REPORTED]", status "NOT_REPORTED" (JANGAN mengira).
+- Borderline: status "AMBIGUOUS" + alasan di evidence.
+- Konsisten dengan canonical terminology.
+- RED FLAGS QA (sample kecil tanpa power analysis, missing data tak dijelaskan, confounder tak ditangani, outcome tak validated) → ringkas di "qa_red_flags" (awali tiap item 'QA_RED:').
+
+Keluarkan HANYA JSON MURNI tanpa markdown:
+{
+  "fields": [{"key": "Theory", "value": "...", "evidence": "Intro p.2: ...", "status": "REPORTED"}],
+  "key_findings": "1-2 kalimat temuan utama",
+  "qa_red_flags": "QA_RED: ... ; QA_RED: ...",
+  "ambiguous": ["nama field yang ambiguous"],
+  "coverage": "COMPLETE"
+}`, colsJSON, opDefs)
+
 	session.ExtractionLog = &model.ExtractionLog{
-		TotalExtracted:   total,
-		VerifiedSample:   checked,
-		DisagreementRate: rate,
-		AmbiguousCount:   ambiguous,
-		NRNote:           nrNote,
+		TotalExtracted:      total,
+		VerifiedSample:      checked,
+		DisagreementRate:    rate,
+		AmbiguousCount:      ambiguous,
+		NRNote:              nrNote,
+		SystemPrompt:        systemPrompt,
+		ModelExtraction:     rp1,
+		ModelRefineProtocol: vp,
 	}
 	logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d; disagreement %.1f%%.\n", total, checked, rate)
 	session.Status = "M7_STEP2_WAITING_APPROVAL"

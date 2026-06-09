@@ -18,6 +18,10 @@ func NewExtractionAgent(client llm.LLMClient) *ExtractionAgent {
 	return &ExtractionAgent{client: client}
 }
 
+func (a *ExtractionAgent) ModelName() string {
+	return a.client.ModelName()
+}
+
 // ===== L1: Framework recommendation + extraction template =====
 
 func (a *ExtractionAgent) RecommendFramework(ctx context.Context, pico, rqs, designBreakdown string) (*model.FrameworkSelection, error) {

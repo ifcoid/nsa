@@ -432,12 +432,15 @@ type FrameworkSelection struct {
 
 // ExtractionLog = log L2 (progress + verifikasi spot-check).
 type ExtractionLog struct {
-	TotalExtracted   int     `bson:"total_extracted" json:"total_extracted"`
-	VerifiedSample   int     `bson:"verified_sample" json:"verified_sample"`
-	DisagreementRate float64 `bson:"disagreement_rate" json:"disagreement_rate"`
-	AmbiguousCount   int     `bson:"ambiguous_count" json:"ambiguous_count"`
-	NRNote           string  `bson:"nr_note" json:"nr_note"`
-	ExtractionKappa  float64 `bson:"extraction_kappa,omitempty" json:"extraction_kappa,omitempty"`
+	TotalExtracted      int     `bson:"total_extracted" json:"total_extracted"`
+	VerifiedSample      int     `bson:"verified_sample" json:"verified_sample"`
+	DisagreementRate    float64 `bson:"disagreement_rate" json:"disagreement_rate"`
+	AmbiguousCount      int     `bson:"ambiguous_count" json:"ambiguous_count"`
+	NRNote              string  `bson:"nr_note" json:"nr_note"`
+	ExtractionKappa     float64 `bson:"extraction_kappa,omitempty" json:"extraction_kappa,omitempty"`
+	SystemPrompt        string  `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
+	ModelExtraction     string  `bson:"model_extraction,omitempty" json:"model_extraction,omitempty"`
+	ModelRefineProtocol string  `bson:"model_refine_protocol,omitempty" json:"model_refine_protocol,omitempty"`
 }
 
 // QAKappaDetails = transparansi detail kesepakatan R1 dan R2.
