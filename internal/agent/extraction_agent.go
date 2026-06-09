@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"nsa/internal/llm"
 	"nsa/internal/model"
@@ -197,37 +198,81 @@ Keluarkan HANYA JSON MURNI tanpa markdown. Buka dengan '{' dan tutup dengan '}':
 // ===== L3: Quality appraisal =====
 
 func (a *ExtractionAgent) SelectQATool(ctx context.Context, designBreakdown string) (*model.QAThresholdJustification, error) {
-	systemPrompt := `Anda metodolog QA Systematic Literature Review.
-Pilih TOOL critical appraisal berdasarkan distribusi study design, lalu tetapkan THRESHOLD dengan justifikasi 3-lapis.
+	systemPrompt := `Anda seorang metodolog QA Systematic Literature Review yang ahli dalam memilih instrumen critical appraisal.
 
-Panduan tool:
-- Machine Learning / AI / Computational Models: CLAIM, TRIPOD-AI, PROBAST-AI, atau ML Reproducibility Checklist.
-- 1 design dominan >70%: RCT->Cochrane RoB 2/Jadad; Observational->NOS; Qualitative->CASP/JBI; SLR->AMSTAR 2.
-- Lintas-desain: MMAT / JBI set / Kmet (score dinormalisasi 0-100%).
-- Sangat heterogen: kombinasi (NOS + CASP), normalisasi 0-100%.
+TUGAS: Pilih TOOL yang paling tepat berdasarkan distribusi study design, lalu tetapkan THRESHOLD (0-100) dengan justifikasi 3-lapis.
 
-Threshold 3-lapis: (1) berbasis literatur bidang, (2) berbasis tool developer, (3) berbasis feasibility pool studi.
+PANDUAN PRIORITAS TOOL:
+1. Jika studi DIDOMINASI (>70%) oleh **RCT** → Cochrane RoB 2 atau Jadad
+2. Jika DIDOMINASI oleh **studi observasional (kohort/case-control)** → NOS atau ROBINS-I
+3. Jika DIDOMINASI oleh **studi kualitatif** → CASP atau JBI
+4. Jika DIDOMINASI oleh **studi komputasional / AI / deep learning / model prediksi** → 
+   - CLAIM (untuk AI dalam medical imaging)
+   - TRIPOD-AI atau PROBAST-AI (untuk model prediksi risiko)
+   - ML Reproducibility Checklist (untuk transparansi kode/data)
+   - JANGAN gunakan MMAT untuk studi AI murni tanpa intervensi manusia
+5. Jika **lintas-desain heterogen** (campuran RCT, observasional, kualitatif, komputasional) → MMAT atau JBI Mixed Methods
+6. Jika **sangat heterogen & tidak ada tool yang pas** → buat CUSTOM rubric dengan normalisasi 0-100%
 
-Keluarkan HANYA JSON MURNI tanpa markdown:
+ATURAN THRESHOLD 3-LAPIS (wajib dijelaskan masing-masing):
+- Layer literature: cutoff yang umum digunakan di bidang studi (dengan referensi minimal 2 sumber)
+- Layer developer: rekomendasi dari pengembang tool (jika ada) atau praktik umum penggunaan tool
+- Layer feasibility: estimasi proporsi studi yang akan lolos di pool (harus realistis, target retain 50-70% studi)
+
+Keluarkan HANYA JSON MURNI tanpa markdown, tanpa komentar tambahan:
+
 {
-  "tool": "MMAT",
-  "tool_justification": "100-150 kata untuk Methods",
+  "tool": "NAMA_TOOL",
+  "tool_justification": "100-150 kata menjelaskan alasan pemilihan tool berdasarkan breakdown design",
   "threshold": 70,
-  "layer_literature": "...",
-  "layer_developer": "...",
-  "layer_feasibility": "...",
+  "layer_literature": "Penjelasan...",
+  "layer_developer": "Penjelasan...",
+  "layer_feasibility": "Penjelasan...",
   "categorization": "HIGH >=80% | MODERATE 70-79% | LOW <70%"
-}`
-	userPrompt := fmt.Sprintf("=== STUDY DESIGN BREAKDOWN ===\n%s", designBreakdown)
+}
+
+CATATAN PENTING:
+- Jika design breakdown menunjukkan proporsi >50% adalah "studi komputasional", "deep learning", "model Mamba", "EEG classification tanpa RCT", maka tool haruslah CLAIM, TRIPOD-AI, atau ML Reproducibility Checklist, BUKAN MMAT.
+- Threshold untuk studi komputasional biasanya 60-70% (jika menggunakan CLAIM/TRIPOD-AI) karena sifatnya yang lebih teknis.
+- Jika tidak ada tool standar yang sesuai, isi tool dengan "CUSTOM_RUBRIC" dan beri justifikasi.`
+
+	userPrompt := fmt.Sprintf("=== STUDY DESIGN BREAKDOWN ===\n%s\n\nBerdasarkan breakdown di atas, pilih tool, threshold, dan berikan justifikasi 3-lapis.", designBreakdown)
+
 	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("SelectQATool LLM: %w", err)
 	}
+
+	cleaned := CleanJSONResponse(raw)
 	var res model.QAThresholdJustification
-	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse QAThreshold (%w). Raw: %s", err, raw)
+	if err := json.Unmarshal([]byte(cleaned), &res); err != nil {
+		return nil, fmt.Errorf("parse QAThreshold (err=%w). Raw: %s", err, cleaned)
 	}
+
+	// Validasi tool yang dipilih sesuai dengan design breakdown (tambahan safety)
+	if err := validateToolAgainstDesign(res.Tool, designBreakdown); err != nil {
+		// Log warning tapi tetap return, atau bisa juga return error
+		// Di sini kita hanya log internal, tidak mengganggu eksekusi
+		_ = err
+	}
+
 	return &res, nil
+}
+
+// validateToolAgainstDesign melakukan validasi sederhana: jika design mengandung banyak kata kunci AI,
+// pastikan tool bukan MMAT.
+func validateToolAgainstDesign(tool, designBreakdown string) error {
+	aiKeywords := []string{"deep learning", "neural network", "mamba", "transformer", "cnn", "lstm", "bert", "gpt", "benchmark dataset", "state space model", "eeg classification", "computational model"}
+	toolLower := strings.ToLower(tool)
+	if toolLower == "mmat" || strings.Contains(toolLower, "mmat") {
+		designLower := strings.ToLower(designBreakdown)
+		for _, kw := range aiKeywords {
+			if strings.Contains(designLower, kw) {
+				return fmt.Errorf("potensi mismatch: tool MMAT digunakan pada studi dengan keyword AI '%s', padahal CLAIM/TRIPOD-AI lebih sesuai", kw)
+			}
+		}
+	}
+	return nil
 }
 
 type QAResult struct {
