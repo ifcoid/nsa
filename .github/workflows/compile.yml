@@ -6,8 +6,23 @@ on:
       - main
 
 jobs:
-  build-and-publish:
+  build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows
+            arch: amd64
+            ext: .exe
+          - os: linux
+            arch: amd64
+            ext: ""
+          - os: darwin
+            arch: amd64
+            ext: ""
+          - os: darwin
+            arch: arm64
+            ext: ""
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -21,21 +36,27 @@ jobs:
       - name: Install Garble
         run: go install mvdan.cc/garble@latest
 
-      - name: Compile for Multiple Architectures
+      - name: Compile Binary
         run: |
           mkdir -p dist
-          # Menggunakan Garble untuk obfuscation tingkat tinggi
-          # -literals : mengacak string hardcoded (seperti prompt LLM, API keys, struktur JSON)
-          # -tiny     : membuang semua debug info, ukuran lebih kecil & mustahil direkonstruksi
-          
-          # Windows
-          GOOS=windows GOARCH=amd64 garble -literals -tiny build -o dist/if-slr-windows-amd64.exe ./cmd/app
-          # Linux
-          GOOS=linux GOARCH=amd64 garble -literals -tiny build -o dist/if-slr-linux-amd64 ./cmd/app
-          # macOS Intel
-          GOOS=darwin GOARCH=amd64 garble -literals -tiny build -o dist/if-slr-darwin-amd64 ./cmd/app
-          # macOS Apple Silicon (M1/M2/M3)
-          GOOS=darwin GOARCH=arm64 garble -literals -tiny build -o dist/if-slr-darwin-arm64 ./cmd/app
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} garble -literals -tiny build -o dist/if-slr-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/app
+
+      - name: Upload Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/*
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Checkout Download Repository
         uses: actions/checkout@v4
@@ -46,13 +67,8 @@ jobs:
 
       - name: Commit and Push Binaries
         run: |
-          # Buat folder khusus jika belum ada
           mkdir -p download-repo/backend-binaries
-          
-          # Salin hasil kompilasi
           cp dist/* download-repo/backend-binaries/
-          
-          # Masuk ke direktori download-repo dan push
           cd download-repo
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
