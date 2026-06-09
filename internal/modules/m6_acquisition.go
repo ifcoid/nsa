@@ -79,7 +79,7 @@ func (m *M6Acquisition) Execute(ctx context.Context, session *model.SLRSession) 
 		session.Status = "M6_STEP3_REVIEW"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
-	case "M6_STEP3_APPROVED":
+	case "M6_STEP3_APPROVED", "M6_COMPLETE":
 		session.Status = "M7_EXTRACTION"
 		logger.Log(session.ID, "   [System] Modul 6 SELESAI. Memulai Modul 7 (Data Extraction + QA).")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
