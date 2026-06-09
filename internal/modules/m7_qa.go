@@ -36,6 +36,7 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		}
 		session.QAThreshold = qt
 		logger.Logf(session.ID, "   [System] QA tool: %s, threshold %.0f%%.\n", qt.Tool, qt.Threshold)
+		session.Status = "M7_STEP3_QA_TOOL_WAITING_APPROVAL"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	}
 

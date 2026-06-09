@@ -72,6 +72,18 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 	// ---- L3: Quality appraisal (tool + threshold + dual-rater kappa + sensitivity) ----
 	case "M7_STEP3_QA":
 		return m.runQAL3(ctx, session)
+	case "M7_STEP3_QA_TOOL_WAITING_APPROVAL":
+		logger.Log(session.ID, "   [System] Tinjau pilihan QA Tool & Threshold. Approve / revisi.")
+		return nil
+	case "M7_STEP3_QA_TOOL_NEEDS_REVISION":
+		logger.Logf(session.ID, "   [Revisi 7.3] Pemilihan ulang QA Tool (feedback: '%s')\n", session.Feedback)
+		session.QAThreshold = nil
+		session.Feedback = ""
+		session.Status = "M7_STEP3_QA"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	case "M7_STEP3_QA_TOOL_APPROVED":
+		session.Status = "M7_STEP3_QA"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	case "M7_STEP3_WAITING_APPROVAL":
 		logger.Log(session.ID, "   [System] Tinjau 'qa_threshold_justification' + 'sensitivity_analysis'. Approve / revisi.")
 		return nil
