@@ -15,6 +15,8 @@ import (
 	"nsa/internal/model"
 	"nsa/internal/orchestrator"
 	"nsa/internal/repository"
+
+	"aidanwoods.dev/go-paseto"
 )
 
 func main() {
@@ -29,6 +31,8 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("⚠️  Info: File .env tidak ditemukan, menggunakan environment OS bawaan.")
 	}
+
+	ensurePasetoKeys()
 
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
@@ -302,4 +306,34 @@ func updateLLMConfigDirectly(ctx context.Context, repo *repository.MongoReposito
 
 	fmt.Printf("🔹 [Seeding] Berhasil mengonfigurasi provider '%s' di MongoDB.\n", config.ID)
 	return nil
+}
+
+// ensurePasetoKeys mengecek apakah PASETO keys sudah ada di environment.
+// Jika belum (misal saat run pertama di komputer/hosting baru), ia akan membuat pasangan kunci baru
+// dan menyimpannya ke file .env (jika bisa ditulisi) serta ke memory environment OS saat ini.
+func ensurePasetoKeys() {
+	privKeyHex := os.Getenv("PASETO_PRIVATE_KEY")
+	pubKeyHex := os.Getenv("PASETO_PUBLIC_KEY")
+
+	if privKeyHex == "" || pubKeyHex == "" {
+		fmt.Println("⚠️  Info: PASETO keys tidak ditemukan. Men-generate pasangan kunci V4 Asymmetric baru...")
+		
+		secretKey := paseto.NewV4AsymmetricSecretKey()
+		publicKey := secretKey.Public()
+
+		privHex := secretKey.ExportHex()
+		pubHex := publicKey.ExportHex()
+
+		os.Setenv("PASETO_PRIVATE_KEY", privHex)
+		os.Setenv("PASETO_PUBLIC_KEY", pubHex)
+
+		f, err := os.OpenFile(".env", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+		if err == nil {
+			defer f.Close()
+			f.WriteString(fmt.Sprintf("\n# Auto-generated PASETO Keys\nPASETO_PRIVATE_KEY=%s\nPASETO_PUBLIC_KEY=%s\n", privHex, pubHex))
+			fmt.Println("✅ PASETO keys berhasil dibuat dan disimpan ke file .env.")
+		} else {
+			fmt.Printf("⚠️  Warn: Gagal menyimpan PASETO keys ke .env: %v. Key hanya berlaku selama aplikasi berjalan.\n", err)
+		}
+	}
 }
