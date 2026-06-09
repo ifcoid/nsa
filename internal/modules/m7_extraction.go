@@ -239,7 +239,7 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 		var ft string
 		if nd := normalizeDOIForRAG(doi); nd != "" && ftIndex[nd] != "" {
 			ft = ftIndex[nd]
-		} else if nt := normTitle(title); nt != "" && ftIndex["title:"+nt] != "" {
+		} else if nt := NormTitle(title); nt != "" && ftIndex["title:"+nt] != "" {
 			ft = ftIndex["title:"+nt]
 		}
 
