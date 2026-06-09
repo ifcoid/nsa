@@ -201,25 +201,8 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 		session.SystemError = "" // Hapus log error sebelumnya
 	} else {
 		// Default simple approve
-		if strings.HasSuffix(session.Status, "_WAITING_APPROVAL") && session.Status != "M7_STEP3_WAITING_APPROVAL" {
+		if strings.HasSuffix(session.Status, "_WAITING_APPROVAL") {
 			session.Status = session.Status[:len(session.Status)-17] + "_APPROVED"
-		} else if session.Status == "M7_STEP3_WAITING_APPROVAL" {
-			session.Status = "M7_STEP3_QA"
-			// User can edit QA Tool settings
-			if qaData, ok := updateData["qa_threshold"].(map[string]interface{}); ok && session.QAThreshold != nil {
-				if tool, ok := qaData["tool"].(string); ok {
-					session.QAThreshold.Tool = tool
-				}
-				if thr, ok := qaData["threshold"].(float64); ok {
-					session.QAThreshold.Threshold = thr
-				}
-				if cat, ok := qaData["categorization"].(string); ok {
-					session.QAThreshold.Categorization = cat
-				}
-				if just, ok := qaData["justification"].(string); ok {
-					session.QAThreshold.ToolJustification = just
-				}
-			}
 		} else if session.Status == "M5_STEP3_WAITING_RESOLUTION" {
 			session.Status = "M5_STEP3_BATCH_SCREENING"
 		} else if session.Status == "M6_STEP1_WAITING_SYNC" {
@@ -1476,16 +1459,6 @@ func (h *SessionHandler) ResetModul7(w http.ResponseWriter, req *http.Request) {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to update session")
 		return
 	}
-
-	// Explicitly unset omitempty fields so they are truly removed from the database
-	_, _ = h.mongoRepo.GetSessionCollection().UpdateOne(ctx, bson.M{"_id": session.ID}, bson.M{
-		"$unset": bson.M{
-			"qa_threshold_justification": "",
-			"sensitivity_analysis":       "",
-			"synthesis_prep":             "",
-			"modul7_summary":             "",
-		},
-	})
 
 	// Reset paper QA fields
 	coll := h.mongoRepo.GetExtractionCollection()

@@ -113,10 +113,6 @@ func (r *MongoRepository) GetPapersCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_papers")
 }
 
-func (r *MongoRepository) GetSessionCollection() *mongo.Collection {
-	return r.client.Database(r.dbName).Collection("slr_sessions")
-}
-
 func (r *MongoRepository) GetPostDedupCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_papers_post_dedup")
 }

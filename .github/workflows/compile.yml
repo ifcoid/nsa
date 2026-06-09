@@ -15,25 +15,27 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version: '1.22' # Sesuaikan dengan versi Go Anda
           cache: true
 
-      - name: Install dependencies
-        run: go mod download
+      - name: Install Garble
+        run: go install mvdan.cc/garble@latest
 
       - name: Compile for Multiple Architectures
         run: |
           mkdir -p dist
-          # Menggunakan standard go build dengan strip debug info
+          # Menggunakan Garble untuk obfuscation tingkat tinggi
+          # -literals : mengacak string hardcoded (seperti prompt LLM, API keys, struktur JSON)
+          # -tiny     : membuang semua debug info, ukuran lebih kecil & mustahil direkonstruksi
           
           # Windows
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o dist/if-slr-windows-amd64.exe ./cmd/app
+          GOOS=windows GOARCH=amd64 garble -literals -tiny build -o dist/if-slr-windows-amd64.exe ./cmd/app
           # Linux
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o dist/if-slr-linux-amd64 ./cmd/app
+          GOOS=linux GOARCH=amd64 garble -literals -tiny build -o dist/if-slr-linux-amd64 ./cmd/app
           # macOS Intel
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o dist/if-slr-darwin-amd64 ./cmd/app
+          GOOS=darwin GOARCH=amd64 garble -literals -tiny build -o dist/if-slr-darwin-amd64 ./cmd/app
           # macOS Apple Silicon (M1/M2/M3)
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o dist/if-slr-darwin-arm64 ./cmd/app
+          GOOS=darwin GOARCH=arm64 garble -literals -tiny build -o dist/if-slr-darwin-arm64 ./cmd/app
 
       - name: Checkout Download Repository
         uses: actions/checkout@v4
