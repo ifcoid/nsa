@@ -28,6 +28,8 @@ Opsi framework:
 - TCCM (Theory-Context-Characteristics-Methodology): management/social science; gap Tipe C; RQ "bagaimana konsep X beroperasi di konteks Y".
 - ADO (Antecedents-Decisions-Outcomes): decision/consumer/organizational; RQ "apa pemicu, keputusan, hasil"; studi causal/process.
 - PICO-BASED: health/medical/intervention; RQ efektivitas intervensi; studi eksperimental/kuasi.
+- TEMA (Technical-Evaluation-Methodology-Applicability): computer science/engineering; sistem teknis, performa algoritma.
+- D-A-V-E-C (Dataset-Architecture-Validation-Efficiency-Context): AI/Machine Learning/Deep Learning; fokus pada arsitektur model, dataset, komputasi.
 - CUSTOM: tidak ada yang fit (wajib justifikasi).
 
 Turunkan kolom template dari framework terpilih. Sertakan kolom Meta (ID, Author, Year, Journal, DOI), kolom inti framework (beri category T/C/Ch/M atau A/D/O dst), Key_Findings (Output), Quality_Score (QA), Notes (Manual).
