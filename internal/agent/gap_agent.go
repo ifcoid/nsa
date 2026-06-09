@@ -44,7 +44,7 @@ Keluarkan output HANYA dalam bentuk array JSON dengan struktur berikut:
 ]
 Pastikan mengembalikan tepat 3 saran topik berbeda. Output HANYA array JSON murni.`
 
-	userPrompt := fmt.Sprintf("Topik mentah awal: %s\nBuatkan 3 saran topik SLR terbaik beserta Gap Characterization-nya.", initialTopic)
+	userPrompt := fmt.Sprintf("Topik mentah awal: %s\nBuatkan 3 saran topik SLR terbaik beserta Gap Characterization-nya.\n\nPENTING: Output Anda HARUS BERUPA ARRAY JSON MURNI (dimulai dengan '[' dan diakhiri dengan ']'). DILARANG memberikan teks pengantar atau penutup.", initialTopic)
 
 	response, err := a.client.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {
