@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"time"
 
 	"nsa/internal/agent"
 	"nsa/internal/logger"
@@ -58,7 +59,27 @@ func (m *M1Foundation) generateBriefing(ctx context.Context, session *model.SLRS
 	}
 
 	foundationAgent := agent.NewFoundationAgent(llmBrain)
+	
+	// Tambahkan progress logger karena proses ini bisa memakan waktu lama dengan LLM lokal/lambat
+	done := make(chan bool)
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		start := time.Now()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				elapsed := time.Since(start)
+				logger.Logf(session.ID, "   [LLM] Masih menyusun fondasi teori... (waktu berjalan: %d detik)", int(elapsed.Seconds()))
+			}
+		}
+	}()
+
 	theory, err := foundationAgent.GenerateTheoryBriefing(ctx, session.Topic, session.Feedback)
+	close(done) // hentikan progress logger
+	
 	if err != nil {
 		return err
 	}
