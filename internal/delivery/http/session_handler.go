@@ -823,6 +823,10 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 		ftIndex = map[string]string{}
 	}
 	ft := ftIndex[doi]
+	if ft == "" && title != "" {
+		// Fallback mencari berdasarkan judul yang dinormalisasi (karena paper ini tidak punya DOI)
+		ft = ftIndex["title:"+modules.NormTitle(title)]
+	}
 
 	if ft == "" {
 		errMsg := fmt.Sprintf("Full-text tidak ditemukan di Qdrant, AI tidak bisa membaca paper ini.\n\nJudul: %s\n\nSilakan baca manual PDF-nya dan gunakan tombol 'Simpan (Manual)', atau jalankan ulang Colab Modul 6 untuk mengimpor paper ini.", title)

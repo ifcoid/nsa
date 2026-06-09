@@ -104,7 +104,7 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 			title, _ := payload["title"].(string)
 
 			nd := normalizeDOIForRAG(doi)
-			nt := normTitle(title)
+			nt := NormTitle(title)
 
 			if nd == "" && nt == "" {
 				continue
@@ -221,7 +221,7 @@ func (r *FulltextRAG) bestTitleMatch(title string) *ragGroup {
 	if r == nil {
 		return nil
 	}
-	nt := normTitle(title)
+	nt := NormTitle(title)
 	if nt == "" {
 		return nil
 	}
@@ -387,7 +387,8 @@ func (r *FulltextRAG) TopKByTitle(title string, qvec []float32, k, maxChars int)
 	return selectContext(g.chunks, qvec, k, maxChars)
 }
 
-func normTitle(s string) string {
+// NormTitle menormalkan judul untuk pencocokan.
+func NormTitle(s string) string {
 	s = strings.ToLower(s)
 	var b strings.Builder
 	for _, r := range s {
@@ -543,7 +544,7 @@ func BuildFulltextRAG(ctx context.Context) (rag *FulltextRAG, available bool, er
 
 	var titles []ragTitleRef
 	for key, g := range byKey {
-		if nt := normTitle(g.title); nt != "" {
+		if nt := NormTitle(g.title); nt != "" {
 			titles = append(titles, ragTitleRef{norm: nt, key: key})
 		}
 	}
