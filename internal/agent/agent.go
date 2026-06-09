@@ -56,16 +56,41 @@ func CleanJSONResponse(rawResponse string) string {
 		}
 	}
 
-	// 4. Fallback: Gunakan strings.IndexAny untuk mengekstrak hanya bagian JSON
-	
-	// Kita cari index pertama dari { atau [
+	// 4. Fallback: Ekstrak blok JSON terakhir (menggunakan brace matching)
+	// Berguna jika LLM melakukan self-correction: json {...} Wait... json {...}
+	endIdx := strings.LastIndexAny(rawResponse, "}]")
+	if endIdx != -1 {
+		charEnd := rawResponse[endIdx]
+		charStart := byte('{')
+		if charEnd == ']' {
+			charStart = '['
+		}
+
+		braceCount := 0
+		startIdx := -1
+		for i := endIdx; i >= 0; i-- {
+			if rawResponse[i] == charEnd {
+				braceCount++
+			} else if rawResponse[i] == charStart {
+				braceCount--
+				if braceCount == 0 {
+					startIdx = i
+					break
+				}
+			}
+		}
+
+		if startIdx != -1 {
+			return strings.TrimSpace(rawResponse[startIdx : endIdx+1])
+		}
+	}
+
+	// 5. Fallback terakhir jika logika brace gagal
 	startIdx := strings.IndexAny(rawResponse, "{[")
 	if startIdx == -1 {
 		return rawResponse
 	}
-	
-	// Kita cari index terakhir dari } atau ]
-	endIdx := strings.LastIndexAny(rawResponse, "}]")
+	endIdx = strings.LastIndexAny(rawResponse, "}]")
 	if endIdx == -1 || endIdx < startIdx {
 		return rawResponse
 	}

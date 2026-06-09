@@ -172,8 +172,9 @@ ATURAN ANTI-HALUSINASI (WAJIB):
 - Berikan kutipan kalimat pendukung di "evidence".
 - Jika benar-benar tidak ada di teks, tulis value "[NOT REPORTED]" dan status "NOT_REPORTED". Dilarang mereka-reka.
 - Jika ada informasi, status WAJIB "REPORTED". Jangan membuat status AMBIGUOUS lagi.
+- DILARANG KERAS menulis teks penjelasan, chain of thought (seperti "Wait, let me..."), atau analisis apa pun di luar JSON.
 
-Keluarkan HANYA JSON MURNI tanpa markdown:
+Keluarkan HANYA JSON MURNI tanpa markdown. Buka dengan '{' dan tutup dengan '}':
 {
   "key": "%s",
   "value": "Nilai yang konklusif / pasti",

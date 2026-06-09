@@ -824,7 +824,7 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 	ft := ftIndex[doi]
 
 	if ft == "" {
-		sendJSONError(w, http.StatusUnprocessableEntity, "Full-text tidak ditemukan di Qdrant, tidak bisa auto-resolve.")
+		sendJSONError(w, http.StatusUnprocessableEntity, "Full-text tidak ditemukan di Qdrant, AI tidak bisa membaca paper ini. Silakan baca manual PDF-nya dan gunakan tombol 'Simpan (Manual)', atau jalankan ulang Colab Modul 6 untuk mengimpor paper ini.")
 		return
 	}
 
