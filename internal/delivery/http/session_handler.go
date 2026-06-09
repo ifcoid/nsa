@@ -1442,7 +1442,7 @@ func (h *SessionHandler) ResetModul7(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ctx := context.Background()
-	session, err := h.mongoRepo.GetSession(ctx, id)
+	_, err := h.mongoRepo.GetSession(ctx, id)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Session not found")
 		return
