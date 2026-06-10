@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 // FoundationBriefing = output Modul 1 (Fondasi Teori + Aturan Global).
 // Hybrid: bagian teori di-generate LLM (disesuaikan topik), sisanya kanonik statik.
@@ -170,6 +174,58 @@ type SearchLog struct {
 	DateExecuted      map[string]string `bson:"date_executed" json:"date_executed"`
 	TotalHits         map[string]string `bson:"total_hits" json:"total_hits"`
 	UpdatePolicy      string            `bson:"update_policy" json:"update_policy"`
+}
+
+// UnmarshalJSON adaptif untuk SearchLog. Menangani kasus dimana LLM halusinasi
+// dan mengembalikan search_string_final sebagai JSON object (map) alih-alih string murni.
+func (s *SearchLog) UnmarshalJSON(data []byte) error {
+	type Alias SearchLog
+	aux := &struct {
+		SearchStringFinal interface{} `json:"search_string_final"`
+		*Alias
+	}{
+		Alias: (*Alias)(s),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	
+	// Adaptasi search_string_final
+	switch v := aux.SearchStringFinal.(type) {
+	case string:
+		s.SearchStringFinal = v
+	case map[string]interface{}:
+		// Gabungkan jika berupa map/object
+		var combined []string
+		for dbName, query := range v {
+			combined = append(combined, fmt.Sprintf("[%s]: %v", dbName, query))
+		}
+		// strings.Join perlu package "strings" dan "fmt" (sudah diimport jika dipakai)
+		// tapi kita pastikan fmt.Sprintf dan strings.Join tersedia.
+		// slr.go sudah ada "time". Perlu kita cek import-nya.
+		s.SearchStringFinal = "GABUNGAN (LLM Object Halusinasi):\n" + joinMapString(v)
+	default:
+		// Fallback raw json
+		b, _ := json.Marshal(v)
+		s.SearchStringFinal = string(b)
+	}
+	return nil
+}
+
+// Helper lokal karena kita tidak tahu pasti isi import di atas
+func joinMapString(m map[string]interface{}) string {
+	var res string
+	for k, v := range m {
+		// Menggunakan type assertion sederhana tanpa package fmt/strings jika belum diimport
+		res += "- [" + k + "]: "
+		if strVal, ok := v.(string); ok {
+			res += strVal + "\n"
+		} else {
+			// fallback sangat kasar jika bukan string
+			res += "...\n"
+		}
+	}
+	return res
 }
 
 type Modul3Summary struct {
