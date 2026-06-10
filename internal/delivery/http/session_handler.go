@@ -267,6 +267,9 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Hentikan paksa background worker yang mungkin sedang berjalan (mitigasi race condition)
+	h.pipeline.StopWorker(id)
+
 	session.Feedback = payload.Feedback
 
 	// Determine NEEDS_REVISION status

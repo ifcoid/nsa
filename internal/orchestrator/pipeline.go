@@ -17,9 +17,10 @@ import (
 type SLRPipeline struct {
 	mongoRepo     *repository.MongoRepository
 	llmFactory    *llm.LLMFactory
-	registry      map[string]modules.Module
-	activeWorkers map[string]bool
-	mu            sync.Mutex
+	registry          map[string]modules.Module
+	activeWorkers     map[string]bool
+	activeCancelFuncs map[string]context.CancelFunc
+	mu                sync.Mutex
 }
 
 func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory, neo4jRepo *repository.Neo4jRepository) *SLRPipeline {
@@ -44,10 +45,11 @@ func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory, 
 	}
 
 	return &SLRPipeline{
-		mongoRepo:     mongo,
-		llmFactory:    factory,
-		registry:      registry,
-		activeWorkers: make(map[string]bool),
+		mongoRepo:         mongo,
+		llmFactory:        factory,
+		registry:          registry,
+		activeWorkers:     make(map[string]bool),
+		activeCancelFuncs: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -111,10 +113,15 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 		// Beri timeout panjang karena panggilan LLM bisa memakan waktu
 		asyncCtx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 		
+		p.mu.Lock()
+		p.activeCancelFuncs[sessionID] = cancel
+		p.mu.Unlock()
+
 		defer func() {
 			cancel()
 			p.mu.Lock()
 			delete(p.activeWorkers, sessionID)
+			delete(p.activeCancelFuncs, sessionID)
 			p.mu.Unlock()
 		}()
 
@@ -184,3 +191,14 @@ func (p *SLRPipeline) ResumeInProgress(ctx context.Context) {
 	}
 }
 
+// StopWorker membatalkan eksekusi pipeline yang sedang berjalan untuk sesi tertentu
+func (p *SLRPipeline) StopWorker(sessionID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if cancel, exists := p.activeCancelFuncs[sessionID]; exists {
+		logger.Logf(sessionID, "[Orchestrator] Menghentikan paksa worker untuk sesi %s...\n", sessionID)
+		cancel()
+		delete(p.activeCancelFuncs, sessionID)
+		// activeWorkers map will be cleaned up by the defer func in ExecuteAsync
+	}
+}
