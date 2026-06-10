@@ -17,6 +17,12 @@ func CleanJSONResponse(rawResponse string) string {
 
 	// Hapus tag <think>...</think> secara utuh (mendukung unclosed tag akibat token limit)
 	rawResponse = thinkRegex.ReplaceAllString(rawResponse, "")
+	
+	// Hapus halusinasi line continuation pada string JSON (misal: "string" \ \n "lanjutan")
+	// Regex ini mencocokkan: tanda kutip penutup, spasi opsional, backslash, spasi/newline, tanda kutip pembuka
+	lineContinuationRegex := regexp.MustCompile(`"\s*\\\s*\n\s*"`)
+	rawResponse = lineContinuationRegex.ReplaceAllString(rawResponse, "")
+
 	rawResponse = strings.TrimSpace(rawResponse)
 
 	// 0. Hapus blok referensi grounding jika ada, agar tidak mengacaukan parser

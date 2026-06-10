@@ -49,6 +49,7 @@ TUGAS ANDA:
 3. Susun dokumen MODUL 3 SUMMARY (Markdown utuh "=== COMPLETE SEARCH STRATEGY (SLR) ===").
 
 Output WAJIB berupa JSON MURNI tanpa blok markdown awalan/akhiran:
+PENTING: JANGAN memecah baris (line continuation) menggunakan backslash (\) untuk string panjang. Tuliskan teks dalam satu baris untuk tiap key JSON.
 {
   "search_log": {
     "search_string_final": "...",
