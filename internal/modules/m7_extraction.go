@@ -61,6 +61,8 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 		logger.Logf(session.ID, "   [Revisi 7.2] Ekstraksi ulang (feedback: '%s')\n", session.Feedback)
 		_, _ = m.deps.MongoRepo.GetExtractionCollection().UpdateMany(ctx,
 			bson.M{"session_id": session.ID}, bson.M{"$set": bson.M{"extracted": false, "verified": false}})
+		_, _ = m.deps.MongoRepo.GetSessionCollection().UpdateOne(ctx,
+			bson.M{"_id": session.ID}, bson.M{"$unset": bson.M{"extraction_log": ""}})
 		session.ExtractionLog = nil
 		session.Feedback = ""
 		session.Status = "M7_STEP2_EXTRACTION"
@@ -77,6 +79,8 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 		return nil
 	case "M7_STEP3_QA_TOOL_NEEDS_REVISION":
 		logger.Logf(session.ID, "   [Revisi 7.3] Pemilihan ulang QA Tool (feedback: '%s')\n", session.Feedback)
+		_, _ = m.deps.MongoRepo.GetSessionCollection().UpdateOne(ctx,
+			bson.M{"_id": session.ID}, bson.M{"$unset": bson.M{"qa_threshold": ""}})
 		session.QAThreshold = nil
 		// Feedback JANGAN dikosongkan di sini agar bisa dibaca oleh runQAL3
 		session.Status = "M7_STEP3_QA"
@@ -91,6 +95,8 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 		logger.Logf(session.ID, "   [Revisi 7.3] QA ulang (feedback: '%s')\n", session.Feedback)
 		_, _ = m.deps.MongoRepo.GetExtractionCollection().UpdateMany(ctx,
 			bson.M{"session_id": session.ID}, bson.M{"$set": bson.M{"qa_rated": false}})
+		_, _ = m.deps.MongoRepo.GetSessionCollection().UpdateOne(ctx,
+			bson.M{"_id": session.ID}, bson.M{"$unset": bson.M{"qa_threshold": "", "sensitivity_analysis": ""}})
 		session.QAThreshold = nil
 		session.SensitivityAnalysis = nil
 		// Feedback JANGAN dikosongkan di sini agar bisa dibaca oleh runQAL3
