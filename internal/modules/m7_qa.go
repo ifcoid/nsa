@@ -91,6 +91,9 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		thr := session.QAThreshold.Threshold
 
 		for i, p := range batch {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			title := getStr(p, "Title")
 			doi := getStr(p, "DOI", "doi")
 			

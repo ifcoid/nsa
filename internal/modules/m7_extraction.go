@@ -250,6 +250,9 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 	}
 
 	for i, p := range batch {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		title := getStr(p, "Title")
 		doi := getStr(p, "DOI", "doi")
 		logger.Logf(session.ID, "      -> Extract [%d/%d] %s\n", i+1, len(batch), doi)
@@ -317,6 +320,9 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 
 	disagree, checked, ambiguous := 0, 0, 0
 	for i := 0; i < total; i++ {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		p := all[i]
 		amb, _ := p["ambiguous"].(bson.A)
 		isAmbiguous := len(amb) > 0
