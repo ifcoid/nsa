@@ -30,29 +30,39 @@ func CleanJSONResponse(rawResponse string) string {
 	   (strings.HasSuffix(rawResponse, "}") || strings.HasSuffix(rawResponse, "]")) {
 		// Do nothing, proceed to fallback extractor below
 	} else {
-		// 2. Coba cari blok markdown ```json ... ```
-		startBlock := strings.Index(rawResponse, "```json")
-		if startBlock != -1 {
-			startBlock += 7
-			// Gunakan LastIndex agar tidak terpotong oleh ``` di dalam JSON
-			endBlock := strings.LastIndex(rawResponse, "```")
-			if endBlock != -1 && endBlock > startBlock {
-				return strings.TrimSpace(rawResponse[startBlock:endBlock])
+		// 2. Cari blok markdown ```json ... ``` TERAKHIR
+		// Ini penting untuk mengatasi kasus dimana LLM halusinasi, terpotong, lalu meminta maaf dan membuat blok json baru di akhir.
+		startIdx := strings.LastIndex(rawResponse, "```json")
+		if startIdx != -1 {
+			startIdx += 7
+			endIdx := strings.Index(rawResponse[startIdx:], "```")
+			if endIdx != -1 {
+				return strings.TrimSpace(rawResponse[startIdx : startIdx+endIdx])
 			}
 		}
 
-		// 3. Coba cari blok markdown ``` ... ``` secara umum
-		startBlock = strings.Index(rawResponse, "```")
-		if startBlock != -1 {
-			startBlock += 3
-			// Jika baris pertama adalah nama bahasa (misal: json), kita bisa skip
-			if strings.HasPrefix(rawResponse[startBlock:], "json") {
-				startBlock += 4
+		// 3. Coba cari blok markdown ``` ... ``` TERAKHIR jika tanpa tag json
+		// Kita iterasi saja semua blok dan ambil yang terakhir
+		var lastBlock string
+		temp := rawResponse
+		for {
+			s := strings.Index(temp, "```")
+			if s == -1 {
+				break
 			}
-			endBlock := strings.LastIndex(rawResponse, "```")
-			if endBlock != -1 && endBlock > startBlock {
-				return strings.TrimSpace(rawResponse[startBlock:endBlock])
+			e := strings.Index(temp[s+3:], "```")
+			if e == -1 {
+				break
 			}
+			lastBlock = temp[s+3 : s+3+e]
+			if strings.HasPrefix(strings.TrimSpace(lastBlock), "json") {
+				lastBlock = strings.TrimSpace(lastBlock)[4:]
+			}
+			temp = temp[s+3+e+3:]
+		}
+		
+		if lastBlock != "" {
+			return strings.TrimSpace(lastBlock)
 		}
 	}
 
