@@ -44,6 +44,10 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		logger.Log(session.ID, "   [System] DIJEDA. Menunggu Anda memilih 1 dari 3 topik yang disarankan.")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
+	case "M2_STEP1_TOPIC_GAP_ERROR":
+		logger.Log(session.ID, "   [ERROR] Gagal memformulasikan Topik (LLM Parsing/Timeout). Silakan klik tombol 'Retry' di UI atau set manual ke M2_STEP1_TOPIC_GAP.")
+		return nil
+
 	case "M2_STEP1_WAITING_APPROVAL":
 		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan setujui di UI Frontend.")
 		return nil
