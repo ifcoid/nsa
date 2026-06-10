@@ -224,3 +224,8 @@ __marimo__/
 /debug.txt
 scratch/*.txt
 backup/
+
+# graphify knowledge-graph output (hasil generate dari /graphify; regenerable,
+# berisi path absolut machine-specific & file besar). Hapus baris ini kalau mau
+# meng-commit graph.json agar grafnya ikut tiap branch.
+graphify-out/
