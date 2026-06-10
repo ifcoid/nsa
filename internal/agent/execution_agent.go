@@ -52,7 +52,7 @@ Output WAJIB berupa JSON MURNI tanpa blok markdown awalan/akhiran:
 PENTING: JANGAN memecah baris (line continuation) menggunakan backslash (\) untuk string panjang. Tuliskan teks dalam satu baris untuk tiap key JSON.
 {
   "search_log": {
-    "search_string_final": "...",
+    "search_string_final": "[GABUNGKAN SEMUA SEARCH STRING KE DALAM 1 TEKS STRING, JANGAN GUNAKAN OBJECT JSON/DICTIONARY]",
     "filters_applied": [ {"filter": "...", "value": "...", "justification": "..."} ],
     "databases": ["Scopus", "Web of Science"],
     "date_executed": {"Scopus": "%s"},
