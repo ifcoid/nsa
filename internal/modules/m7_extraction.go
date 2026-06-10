@@ -78,7 +78,7 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 	case "M7_STEP3_QA_TOOL_NEEDS_REVISION":
 		logger.Logf(session.ID, "   [Revisi 7.3] Pemilihan ulang QA Tool (feedback: '%s')\n", session.Feedback)
 		session.QAThreshold = nil
-		session.Feedback = ""
+		// Feedback JANGAN dikosongkan di sini agar bisa dibaca oleh runQAL3
 		session.Status = "M7_STEP3_QA"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	case "M7_STEP3_QA_TOOL_APPROVED":
@@ -93,7 +93,7 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 			bson.M{"session_id": session.ID}, bson.M{"$set": bson.M{"qa_rated": false}})
 		session.QAThreshold = nil
 		session.SensitivityAnalysis = nil
-		session.Feedback = ""
+		// Feedback JANGAN dikosongkan di sini agar bisa dibaca oleh runQAL3
 		session.Status = "M7_STEP3_QA"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	case "M7_STEP3_APPROVED":

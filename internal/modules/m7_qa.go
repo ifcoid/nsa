@@ -30,11 +30,12 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 			return fmt.Errorf("gemini (brain QA) gagal: %w", err)
 		}
 		designBreakdown := m.designBreakdownFromExtraction(ctx, session)
-		qt, err := agent.NewExtractionAgent(brain).SelectQATool(ctx, designBreakdown)
+		qt, err := agent.NewExtractionAgent(brain).SelectQATool(ctx, designBreakdown, session.Feedback)
 		if err != nil {
 			return err
 		}
 		session.QAThreshold = qt
+		session.Feedback = "" // Bersihkan feedback setelah dipakai
 		logger.Logf(session.ID, "   [System] QA tool: %s, threshold %.0f%%.\n", qt.Tool, qt.Threshold)
 		session.Status = "M7_STEP3_QA_TOOL_WAITING_APPROVAL"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)

@@ -197,7 +197,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown. Buka dengan '{' dan tutup dengan '}':
 
 // ===== L3: Quality appraisal =====
 
-func (a *ExtractionAgent) SelectQATool(ctx context.Context, designBreakdown string) (*model.QAThresholdJustification, error) {
+func (a *ExtractionAgent) SelectQATool(ctx context.Context, designBreakdown string, feedback string) (*model.QAThresholdJustification, error) {
 	systemPrompt := `Anda seorang metodolog QA Systematic Literature Review yang ahli dalam memilih instrumen critical appraisal.
 
 TUGAS: Pilih TOOL yang paling tepat berdasarkan distribusi study design, lalu tetapkan THRESHOLD (0-100) dengan justifikasi 3-lapis.
@@ -237,6 +237,9 @@ CATATAN PENTING:
 - Jika tidak ada tool standar yang sesuai, isi tool dengan "CUSTOM_RUBRIC" dan beri justifikasi.`
 
 	userPrompt := fmt.Sprintf("=== STUDY DESIGN BREAKDOWN ===\n%s\n\nBerdasarkan breakdown di atas, pilih tool, threshold, dan berikan justifikasi 3-lapis.", designBreakdown)
+	if feedback != "" {
+		userPrompt += fmt.Sprintf("\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s\nPerhatikan instruksi ini secara saksama dalam memilih tool dan threshold.", feedback)
+	}
 
 	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {
