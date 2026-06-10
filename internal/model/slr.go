@@ -2,7 +2,6 @@ package model
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
@@ -177,52 +176,93 @@ type SearchLog struct {
 }
 
 // UnmarshalJSON adaptif untuk SearchLog. Menangani kasus dimana LLM halusinasi
-// dan mengembalikan search_string_final sebagai JSON object (map) alih-alih string murni.
+// mengembalikan search_string_final atau total_hits sebagai JSON object (map) alih-alih tipe aslinya.
 func (s *SearchLog) UnmarshalJSON(data []byte) error {
-	type Alias SearchLog
-	aux := &struct {
-		SearchStringFinal interface{} `json:"search_string_final"`
-		*Alias
-	}{
-		Alias: (*Alias)(s),
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
+	// Parse ke map generik terlebih dahulu untuk menangani anomali tipe data
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	
-	// Adaptasi search_string_final
-	switch v := aux.SearchStringFinal.(type) {
-	case string:
-		s.SearchStringFinal = v
-	case map[string]interface{}:
-		// Gabungkan jika berupa map/object
-		var combined []string
-		for dbName, query := range v {
-			combined = append(combined, fmt.Sprintf("[%s]: %v", dbName, query))
+
+	// 1. SearchStringFinal
+	if val, ok := raw["search_string_final"]; ok {
+		switch v := val.(type) {
+		case string:
+			s.SearchStringFinal = v
+		case map[string]interface{}:
+			s.SearchStringFinal = "GABUNGAN (LLM Object Halusinasi):\n" + joinMapString(v)
+		default:
+			b, _ := json.Marshal(v)
+			s.SearchStringFinal = string(b)
 		}
-		// strings.Join perlu package "strings" dan "fmt" (sudah diimport jika dipakai)
-		// tapi kita pastikan fmt.Sprintf dan strings.Join tersedia.
-		// slr.go sudah ada "time". Perlu kita cek import-nya.
-		s.SearchStringFinal = "GABUNGAN (LLM Object Halusinasi):\n" + joinMapString(v)
-	default:
-		// Fallback raw json
-		b, _ := json.Marshal(v)
-		s.SearchStringFinal = string(b)
 	}
+
+	// 2. FiltersApplied
+	if val, ok := raw["filters_applied"]; ok {
+		b, _ := json.Marshal(val)
+		json.Unmarshal(b, &s.FiltersApplied)
+	}
+
+	// 3. Databases
+	if val, ok := raw["databases"]; ok {
+		b, _ := json.Marshal(val)
+		json.Unmarshal(b, &s.Databases)
+	}
+
+	// 4. DateExecuted
+	if val, ok := raw["date_executed"]; ok {
+		if mapVal, isMap := val.(map[string]interface{}); isMap {
+			s.DateExecuted = make(map[string]string)
+			for k, v := range mapVal {
+				if strVal, isStr := v.(string); isStr {
+					s.DateExecuted[k] = strVal
+				} else {
+					b, _ := json.Marshal(v)
+					s.DateExecuted[k] = string(b)
+				}
+			}
+		}
+	}
+
+	// 5. TotalHits (Ini sering halusinasi menjadi objek bersarang { Scopus: { post_filter: 54 } })
+	if val, ok := raw["total_hits"]; ok {
+		if mapVal, isMap := val.(map[string]interface{}); isMap {
+			s.TotalHits = make(map[string]string)
+			for k, v := range mapVal {
+				if strVal, isStr := v.(string); isStr {
+					s.TotalHits[k] = strVal
+				} else {
+					// Jika LLM mereturn object (seperti { "post_filter": 54, "notes": "..." })
+					b, _ := json.Marshal(v)
+					s.TotalHits[k] = string(b)
+				}
+			}
+		}
+	}
+
+	// 6. UpdatePolicy
+	if val, ok := raw["update_policy"]; ok {
+		if strVal, isStr := val.(string); isStr {
+			s.UpdatePolicy = strVal
+		} else {
+			b, _ := json.Marshal(val)
+			s.UpdatePolicy = string(b)
+		}
+	}
+
 	return nil
 }
 
-// Helper lokal karena kita tidak tahu pasti isi import di atas
+// Helper lokal
 func joinMapString(m map[string]interface{}) string {
 	var res string
 	for k, v := range m {
-		// Menggunakan type assertion sederhana tanpa package fmt/strings jika belum diimport
 		res += "- [" + k + "]: "
 		if strVal, ok := v.(string); ok {
 			res += strVal + "\n"
 		} else {
-			// fallback sangat kasar jika bukan string
-			res += "...\n"
+			b, _ := json.Marshal(v)
+			res += string(b) + "\n"
 		}
 	}
 	return res
