@@ -1,190 +1,835 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.0.3",
   "info": {
     "title": "Agentic SLR Orchestrator API",
-    "description": "API untuk mengelola sistem Systematic Literature Review berbasis agen Multi-LLM.",
-    "version": "1.0.0"
+    "description": "REST API untuk pipeline Systematic Literature Review (SLR) agentic neuro-symbolic (Modul 1-9). Sebagian besar endpoint memajukan state machine sesi riset (field `status`) dan memicu eksekusi pipeline asinkron. Autentikasi memakai token PASETO v4 (bukan JWT) yang dikirim sebagai `Authorization: Bearer <token>`.",
+    "version": "2.0.0"
   },
   "servers": [
-    {
-      "url": "http://localhost:50607",
-      "description": "Local development server"
-    }
+    { "url": "http://localhost:50607", "description": "Local development (PORT default 50607)" },
+    { "url": "https://{host}", "description": "Production (mis. Fly.io)", "variables": { "host": { "default": "your-app.fly.dev" } } }
   ],
+  "tags": [
+    { "name": "Auth", "description": "Registrasi & login (publik). Mengembalikan token PASETO v4." },
+    { "name": "Sessions", "description": "Siklus hidup sesi SLR: create, get, update, approve, revise (state machine)." },
+    { "name": "Extractions (M7)", "description": "Data extraction Modul 7: ambil hasil, resolusi field ambigu (manual/otomatis)." },
+    { "name": "Full-text (M6)", "description": "Modul 6: sinkronisasi Qdrant, akses full-text, ekspor link." },
+    { "name": "Bibliometric (M8b)", "description": "Modul 8b: submit data VOSviewer/SLNA." },
+    { "name": "LLM Config", "description": "Konfigurasi provider LLM, health check, model routing per peran." },
+    { "name": "Integrations", "description": "Konfigurasi GitHub publisher & endpoint embedding." },
+    { "name": "MCP & Realtime", "description": "Endpoint MCP (SSE/JSON-RPC) dan WebSocket log stream." }
+  ],
+  "security": [{ "bearerAuth": [] }],
   "paths": {
-    "/api/sessions": {
+    "/api/auth/register": {
       "post": {
-        "summary": "Membuat atau me-reset sesi SLR baru.",
+        "tags": ["Auth"],
+        "summary": "Registrasi user baru",
+        "description": "Membuat user (role default `admin`). Jika env `REGISTER_INVITE_CODE` di-set, `invite_code` wajib cocok.",
+        "security": [],
         "requestBody": {
           "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "example": "bci_2026"
-                  },
-                  "topic": {
-                    "type": "string",
-                    "example": "Penggunaan Active Learning untuk EEG BCI"
-                  }
-                },
-                "required": ["id", "topic"]
-              }
-            }
-          }
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterRequest" } } }
         },
         "responses": {
-          "201": {
-            "description": "Sesi berhasil dibuat dan pipeline agen mulai berjalan di background."
-          }
+          "201": { "description": "User dibuat", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "description": "Invite code tidak valid", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "409": { "description": "Username sudah ada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login & dapatkan token PASETO v4",
+        "description": "Token berlaku 24 jam. Kirim sebagai `Authorization: Bearer <auth_token>` pada endpoint terproteksi.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Login berhasil", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/sessions": {
+      "post": {
+        "tags": ["Sessions"],
+        "summary": "Buat / reset sesi SLR",
+        "description": "Membuat sesi baru berstatus `INIT` lalu memicu pipeline asinkron. Jika `id` sudah ada, topiknya diperbarui (resume).",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSessionRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Sesi dibuat & pipeline dimulai", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       }
     },
     "/api/sessions/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
       "get": {
-        "summary": "Mendapatkan status dan data sesi SLR.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "tags": ["Sessions"],
+        "summary": "Ambil seluruh state sesi",
+        "description": "Mengembalikan dokumen sesi lengkap (topik, PICO, RQ, log screening, hasil tiap modul, dst).",
         "responses": {
-          "200": {
-            "description": "Berhasil mengambil data sesi.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "topic": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
+          "200": { "description": "Dokumen sesi", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SLRSession" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["Sessions"],
+        "summary": "Update field sesi (dinamis)",
+        "description": "Patch parsial. Field yang dikenali: `status`, `scope_filters`, `feedback`, `data_mining_log`. Memicu pipeline asinkron.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateSessionRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Sesi diperbarui", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/resume": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "post": {
+        "tags": ["Sessions"],
+        "summary": "Lanjutkan worker pipeline",
+        "description": "Memicu eksekusi asinkron dari progres terakhir. Diabaikan jika worker sudah berjalan.",
+        "responses": {
+          "200": { "description": "Resume dipicu", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
     "/api/sessions/{id}/approve": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
       "put": {
-        "summary": "Menyetujui langkah saat ini dan memicu agen untuk lanjut ke langkah berikutnya.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "tags": ["Sessions"],
+        "summary": "Setujui gate Human-in-the-Loop",
+        "description": "Mengubah `*_WAITING_APPROVAL` menjadi `*_APPROVED` (atau transisi gate M5/M6) lalu melanjutkan pipeline. Body opsional: `is_retry: true` menghapus suffix `_ERROR`; pada `M2_STEP1_APPROVED` sertakan `selected_topic`.",
         "requestBody": {
           "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "description": "Payload opsional untuk meng-update field tertentu seperti selected_topic."
-              }
-            }
-          }
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApproveStepRequest" } } }
         },
         "responses": {
-          "200": {
-            "description": "Langkah disetujui, pipeline berlanjut."
-          }
+          "200": { "description": "Disetujui, pipeline lanjut", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
     "/api/sessions/{id}/revise": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
       "put": {
-        "summary": "Meminta revisi pada langkah saat ini.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "tags": ["Sessions"],
+        "summary": "Minta revisi langkah dengan feedback",
+        "description": "Mengisi `feedback` dan mengarahkan status ke varian `_NEEDS_REVISION` (atau `target_status` eksplisit) supaya agen menghasilkan ulang.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReviseStepRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Revisi dipicu", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/reimport": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "put": {
+        "tags": ["Sessions"],
+        "summary": "Set ulang status ke impor data (M4)",
+        "description": "Mengembalikan status ke `M4_STEP2_WAITING_IMPORT` agar user bisa mengunggah ulang data.",
+        "responses": {
+          "200": { "description": "Status di-reset ke impor", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/import-data": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "post": {
+        "tags": ["Sessions"],
+        "summary": "Unggah data sitasi (multipart)",
+        "description": "Unggah satu/lebih file (BibTeX `.bib`, `.nbib`, `.csv`, dll). Maks 50 MB total. Field form: `files`. Diparse menjadi Paper dan disimpan ke sesi.",
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "properties": {
-                  "feedback": {
-                    "type": "string",
-                    "example": "Tolong gunakan referensi yang lebih baru dari tahun 2024."
-                  }
-                },
-                "required": ["feedback"]
+                "properties": { "files": { "type": "array", "items": { "type": "string", "format": "binary" } } },
+                "required": ["files"]
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Revisi dicatat, agen mengulang pekerjaannya."
-          }
+          "200": { "description": "Data terimpor", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/disagreements": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "get": {
+        "tags": ["Sessions"],
+        "summary": "Daftar ketidaksepakatan reviewer",
+        "description": "Kasus DISAGREE/UNCERTAIN antara R1 & R2. Gunakan `?stage=fulltext` untuk tahap Modul 6 (default: tahap abstrak/M5).",
+        "parameters": [
+          { "name": "stage", "in": "query", "required": false, "schema": { "type": "string", "enum": ["", "fulltext"] }, "description": "`fulltext` untuk M6, kosong untuk M5." }
+        ],
+        "responses": {
+          "200": { "description": "Daftar disagreement", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/resolve-conflicts": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "post": {
+        "tags": ["Sessions"],
+        "summary": "Resolusi konflik screening (HitL)",
+        "description": "Kirim keputusan final manusia untuk paper yang disagree/uncertain. `stage` kosong = M5, `fulltext` = M6.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResolveConflictsRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Konflik diselesaikan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/extractions": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "get": {
+        "tags": ["Extractions (M7)"],
+        "summary": "Ambil hasil ekstraksi data (M7)",
+        "responses": {
+          "200": { "description": "Daftar field hasil ekstraksi", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/extractions/ambiguous": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "get": {
+        "tags": ["Extractions (M7)"],
+        "summary": "Ambil field ekstraksi yang ambigu",
+        "description": "Field yang perlu resolusi manusia sebelum sintesis.",
+        "responses": {
+          "200": { "description": "Daftar field ambigu", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/extractions/{ext_id}/resolve": {
+      "parameters": [
+        { "$ref": "#/components/parameters/SessionId" },
+        { "$ref": "#/components/parameters/ExtId" }
+      ],
+      "put": {
+        "tags": ["Extractions (M7)"],
+        "summary": "Resolusi manual satu field ekstraksi",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResolveExtractionManualRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Field diselesaikan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/extractions/{ext_id}/auto-resolve": {
+      "parameters": [
+        { "$ref": "#/components/parameters/SessionId" },
+        { "$ref": "#/components/parameters/ExtId" }
+      ],
+      "post": {
+        "tags": ["Extractions (M7)"],
+        "summary": "Resolusi otomatis (LLM) satu field ekstraksi",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResolveExtractionAutoRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Field diselesaikan otomatis", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/m6/sync-qdrant": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "post": {
+        "tags": ["Full-text (M6)"],
+        "summary": "Sinkronkan full-text ke Qdrant (vektorisasi RAG)",
+        "responses": {
+          "200": { "description": "Sinkronisasi dimulai/selesai", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/m6/qdrant/paper": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "delete": {
+        "tags": ["Full-text (M6)"],
+        "summary": "Hapus satu paper dari index Qdrant",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeleteQdrantPaperRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Paper dihapus dari index", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/m6/mark-inaccessible": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "post": {
+        "tags": ["Full-text (M6)"],
+        "summary": "Tandai paper tak dapat diakses",
+        "description": "Mencatat paper yang full-text-nya tak bisa diperoleh, beserta dokumentasi upaya akses.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MarkInaccessibleRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Ditandai inaccessible", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/m6/export-links": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "get": {
+        "tags": ["Full-text (M6)"],
+        "summary": "Ekspor daftar link akuisisi full-text",
+        "responses": {
+          "200": { "description": "Daftar link/DOI untuk akuisisi", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/m6/papers": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "get": {
+        "tags": ["Full-text (M6)"],
+        "summary": "Daftar paper tahap Modul 6 + status akuisisi",
+        "responses": {
+          "200": { "description": "Daftar paper M6", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/reset-m7": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "post": {
+        "tags": ["Extractions (M7)"],
+        "summary": "Reset state Modul 7 (data extraction)",
+        "responses": {
+          "200": { "description": "Modul 7 di-reset", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/sessions/{id}/m8b/vosviewer": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "post": {
+        "tags": ["Bibliometric (M8b)"],
+        "summary": "Submit data VOSviewer / SLNA",
+        "description": "Mengirim data jaringan bibliometrik (sebagai string) untuk diintegrasikan ke analisis Modul 8b.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SubmitVOSviewerRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Data VOSviewer diterima", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/llm/health": {
+      "get": {
+        "tags": ["LLM Config"],
+        "summary": "Cek kesehatan & kuota semua provider LLM",
+        "description": "Mengetes setiap provider terkonfigurasi secara paralel (endpoint `/models`).",
+        "responses": {
+          "200": { "description": "Hasil health check", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/ServerError" }
         }
       }
     },
     "/api/llm/config": {
       "put": {
-        "summary": "Memperbarui konfigurasi API Key Provider (Gemini, Groq, dll).",
+        "tags": ["LLM Config"],
+        "summary": "Buat/perbarui konfigurasi provider LLM",
+        "description": "`base_url` opsional; jika kosong diisi default per provider (groq, zhipu, xiaomi, rprompt, dst).",
         "requestBody": {
           "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "string",
-                    "example": "gemini"
-                  },
-                  "api_key": {
-                    "type": "string",
-                    "example": "AIzaSy..."
-                  },
-                  "default_model": {
-                    "type": "string",
-                    "example": "gemini-2.5-flash"
-                  },
-                  "base_url": {
-                    "type": "string"
-                  }
-                },
-                "required": ["provider", "api_key"]
-              }
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LLMConfigRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Config tersimpan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/api/llm/providers/{id}/models": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "ID provider (gemini, claude, cohere, groq, zhipu, openrouter, xiaomi, rprompt, ...)." }
+      ],
+      "post": {
+        "tags": ["LLM Config"],
+        "summary": "Ambil daftar model dari API vendor",
+        "description": "Memanggil API vendor memakai `api_key` yang dikirim untuk mengembalikan daftar model yang tersedia. Untuk `claude`, api_key boleh kosong.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FetchModelsRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Daftar model", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FetchModelsResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/api/llm/roles": {
+      "get": {
+        "tags": ["LLM Config"],
+        "summary": "Ambil pemetaan peran -> provider (model routing)",
+        "responses": {
+          "200": { "description": "Pemetaan peran", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LLMRoles" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "put": {
+        "tags": ["LLM Config"],
+        "summary": "Perbarui pemetaan peran -> provider",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LLMRoles" } } }
+        },
+        "responses": {
+          "200": { "description": "Roles tersimpan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/api/github/config": {
+      "get": {
+        "tags": ["Integrations"],
+        "summary": "Ambil konfigurasi GitHub publisher",
+        "description": "Token DIREDAKSI (dikosongkan); field `token_set` menandakan apakah token tersimpan.",
+        "responses": {
+          "200": { "description": "Config GitHub", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GitHubConfigResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "put": {
+        "tags": ["Integrations"],
+        "summary": "Simpan konfigurasi GitHub publisher",
+        "description": "`token` kosong = pertahankan token lama.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GitHubConfig" } } }
+        },
+        "responses": {
+          "200": { "description": "Config GitHub tersimpan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/api/embed/config": {
+      "get": {
+        "tags": ["Integrations"],
+        "summary": "Ambil konfigurasi endpoint embedding",
+        "description": "`api_key` DISEMBUNYIKAN; field `key_set` menandakan apakah key tersimpan.",
+        "responses": {
+          "200": { "description": "Config embedding", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmbedConfigResponse" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "put": {
+        "tags": ["Integrations"],
+        "summary": "Simpan konfigurasi endpoint embedding",
+        "description": "`api_key` kosong = pertahankan key lama.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmbedConfig" } } }
+        },
+        "responses": {
+          "200": { "description": "Config embedding tersimpan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MessageResponse" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/api/mcp/sse": {
+      "get": {
+        "tags": ["MCP & Realtime"],
+        "summary": "MCP Server-Sent Events stream (publik)",
+        "description": "Endpoint SSE untuk agen MCP. Bukan JSON biasa; mengembalikan `text/event-stream`. Endpoint pesan: `POST /api/mcp/messages`.",
+        "security": [],
+        "responses": {
+          "200": { "description": "Stream SSE", "content": { "text/event-stream": { "schema": { "type": "string" } } } }
+        }
+      }
+    },
+    "/api/mcp/messages": {
+      "post": {
+        "tags": ["MCP & Realtime"],
+        "summary": "Kirim pesan JSON-RPC ke MCP server (publik)",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+        },
+        "responses": {
+          "200": { "description": "Diterima MCP server", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } }
+        }
+      }
+    },
+    "/api/ws/logs/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/SessionId" }],
+      "get": {
+        "tags": ["MCP & Realtime"],
+        "summary": "WebSocket stream log pipeline (live)",
+        "description": "Upgrade ke WebSocket untuk menstream log eksekusi sesi secara realtime. Tidak diproteksi middleware (jika perlu, sisipkan token di query).",
+        "security": [],
+        "responses": {
+          "101": { "description": "Switching Protocols (WebSocket upgrade)" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "PASETO v4 (public)",
+        "description": "Token PASETO v4 dari `/api/auth/login`. Kirim sebagai `Authorization: Bearer <token>`. Berlaku 24 jam."
+      }
+    },
+    "parameters": {
+      "SessionId": { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "ID sesi SLR." },
+      "ExtId": { "name": "ext_id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "ID field/record ekstraksi." }
+    },
+    "responses": {
+      "BadRequest": { "description": "Request tidak valid", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "Unauthorized": { "description": "Token hilang/tidak valid/kedaluwarsa", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "NotFound": { "description": "Sesi tidak ditemukan", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "ServerError": { "description": "Kesalahan server", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": { "error": { "type": "string" } },
+        "required": ["error"]
+      },
+      "MessageResponse": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "required": ["message"]
+      },
+      "StatusResponse": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "status": { "type": "string", "description": "Status state-machine sesi setelah aksi." }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "properties": {
+          "username": { "type": "string" },
+          "password": { "type": "string" },
+          "invite_code": { "type": "string", "description": "Wajib jika env REGISTER_INVITE_CODE di-set." }
+        },
+        "required": ["username", "password"]
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "username": { "type": "string" },
+          "password": { "type": "string" }
+        },
+        "required": ["username", "password"]
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "auth_token": { "type": "string", "description": "Token PASETO v4." },
+          "user_data": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "username": { "type": "string" },
+              "role": { "type": "string" }
+            }
+          }
+        }
+      },
+      "CreateSessionRequest": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "ID sesi yang diinginkan (juga dipakai untuk reset/resume)." },
+          "topic": { "type": "string", "description": "Topik mentah awal riset." }
+        },
+        "required": ["id", "topic"]
+      },
+      "UpdateSessionRequest": {
+        "type": "object",
+        "description": "Patch parsial. Hanya field berikut yang diproses.",
+        "properties": {
+          "status": { "type": "string", "description": "Set status state-machine secara manual." },
+          "scope_filters": { "type": "object", "additionalProperties": true, "description": "Objek ScopeFilters (rentang_tahun, geografis, sektor, bahasa, lainnya)." },
+          "feedback": { "type": "string", "description": "Catatan/feedback; mis. M3_STEP4 memakai ini untuk jumlah hits." },
+          "data_mining_log": { "type": "object", "additionalProperties": true, "description": "Objek DataMiningLog." }
+        }
+      },
+      "ApproveStepRequest": {
+        "type": "object",
+        "description": "Body opsional untuk gate approve.",
+        "properties": {
+          "is_retry": { "type": "boolean", "description": "Jika true, hapus suffix `_ERROR` dari status (retry setelah error)." },
+          "selected_topic": { "$ref": "#/components/schemas/SuggestedTopic" }
+        }
+      },
+      "ReviseStepRequest": {
+        "type": "object",
+        "properties": {
+          "feedback": { "type": "string", "description": "Instruksi revisi dari peneliti." },
+          "target_status": { "type": "string", "description": "Opsional: status revisi eksplisit (mis. M2_STEP3_NEEDS_REVISION)." }
+        },
+        "required": ["feedback"]
+      },
+      "ResolveConflictsRequest": {
+        "type": "object",
+        "properties": {
+          "stage": { "type": "string", "enum": ["", "fulltext"], "description": "Kosong = M5 (abstrak), `fulltext` = M6." },
+          "resolutions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "paper_id": { "type": "string" },
+                "final_decision": { "type": "string", "description": "Keputusan final manusia, mis. INCLUDE/EXCLUDE." },
+                "conflict_resolution": { "type": "string", "description": "Catatan resolusi konflik." }
+              },
+              "required": ["paper_id", "final_decision"]
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Konfigurasi berhasil disimpan di MongoDB."
+        "required": ["resolutions"]
+      },
+      "ResolveExtractionManualRequest": {
+        "type": "object",
+        "properties": {
+          "field_key": { "type": "string" },
+          "resolved_value": { "type": "string" }
+        },
+        "required": ["field_key", "resolved_value"]
+      },
+      "ResolveExtractionAutoRequest": {
+        "type": "object",
+        "properties": {
+          "field_key": { "type": "string" }
+        },
+        "required": ["field_key"]
+      },
+      "DeleteQdrantPaperRequest": {
+        "type": "object",
+        "properties": {
+          "doi": { "type": "string" },
+          "title": { "type": "string" }
+        }
+      },
+      "MarkInaccessibleRequest": {
+        "type": "object",
+        "properties": {
+          "paper_id": { "type": "string" },
+          "documentation": { "type": "string", "description": "Dokumentasi upaya akses full-text." }
+        },
+        "required": ["paper_id"]
+      },
+      "SubmitVOSviewerRequest": {
+        "type": "object",
+        "properties": {
+          "data": { "type": "string", "description": "Data jaringan bibliometrik (mis. teks map/network VOSviewer)." }
+        },
+        "required": ["data"]
+      },
+      "LLMConfigRequest": {
+        "type": "object",
+        "properties": {
+          "provider": { "type": "string", "description": "ID provider (mis. gemini, groq, zhipu, xiaomi, rprompt1)." },
+          "api_key": { "type": "string" },
+          "default_model": { "type": "string" },
+          "base_url": { "type": "string", "description": "Opsional; default per provider jika kosong." }
+        },
+        "required": ["provider", "api_key"]
+      },
+      "FetchModelsRequest": {
+        "type": "object",
+        "properties": {
+          "api_key": { "type": "string", "description": "Boleh kosong khusus provider `claude`." },
+          "base_url": { "type": "string" }
+        }
+      },
+      "FetchModelsResponse": {
+        "type": "object",
+        "properties": {
+          "provider": { "type": "string" },
+          "models": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "health": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "provider": { "type": "string" },
+                "status": { "type": "string", "enum": ["ALIVE", "UNAUTHORIZED", "QUOTA_EXCEEDED", "ERROR"] },
+                "message": { "type": "string" }
+              }
+            }
           }
         }
+      },
+      "LLMRoles": {
+        "type": "object",
+        "description": "Pemetaan peran agen ke provider (+fallback).",
+        "properties": {
+          "reviewer1": { "type": "string" },
+          "reviewer1_fallback": { "type": "string" },
+          "reviewer2": { "type": "string" },
+          "reviewer2_fallback": { "type": "string" },
+          "supervisor": { "type": "string" },
+          "supervisor_fallback": { "type": "string" },
+          "brain": { "type": "string" },
+          "brain_fallback": { "type": "string" }
+        }
+      },
+      "GitHubConfig": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "token": { "type": "string", "description": "Personal Access Token (diredaksi saat GET)." },
+          "owner": { "type": "string" },
+          "repo": { "type": "string" },
+          "branch": { "type": "string", "default": "main" },
+          "base_path": { "type": "string" },
+          "pages_url": { "type": "string" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "GitHubConfigResponse": {
+        "type": "object",
+        "properties": {
+          "config": { "$ref": "#/components/schemas/GitHubConfig" },
+          "token_set": { "type": "boolean" }
+        }
+      },
+      "EmbedConfig": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "endpoint": { "type": "string", "description": "Base URL OpenAI-compatible embedding." },
+          "api_key": { "type": "string", "description": "Disembunyikan saat GET." },
+          "model": { "type": "string", "description": "Mis. BAAI/bge-m3." },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "EmbedConfigResponse": {
+        "type": "object",
+        "properties": {
+          "config": { "$ref": "#/components/schemas/EmbedConfig" },
+          "key_set": { "type": "boolean" }
+        }
+      },
+      "SuggestedTopic": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "gap": { "type": "string" },
+          "type": { "type": "string", "description": "TIPE A / TIPE B / TIPE C." },
+          "type_reason": { "type": "string" },
+          "evidence": { "type": "string" },
+          "importance": { "type": "string" },
+          "references": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "SLRSession": {
+        "type": "object",
+        "description": "Dokumen state sesi SLR yang lengkap. Field bertambah seiring kemajuan modul (M1-M9). Hanya field inti yang dirinci; field lain dikembalikan apa adanya.",
+        "properties": {
+          "id": { "type": "string" },
+          "topic": { "type": "string" },
+          "status": { "type": "string", "description": "Status state-machine, mis. M2_STEP3_WAITING_APPROVAL." },
+          "feedback": { "type": "string" },
+          "system_error": { "type": "string" },
+          "selected_topic": { "$ref": "#/components/schemas/SuggestedTopic" },
+          "suggested_topics": { "type": "array", "items": { "$ref": "#/components/schemas/SuggestedTopic" } },
+          "scope_filters": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": true
       }
     }
   }
