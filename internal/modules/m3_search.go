@@ -272,6 +272,10 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		logger.Log(session.ID, "   3b. Jika BUTUH REVISI, ubah status ke 'M3_STEP4_NEEDS_REVISION' dan ketik feedback.")
 		return nil
 
+	case "M3_STEP4_EVALUATION_ERROR":
+		logger.Log(session.ID, "   [ERROR] Evaluasi gagal (LLM Parsing/Timeout). Silakan klik tombol 'Retry' di UI atau ubah status ke 'M3_STEP4_EVALUATION' secara manual.")
+		return nil
+
 	case "M3_STEP4_NEEDS_REVISION":
 		logger.Logf(session.ID, "   [Revisi 3.4] Memperbaiki Search Log & Summary berdasarkan feedback: '%s'\n", session.Feedback)
 		
