@@ -287,7 +287,16 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 	} else if session.Status == "M2_STEP1_WAITING_APPROVAL" {
 		session.Status = "M2_STEP1_NEEDS_REVISION"
 	} else {
-		session.Status = fmt.Sprintf("%s_NEEDS_REVISION", session.Status[:len(session.Status)-17])
+		// Safely extract the module and step prefix (e.g., M7_STEP3) and append NEEDS_REVISION
+		parts := strings.Split(session.Status, "_")
+		if len(parts) >= 2 && strings.HasPrefix(parts[1], "STEP") {
+			session.Status = fmt.Sprintf("%s_%s_NEEDS_REVISION", parts[0], parts[1])
+		} else if len(parts) >= 1 && strings.HasPrefix(parts[0], "M") {
+			session.Status = fmt.Sprintf("%s_NEEDS_REVISION", parts[0])
+		} else {
+			// Fallback if status format is unexpected
+			session.Status = session.Status + "_NEEDS_REVISION"
+		}
 	}
 
 	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
