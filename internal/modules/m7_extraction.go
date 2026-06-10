@@ -86,6 +86,40 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 		session.Status = "M7_STEP3_QA"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	case "M7_STEP3_QA_TOOL_APPROVED":
+		session.Status = "M7_STEP3_QA_CALIBRATION"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	// ---- L3 Calibration: anchor examples + pilot batch + kappa check ----
+	case "M7_STEP3_QA_CALIBRATION":
+		return m.runQACalibration(ctx, session)
+	case "M7_STEP3_QA_CALIBRATION_WAITING_APPROVAL":
+		logger.Log(session.ID, "   [System] Tinjau hasil kalibrasi QA (anchors + pilot kappa). Approve untuk lanjut full rating.")
+		return nil
+	case "M7_STEP3_QA_CALIBRATION_APPROVED":
+		// Reset pilot papers qa_rated flag so they get re-rated in full batch.
+		coll := m.deps.MongoRepo.GetExtractionCollection()
+		_, _ = coll.UpdateMany(ctx,
+			bson.M{"session_id": session.ID, "qa_calibration_pilot": true},
+			bson.M{"$set": bson.M{"qa_rated": false}})
+		session.Status = "M7_STEP3_QA"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	case "M7_STEP3_QA_CALIBRATION_LOW_KAPPA":
+		logger.Log(session.ID, "   [System] Kalibrasi QA kappa rendah. Pilih: retry kalibrasi atau lanjutkan (force proceed).")
+		return nil
+	case "M7_STEP3_QA_CALIBRATION_RETRY":
+		// User wants to retry calibration. Reset pilot papers and re-run.
+		coll := m.deps.MongoRepo.GetExtractionCollection()
+		_, _ = coll.UpdateMany(ctx,
+			bson.M{"session_id": session.ID, "qa_calibration_pilot": true},
+			bson.M{"$unset": bson.M{"qa_calibration_pilot": ""}, "$set": bson.M{"qa_rated": false}})
+		session.Status = "M7_STEP3_QA_CALIBRATION"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	case "M7_STEP3_QA_CALIBRATION_FORCE_PROCEED":
+		// User wants to proceed despite low kappa.
+		coll := m.deps.MongoRepo.GetExtractionCollection()
+		_, _ = coll.UpdateMany(ctx,
+			bson.M{"session_id": session.ID, "qa_calibration_pilot": true},
+			bson.M{"$set": bson.M{"qa_rated": false}})
 		session.Status = "M7_STEP3_QA"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	case "M7_STEP3_WAITING_APPROVAL":

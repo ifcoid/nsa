@@ -197,6 +197,71 @@ Keluarkan HANYA JSON MURNI tanpa markdown. Buka dengan '{' dan tutup dengan '}':
 
 // ===== L3: Quality appraisal =====
 
+// GenerateQAAnchors asks the brain LLM to produce 3 synthetic anchor examples (HIGH, MODERATE, LOW)
+// for calibrating the QA raters before full rating begins.
+func (a *ExtractionAgent) GenerateQAAnchors(ctx context.Context, tool, categorization, justification string) ([]model.QAAnchorExample, error) {
+	systemPrompt := fmt.Sprintf(`Anda adalah ahli metodologi SLR yang bertugas membuat CONTOH ANCHOR (kalibrasi) untuk quality appraisal.
+
+TOOL yang digunakan: %s
+KATEGORISASI: %s
+JUSTIFIKASI TOOL: %s
+
+TUGAS: Buat 3 contoh sintetis (fictional) paper yang masing-masing mewakili kategori HIGH, MODERATE, dan LOW.
+Setiap contoh harus berisi:
+- Deskripsi singkat paper sintetis (1-2 kalimat tentang desain, metode, dan temuan)
+- Skor yang diharapkan (0-100, sesuai dengan kategorisasi di atas)
+- Penjelasan mengapa paper tersebut masuk kategori itu berdasarkan kriteria tool
+
+Contoh ini akan dipakai sebagai referensi oleh rater agar konsisten dalam menilai.
+
+Keluarkan HANYA JSON MURNI tanpa markdown:
+[
+  {"category": "HIGH", "description": "...", "score": 85, "reasoning": "..."},
+  {"category": "MODERATE", "description": "...", "score": 72, "reasoning": "..."},
+  {"category": "LOW", "description": "...", "score": 45, "reasoning": "..."}
+]`, tool, categorization, justification)
+
+	userPrompt := "Buat 3 anchor examples (HIGH, MODERATE, LOW) berdasarkan tool dan kategorisasi di atas."
+
+	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("GenerateQAAnchors LLM: %w", err)
+	}
+	var res []model.QAAnchorExample
+	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
+		return nil, fmt.Errorf("parse QAAnchorExamples (%w). Raw: %s", err, raw)
+	}
+	return res, nil
+}
+
+// SuggestRubricRefinement asks the brain to suggest improvements to the QA rubric
+// based on pilot disagreements.
+func (a *ExtractionAgent) SuggestRubricRefinement(ctx context.Context, tool, categorization string, pilots []model.QACalibrationPilot) (string, error) {
+	pilotsJSON, _ := json.Marshal(pilots)
+	systemPrompt := fmt.Sprintf(`Anda metodolog QA SLR. Pilot kalibrasi menunjukkan kappa rendah (disagreement tinggi antara 2 rater).
+
+TOOL: %s
+KATEGORISASI: %s
+
+HASIL PILOT (ada disagreement antara R1 dan R2):
+%s
+
+TUGAS: Analisis pola disagreement dan sarankan PERBAIKAN RUBRIK yang spesifik agar rater lebih konsisten.
+Fokus pada:
+1. Ambiguitas dalam kriteria yang menyebabkan perbedaan interpretasi
+2. Item yang perlu klarifikasi operasional
+3. Saran threshold adjustment jika diperlukan
+
+Keluarkan teks ringkas (2-4 kalimat) berisi saran perbaikan rubrik.`, tool, categorization, string(pilotsJSON))
+
+	userPrompt := "Berdasarkan hasil pilot di atas, berikan saran perbaikan rubrik."
+	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return "", fmt.Errorf("SuggestRubricRefinement LLM: %w", err)
+	}
+	return strings.TrimSpace(raw), nil
+}
+
 func (a *ExtractionAgent) SelectQATool(ctx context.Context, designBreakdown string, feedback string) (*model.QAThresholdJustification, error) {
 	systemPrompt := `Anda seorang metodolog QA Systematic Literature Review yang ahli dalam memilih instrumen critical appraisal.
 

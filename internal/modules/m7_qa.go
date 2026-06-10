@@ -18,6 +18,233 @@ import (
 )
 
 const qaBatchSize = 6
+const qaCalibrationPilotSize = 5
+const qaCalibrationKappaThreshold = 0.6
+const qaCalibrationMaxAttempts = 3
+
+// ===== QA Calibration: anchor examples + pilot batch + kappa check =====
+
+func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRSession) error {
+	coll := m.deps.MongoRepo.GetExtractionCollection()
+	tool := session.QAThreshold.Tool
+	cat := session.QAThreshold.Categorization
+	justification := session.QAThreshold.ToolJustification
+	thr := session.QAThreshold.Threshold
+
+	// Initialize calibration state if needed.
+	if session.QACalibration == nil {
+		session.QACalibration = &model.QACalibration{
+			MaxAttempts: qaCalibrationMaxAttempts,
+			Attempts:    0,
+		}
+	}
+	cal := session.QACalibration
+	cal.Attempts++
+
+	// Phase 1: Generate anchor examples (only on first attempt or if no anchors yet).
+	if len(cal.Anchors) == 0 {
+		logger.Log(session.ID, "   [Kalibrasi QA] Menghasilkan anchor examples (HIGH/MODERATE/LOW)...")
+		brain, err := m.deps.LLMFactory.BrainClient(ctx)
+		if err != nil {
+			return fmt.Errorf("brain client for QA anchors: %w", err)
+		}
+		anchors, err := agent.NewExtractionAgent(brain).GenerateQAAnchors(ctx, tool, cat, justification)
+		if err != nil {
+			return fmt.Errorf("GenerateQAAnchors: %w", err)
+		}
+		cal.Anchors = anchors
+		logger.Logf(session.ID, "   [System] %d anchor examples dihasilkan.\n", len(anchors))
+	}
+
+	// Phase 2: Pilot batch - pick up to qaCalibrationPilotSize papers with fulltext.
+	logger.Log(session.ID, "   [Kalibrasi QA] Menjalankan pilot batch rating...")
+
+	ftIndex, _, _ := BuildFulltextIndex(ctx)
+	if ftIndex == nil {
+		ftIndex = map[string]string{}
+	}
+
+	// Find papers that have fulltext available for pilot.
+	cur, err := coll.Find(ctx, bson.M{"session_id": session.ID}, options.Find().SetLimit(50))
+	if err != nil {
+		return fmt.Errorf("find papers for pilot: %w", err)
+	}
+	var allPapers []bson.M
+	_ = cur.All(ctx, &allPapers)
+
+	var pilotPapers []bson.M
+	for _, p := range allPapers {
+		if len(pilotPapers) >= qaCalibrationPilotSize {
+			break
+		}
+		title := getStr(p, "Title")
+		doi := getStr(p, "DOI", "doi")
+		var ft string
+		if nd := normalizeDOIForRAG(doi); nd != "" && ftIndex[nd] != "" {
+			ft = ftIndex[nd]
+		} else if nt := NormTitle(title); nt != "" && ftIndex["title:"+nt] != "" {
+			ft = ftIndex["title:"+nt]
+		}
+		if ft != "" {
+			pilotPapers = append(pilotPapers, p)
+		}
+	}
+
+	if len(pilotPapers) == 0 {
+		// No fulltext available for pilot, pass calibration automatically.
+		logger.Log(session.ID, "   [Kalibrasi QA] Tidak ada paper dengan fulltext untuk pilot. Kalibrasi dilewati.")
+		cal.CalibrationPassed = true
+		cal.PilotKappa = 1.0
+		session.Status = "M7_STEP3_QA_CALIBRATION_WAITING_APPROVAL"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	}
+
+	// Set up dual raters.
+	qp1, qf1 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
+	r1, err := m.agentWithFallback(ctx, qp1, qf1)
+	if err != nil {
+		return fmt.Errorf("QA Calibration Rater 1 (%s/%s): %w", qp1, qf1, err)
+	}
+	qp2, qf2 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer2")
+	r2, err := m.agentWithFallback(ctx, qp2, qf2)
+	if err != nil {
+		return fmt.Errorf("QA Calibration Rater 2 (%s/%s): %w", qp2, qf2, err)
+	}
+
+	// Build anchor context string to include in appraisal prompt.
+	anchorCtx := formatAnchorContext(cal.Anchors)
+
+	// Rate pilot papers.
+	var pilotResults []model.QACalibrationPilot
+	for i, p := range pilotPapers {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		title := getStr(p, "Title")
+		doi := getStr(p, "DOI", "doi")
+		var ft string
+		if nd := normalizeDOIForRAG(doi); nd != "" && ftIndex[nd] != "" {
+			ft = ftIndex[nd]
+		} else if nt := NormTitle(title); nt != "" && ftIndex["title:"+nt] != "" {
+			ft = ftIndex["title:"+nt]
+		}
+
+		logger.Logf(session.ID, "      -> Pilot QA [%d/%d] %s\n", i+1, len(pilotPapers), doi)
+
+		// Include anchor examples in justification context for calibration.
+		calibJustification := justification + "\n\n" + anchorCtx
+		if cal.RefinementNote != "" {
+			calibJustification += "\n\n[RUBRIC REFINEMENT]: " + cal.RefinementNote
+		}
+
+		s1, e1 := r1.AppraiseQuality(ctx, tool, cat, calibJustification, title, ft)
+		time.Sleep(3 * time.Second)
+		s2, e2 := r2.AppraiseQuality(ctx, tool, cat, calibJustification, title, ft)
+
+		pilot := model.QACalibrationPilot{
+			PaperID: doi,
+			Title:   title,
+		}
+		if e1 == nil && s1 != nil {
+			pilot.R1Score = s1.TotalScore
+			pilot.R1Category = s1.Category
+		}
+		if e2 == nil && s2 != nil {
+			pilot.R2Score = s2.TotalScore
+			pilot.R2Category = s2.Category
+		}
+		if s1 != nil && s2 != nil {
+			avg := (s1.TotalScore + s2.TotalScore) / 2
+			pilot.FinalCategory = categoryFor(avg, thr, cat)
+			pilot.Disagreement = s1.Category != s2.Category
+		} else {
+			pilot.FinalCategory = "ERROR"
+			pilot.Disagreement = true
+		}
+		pilotResults = append(pilotResults, pilot)
+
+		// Mark paper as calibration pilot in MongoDB.
+		_, _ = coll.UpdateByID(ctx, p["_id"], bson.M{"$set": bson.M{"qa_calibration_pilot": true}})
+		time.Sleep(5 * time.Second)
+	}
+
+	cal.PilotResults = pilotResults
+
+	// Phase 3: Compute pilot kappa.
+	pilotKappa := computePilotKappa(pilotResults)
+	cal.PilotKappa = pilotKappa
+
+	logger.Logf(session.ID, "   [Kalibrasi QA] Pilot kappa: %.3f (threshold: %.2f, attempt %d/%d)\n",
+		pilotKappa, qaCalibrationKappaThreshold, cal.Attempts, cal.MaxAttempts)
+
+	if pilotKappa >= qaCalibrationKappaThreshold {
+		cal.CalibrationPassed = true
+		session.Status = "M7_STEP3_QA_CALIBRATION_WAITING_APPROVAL"
+		logger.Log(session.ID, "   [System] Kalibrasi QA LULUS. Menunggu persetujuan untuk lanjut full rating.")
+	} else {
+		cal.CalibrationPassed = false
+		if cal.Attempts >= cal.MaxAttempts {
+			// Max retries reached, proceed with warning.
+			cal.CalibrationPassed = true
+			cal.RefinementNote += " [WARNING: Kalibrasi tidak tercapai setelah " +
+				fmt.Sprintf("%d", cal.MaxAttempts) + " percobaan. Melanjutkan dengan peringatan.]"
+			session.Status = "M7_STEP3_QA_CALIBRATION_WAITING_APPROVAL"
+			logger.Log(session.ID, "   [System] Kalibrasi QA tidak tercapai setelah max attempts. Melanjutkan dengan peringatan.")
+		} else {
+			// Ask brain for rubric refinement suggestion.
+			brain, err := m.deps.LLMFactory.BrainClient(ctx)
+			if err == nil {
+				note, rerr := agent.NewExtractionAgent(brain).SuggestRubricRefinement(ctx, tool, cat, pilotResults)
+				if rerr == nil && note != "" {
+					cal.RefinementNote = note
+				}
+			}
+			session.Status = "M7_STEP3_QA_CALIBRATION_LOW_KAPPA"
+			logger.Log(session.ID, "   [System] Kalibrasi QA kappa rendah. Menunggu keputusan user (retry/proceed).")
+		}
+	}
+
+	session.QACalibration = cal
+	return m.deps.MongoRepo.UpdateSession(ctx, session)
+}
+
+// computePilotKappa calculates Cohen's kappa from pilot calibration results.
+// Uses pass/fail binary (HIGH/MODERATE = pass, LOW = fail).
+func computePilotKappa(pilots []model.QACalibrationPilot) float64 {
+	var total, bothPass, bothFail, r1PassR2Fail, r1FailR2Pass int
+	pass := func(cat string) bool { return cat == "HIGH" || cat == "MODERATE" }
+	for _, p := range pilots {
+		if p.R1Category == "" || p.R2Category == "" {
+			continue
+		}
+		total++
+		switch {
+		case pass(p.R1Category) && pass(p.R2Category):
+			bothPass++
+		case !pass(p.R1Category) && !pass(p.R2Category):
+			bothFail++
+		case pass(p.R1Category) && !pass(p.R2Category):
+			r1PassR2Fail++
+		default:
+			r1FailR2Pass++
+		}
+	}
+	return cohensKappa(total, bothPass, bothFail, r1PassR2Fail, r1FailR2Pass)
+}
+
+// formatAnchorContext formats anchor examples into a string for inclusion in prompts.
+func formatAnchorContext(anchors []model.QAAnchorExample) string {
+	if len(anchors) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("[ANCHOR EXAMPLES FOR CALIBRATION]:\n")
+	for _, a := range anchors {
+		sb.WriteString(fmt.Sprintf("- %s (score ~%.0f): %s | Reasoning: %s\n",
+			a.Category, a.Score, a.Description, a.Reasoning))
+	}
+	return sb.String()
+}
 
 // ===== L3: Quality appraisal (tool + threshold + dual-rater kappa + sensitivity) =====
 

@@ -440,6 +440,7 @@ type SLRSession struct {
 	FrameworkSelection    *FrameworkSelection    `bson:"framework_selection,omitempty" json:"framework_selection,omitempty"`
 	ExtractionLog         *ExtractionLog         `bson:"extraction_log,omitempty" json:"extraction_log,omitempty"`
 	QAThreshold           *QAThresholdJustification `bson:"qa_threshold_justification,omitempty" json:"qa_threshold_justification,omitempty"`
+	QACalibration         *QACalibration         `bson:"qa_calibration,omitempty" json:"qa_calibration,omitempty"`
 	SensitivityAnalysis   *SensitivityAnalysis   `bson:"sensitivity_analysis,omitempty" json:"sensitivity_analysis,omitempty"`
 	SynthesisPrep         *SynthesisPrep         `bson:"synthesis_prep,omitempty" json:"synthesis_prep,omitempty"`
 	Modul7Summary         *Modul7Summary         `bson:"modul7_summary,omitempty" json:"modul7_summary,omitempty"`
@@ -537,6 +538,37 @@ type ExtractionLog struct {
 	SystemPrompt        string  `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 	ModelExtraction     string  `bson:"model_extraction,omitempty" json:"model_extraction,omitempty"`
 	ModelRefineProtocol string  `bson:"model_refine_protocol,omitempty" json:"model_refine_protocol,omitempty"`
+}
+
+// QAAnchorExample = contoh sintetis anchor untuk kalibrasi QA.
+type QAAnchorExample struct {
+	Category    string  `bson:"category" json:"category"`       // HIGH / MODERATE / LOW
+	Description string  `bson:"description" json:"description"` // synthetic paper description
+	Score       float64 `bson:"score" json:"score"`             // expected score
+	Reasoning   string  `bson:"reasoning" json:"reasoning"`     // why this category
+}
+
+// QACalibrationPilot = hasil rating pilot untuk satu paper.
+type QACalibrationPilot struct {
+	PaperID       string  `bson:"paper_id" json:"paper_id"`
+	Title         string  `bson:"title" json:"title"`
+	R1Score       float64 `bson:"r1_score" json:"r1_score"`
+	R1Category    string  `bson:"r1_category" json:"r1_category"`
+	R2Score       float64 `bson:"r2_score" json:"r2_score"`
+	R2Category    string  `bson:"r2_category" json:"r2_category"`
+	FinalCategory string  `bson:"final_category" json:"final_category"`
+	Disagreement  bool    `bson:"disagreement" json:"disagreement"`
+}
+
+// QACalibration = state kalibrasi QA (anchor + pilot batch + kappa check).
+type QACalibration struct {
+	Anchors           []QAAnchorExample    `bson:"anchors" json:"anchors"`
+	PilotResults      []QACalibrationPilot `bson:"pilot_results" json:"pilot_results"`
+	PilotKappa        float64              `bson:"pilot_kappa" json:"pilot_kappa"`
+	CalibrationPassed bool                 `bson:"calibration_passed" json:"calibration_passed"`
+	Attempts          int                  `bson:"attempts" json:"attempts"`
+	MaxAttempts       int                  `bson:"max_attempts" json:"max_attempts"` // default 3
+	RefinementNote    string               `bson:"refinement_note,omitempty" json:"refinement_note,omitempty"`
 }
 
 // QAKappaDetails = transparansi detail kesepakatan R1 dan R2.
