@@ -67,6 +67,8 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 			config.BaseURL = "https://open.bigmodel.cn/api/paas/v4"
 		} else if payload.Provider == "xiaomi" {
 			config.BaseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
+		} else if payload.Provider == "nvidia" {
+			config.BaseURL = "https://integrate.api.nvidia.com/v1"
 		} else if strings.HasPrefix(payload.Provider, "rprompt") {
 			config.BaseURL = "https://rprompt.ll.my.id/v1"
 		}
@@ -279,6 +281,8 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 				baseURL = "https://openrouter.ai/api/v1"
 			} else if provider == "xiaomi" {
 				baseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
+			} else if provider == "nvidia" {
+				baseURL = "https://integrate.api.nvidia.com/v1"
 			} else if strings.HasPrefix(provider, "rprompt") {
 				baseURL = "https://rprompt.ll.my.id/v1"
 			} else {

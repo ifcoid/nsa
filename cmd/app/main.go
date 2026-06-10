@@ -200,6 +200,21 @@ func seedInitialData(ctx context.Context, repo *repository.MongoRepository, sess
 		_ = updateLLMConfigDirectly(ctx, repo, openrouterConfig)
 	}
 
+	_, err = repo.GetLLMConfig(ctx, "nvidia")
+	if err != nil {
+		fmt.Println("[Seeding] Menyiapkan data default provider 'nvidia' (NIM) di MongoDB...")
+		nvidiaConfig := &model.LLMConfig{
+			ID:           "nvidia",
+			ProviderName: "openai-compatible",
+			BaseURL:      "https://integrate.api.nvidia.com/v1",
+			APIKey:       "GANTI_DENGAN_API_KEY_NVIDIA_ANDA",
+			DefaultModel: "meta/llama-3.3-70b-instruct",
+			IsActive:     true,
+			UpdatedAt:    time.Now(),
+		}
+		_ = updateLLMConfigDirectly(ctx, repo, nvidiaConfig)
+	}
+
 	_, err = repo.GetLLMConfig(ctx, "claude")
 	if err != nil {
 		fmt.Println("[Seeding] Menyiapkan data default provider 'claude' (Anthropic) di MongoDB...")
