@@ -535,8 +535,48 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 				}
 
 				if e1 != nil || e2 != nil || s1 == nil || s2 == nil {
-					upd["qa_final_category"] = "ERROR"
-					upd["qa_total_score"] = 0
+					// Save any successful rater's data even if the other failed.
+					if s1 != nil {
+						upd["qa_r1_score"] = s1.TotalScore
+						upd["qa_r1_category"] = s1.Category
+						upd["qa_r1_reasoning"] = s1.Reasoning
+						upd["qa_r1_evidence"] = s1.Evidence
+						upd["qa_r1_model"] = r1Model
+					}
+					if s2 != nil {
+						upd["qa_r2_score"] = s2.TotalScore
+						upd["qa_r2_category"] = s2.Category
+						upd["qa_r2_reasoning"] = s2.Reasoning
+						upd["qa_r2_evidence"] = s2.Evidence
+						upd["qa_r2_model"] = r2Model
+					}
+
+					// Try to compute final from available data (current run + existing doc).
+					var r1Score, r2Score float64
+					var hasR1, hasR2 bool
+					if s1 != nil {
+						r1Score = s1.TotalScore
+						hasR1 = true
+					} else if v, ok := toFloat(p["qa_r1_score"]); ok && v > 0 {
+						r1Score = v
+						hasR1 = true
+					}
+					if s2 != nil {
+						r2Score = s2.TotalScore
+						hasR2 = true
+					} else if v, ok := toFloat(p["qa_r2_score"]); ok && v > 0 {
+						r2Score = v
+						hasR2 = true
+					}
+
+					if hasR1 && hasR2 {
+						avg := (r1Score + r2Score) / 2
+						upd["qa_total_score"] = avg
+						upd["qa_final_category"] = categoryFor(avg, thr, cat)
+					} else {
+						upd["qa_final_category"] = "ERROR"
+						upd["qa_total_score"] = 0
+					}
 				} else {
 					avg := (s1.TotalScore + s2.TotalScore) / 2
 					upd["qa_r1_score"] = s1.TotalScore
@@ -561,6 +601,38 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 	}
 
 	// Fase 3b + 4: kappa + sensitivity (semua sudah dirating).
+
+	// Recalculation pass: fix papers stuck in ERROR that have valid R1 AND R2 data.
+	tool := session.QAThreshold.Tool
+	cat := session.QAThreshold.Categorization
+	thr := session.QAThreshold.Threshold
+	_ = tool // used for context only; categoryFor uses thr and cat
+
+	errCur, errFindErr := coll.Find(ctx, bson.M{
+		"session_id":        session.ID,
+		"qa_final_category": "ERROR",
+		"qa_r1_score":       bson.M{"$gt": 0},
+		"qa_r2_score":       bson.M{"$gt": 0},
+	})
+	if errFindErr == nil {
+		var errDocs []bson.M
+		_ = errCur.All(ctx, &errDocs)
+		for _, ep := range errDocs {
+			r1sc, r1ok := toFloat(ep["qa_r1_score"])
+			r2sc, r2ok := toFloat(ep["qa_r2_score"])
+			if r1ok && r2ok && r1sc > 0 && r2sc > 0 {
+				avg := (r1sc + r2sc) / 2
+				fixUpd := bson.M{
+					"qa_total_score":    avg,
+					"qa_final_category": categoryFor(avg, thr, cat),
+				}
+				_, _ = coll.UpdateByID(ctx, ep["_id"], bson.M{"$set": fixUpd})
+				logger.Logf(session.ID, "      [Recalc] Fixed ERROR paper %s: avg=%.1f -> %s\n",
+					getStr(ep, "DOI", "doi"), avg, categoryFor(avg, thr, cat))
+			}
+		}
+	}
+
 	logger.Log(session.ID, "   [Langkah 7.3] Hitung kappa QA + sensitivity analysis...")
 	rated := m.allRated(ctx, session)
 	kappa, details := qaKappa(rated)
