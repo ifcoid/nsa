@@ -984,7 +984,12 @@
           "calibration_passed": { "type": "boolean", "description": "true jika pilot_kappa >= 0.6." },
           "attempts": { "type": "integer", "description": "Jumlah percobaan kalibrasi saat ini." },
           "max_attempts": { "type": "integer", "description": "Maks percobaan (default 3)." },
-          "refinement_note": { "type": "string", "description": "Saran perbaikan rubrik dari Brain (jika kappa rendah)." }
+          "refinement_note": { "type": "string", "description": "Saran perbaikan rubrik dari Brain (jika kappa rendah)." },
+          "r1_model": { "type": "string", "description": "Nama model LLM yang dipakai sebagai Rater 1 saat kalibrasi." },
+          "r2_model": { "type": "string", "description": "Nama model LLM yang dipakai sebagai Rater 2 saat kalibrasi." },
+          "brain_model": { "type": "string", "description": "Nama model LLM yang dipakai sebagai Brain (generate anchors + refinement)." },
+          "system_prompt": { "type": "string", "description": "System prompt lengkap yang dikirim ke rater saat kalibrasi (termasuk anchor + refinement)." },
+          "action_items": { "type": "string", "description": "Penjelasan langkah konkret yang akan terjadi jika user klik Retry atau Force Proceed." }
         }
       },
       "QAAnchorExample": {

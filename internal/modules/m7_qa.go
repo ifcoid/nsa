@@ -217,11 +217,47 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 		return fmt.Errorf("QA Calibration Rater 2 (%s/%s): %w", qp2, qf2, err)
 	}
 
+	// Get model names for transparency.
+	var r1Model, r2Model string
+	cfg1, _ := m.deps.MongoRepo.GetLLMConfig(ctx, qp1)
+	if cfg1 != nil {
+		r1Model = cfg1.ProviderName
+		if cfg1.DefaultModel != "" {
+			r1Model += " (" + cfg1.DefaultModel + ")"
+		}
+	} else {
+		r1Model = qp1
+	}
+	cfg2, _ := m.deps.MongoRepo.GetLLMConfig(ctx, qp2)
+	if cfg2 != nil {
+		r2Model = cfg2.ProviderName
+		if cfg2.DefaultModel != "" {
+			r2Model += " (" + cfg2.DefaultModel + ")"
+		}
+	} else {
+		r2Model = qp2
+	}
+	cal.R1Model = r1Model
+	cal.R2Model = r2Model
+
+	// Get brain model name for transparency.
+	brainPrimary, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
+	cfgBrain, _ := m.deps.MongoRepo.GetLLMConfig(ctx, brainPrimary)
+	if cfgBrain != nil {
+		cal.BrainModel = cfgBrain.ProviderName
+		if cfgBrain.DefaultModel != "" {
+			cal.BrainModel += " (" + cfgBrain.DefaultModel + ")"
+		}
+	} else {
+		cal.BrainModel = brainPrimary
+	}
+
 	// Build anchor context string to include in appraisal prompt.
 	anchorCtx := formatAnchorContext(cal.Anchors)
 
 	// Rate pilot papers.
 	var pilotResults []model.QACalibrationPilot
+	var systemPromptCaptured bool
 	for i, p := range pilotPapers {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -241,6 +277,12 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 		calibJustification := justification + "\n\n" + anchorCtx
 		if cal.RefinementNote != "" {
 			calibJustification += "\n\n[RUBRIC REFINEMENT]: " + cal.RefinementNote
+		}
+
+		// Store the system prompt once (representative for all papers in this pilot batch).
+		if !systemPromptCaptured {
+			cal.SystemPrompt = calibJustification
+			systemPromptCaptured = true
 		}
 
 		s1, e1 := r1.AppraiseQuality(ctx, tool, cat, calibJustification, title, ft)
@@ -304,6 +346,20 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 				if rerr == nil && note != "" {
 					cal.RefinementNote = note
 				}
+			}
+			// Generate clear action items so user knows what will happen on retry.
+			if cal.RefinementNote != "" {
+				cal.ActionItems = fmt.Sprintf(
+					"Jika Anda klik 'Retry Kalibrasi':\n"+
+						"1. Sistem akan mereset pilot papers dan mengambil %d sample baru\n"+
+						"2. Rubrik refinement dari Brain akan ditambahkan ke prompt rater:\n   \"%s\"\n"+
+						"3. Kedua rater (R1: %s, R2: %s) akan menilai ulang dengan panduan yang lebih ketat\n"+
+						"4. Kappa dihitung ulang - target >= %.1f\n\n"+
+						"Jika Anda klik 'Lanjutkan (Force Proceed)':\n"+
+						"1. Sistem akan melanjutkan full rating TANPA kalibrasi ulang\n"+
+						"2. Kappa rendah akan dicatat sebagai limitasi di manuskrip\n"+
+						"3. Hasil QA tetap dihasilkan tapi dengan peringatan inter-rater agreement rendah",
+					qaCalibrationPilotSize, cal.RefinementNote, cal.R1Model, cal.R2Model, qaCalibrationKappaThreshold)
 			}
 			session.Status = "M7_STEP3_QA_CALIBRATION_LOW_KAPPA"
 			logger.Log(session.ID, "   [System] Kalibrasi QA kappa rendah. Menunggu keputusan user (retry/proceed).")

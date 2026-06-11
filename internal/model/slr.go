@@ -569,6 +569,12 @@ type QACalibration struct {
 	Attempts          int                  `bson:"attempts" json:"attempts"`
 	MaxAttempts       int                  `bson:"max_attempts" json:"max_attempts"` // default 3
 	RefinementNote    string               `bson:"refinement_note,omitempty" json:"refinement_note,omitempty"`
+	// Transparency fields: model names used during calibration.
+	R1Model      string `bson:"r1_model,omitempty" json:"r1_model,omitempty"`           // model name used for Rater 1
+	R2Model      string `bson:"r2_model,omitempty" json:"r2_model,omitempty"`           // model name used for Rater 2
+	BrainModel   string `bson:"brain_model,omitempty" json:"brain_model,omitempty"`     // model name used for Brain (anchors + refinement)
+	SystemPrompt string `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"` // the system prompt used for raters in this calibration round
+	ActionItems  string `bson:"action_items,omitempty" json:"action_items,omitempty"`   // what happens on retry (derived from refinement_note)
 }
 
 // QAKappaDetails = transparansi detail kesepakatan R1 dan R2.
