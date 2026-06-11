@@ -591,6 +591,12 @@ type QAThresholdJustification struct {
 	Categorization   string          `bson:"categorization" json:"categorization"`
 	Kappa            float64         `bson:"kappa" json:"kappa"`
 	KappaDetails     *QAKappaDetails `bson:"kappa_details,omitempty" json:"kappa_details,omitempty"`
+	// Point 1: Actual feasibility calculated from rated data (post-rating).
+	ActualFeasibility     float64  `bson:"actual_feasibility,omitempty" json:"actual_feasibility,omitempty"`
+	ActualFeasibilityNote string   `bson:"actual_feasibility_note,omitempty" json:"actual_feasibility_note,omitempty"`
+	// Point 4: Literature grounding from known tool cutoffs.
+	LiteratureReferences   []string `bson:"literature_references,omitempty" json:"literature_references,omitempty"`
+	ThresholdDeviationNote string   `bson:"threshold_deviation_note,omitempty" json:"threshold_deviation_note,omitempty"`
 }
 
 type SensitivityScenario struct {
@@ -604,6 +610,7 @@ type SensitivityScenario struct {
 type SensitivityAnalysis struct {
 	Scenarios []SensitivityScenario `bson:"scenarios" json:"scenarios"`
 	Verdict   string                `bson:"verdict" json:"verdict"` // ROBUST / CONDITIONALLY ROBUST / SENSITIVE
+	Reasoning string                `bson:"reasoning,omitempty" json:"reasoning,omitempty"`
 	Markdown  string                `bson:"markdown" json:"markdown"`
 }
 

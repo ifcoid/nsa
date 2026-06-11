@@ -22,6 +22,112 @@ const qaCalibrationPilotSize = 5
 const qaCalibrationKappaThreshold = 0.6
 const qaCalibrationMaxAttempts = 3
 
+// knownToolCutoffs provides literature-grounded default thresholds and references
+// for common critical appraisal tools.
+var knownToolCutoffs = map[string]struct {
+	DefaultThreshold float64
+	References       []string
+}{
+	"MMAT": {
+		DefaultThreshold: 70,
+		References: []string{
+			"Hong QN et al. (2018). Mixed Methods Appraisal Tool (MMAT) v2018 User Guide.",
+			"Pace R et al. (2012). Testing the reliability and efficiency of the pilot MMAT. Int J Nurs Stud, 49(1):47-53.",
+		},
+	},
+	"NOS": {
+		DefaultThreshold: 70,
+		References: []string{
+			"Wells GA et al. The Newcastle-Ottawa Scale (NOS) for assessing the quality of nonrandomised studies.",
+			"Lo CK et al. (2014). Newcastle-Ottawa Scale: comparing reviewers' to authors' assessments. BMC Med Res Methodol, 14:45.",
+		},
+	},
+	"COCHRANE_ROB2": {
+		DefaultThreshold: 75,
+		References: []string{
+			"Sterne JAC et al. (2019). RoB 2: a revised tool for assessing risk of bias in randomised trials. BMJ, 366:l4898.",
+			"Higgins JPT et al. (2011). The Cochrane Collaboration's tool for assessing risk of bias. BMJ, 343:d5928.",
+		},
+	},
+	"CASP": {
+		DefaultThreshold: 70,
+		References: []string{
+			"Critical Appraisal Skills Programme (2018). CASP Qualitative Checklist.",
+			"Long HA et al. (2020). Optimising the value of the CASP. BMC Med Res Methodol, 20:36.",
+		},
+	},
+	"JBI": {
+		DefaultThreshold: 70,
+		References: []string{
+			"Aromataris E, Munn Z (Eds). (2020). JBI Manual for Evidence Synthesis. JBI.",
+			"Munn Z et al. (2015). Methodological quality of case series studies. JBI Database System Rev Implement Rep, 13(1):118-33.",
+		},
+	},
+	"ROBINS_I": {
+		DefaultThreshold: 70,
+		References: []string{
+			"Sterne JA et al. (2016). ROBINS-I: a tool for assessing risk of bias in non-randomised studies. BMJ, 355:i4919.",
+		},
+	},
+	"CLAIM": {
+		DefaultThreshold: 65,
+		References: []string{
+			"Mongan J et al. (2020). Checklist for AI in Medical Imaging (CLAIM). Radiology: AI, 2(2):e200029.",
+		},
+	},
+	"TRIPOD_AI": {
+		DefaultThreshold: 65,
+		References: []string{
+			"Collins GS et al. (2024). TRIPOD+AI statement: updated guidance for reporting clinical prediction models. BMJ, 385:e078378.",
+			"Collins GS et al. (2015). Transparent Reporting of a multivariable prediction model. Ann Intern Med, 162(1):55-63.",
+		},
+	},
+	"PROBAST": {
+		DefaultThreshold: 65,
+		References: []string{
+			"Wolff RF et al. (2019). PROBAST: A Tool to Assess the Risk of Bias and Applicability. Ann Intern Med, 170(1):51-58.",
+		},
+	},
+}
+
+// normalizeToolKey normalizes a tool name for lookup by uppercasing and replacing
+// spaces, hyphens, and other separators with underscores.
+func normalizeToolKey(name string) string {
+	name = strings.ToUpper(strings.TrimSpace(name))
+	name = strings.ReplaceAll(name, " ", "_")
+	name = strings.ReplaceAll(name, "-", "_")
+	return name
+}
+
+// lookupToolCutoff finds a matching entry in knownToolCutoffs using normalized key matching.
+func lookupToolCutoff(toolName string) (struct {
+	DefaultThreshold float64
+	References       []string
+}, bool) {
+	normalized := normalizeToolKey(toolName)
+	if ref, ok := knownToolCutoffs[normalized]; ok {
+		return ref, true
+	}
+	// Try partial match: check if any known key is contained in the normalized name or vice versa.
+	for key, ref := range knownToolCutoffs {
+		if strings.Contains(normalized, key) || strings.Contains(key, normalized) {
+			return ref, true
+		}
+	}
+	return struct {
+		DefaultThreshold float64
+		References       []string
+	}{}, false
+}
+
+// abs64 returns the absolute value of a float64.
+func abs64(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 // ===== QA Calibration: anchor examples + pilot batch + kappa check =====
 
 func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRSession) error {
@@ -265,6 +371,17 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		}
 		session.QAThreshold = qt
 		session.Feedback = "" // Bersihkan feedback setelah dipakai
+
+		// Point 4: Enrich with literature grounding from known tool cutoffs.
+		if ref, ok := lookupToolCutoff(qt.Tool); ok {
+			qt.LiteratureReferences = ref.References
+			// Flag if threshold deviates significantly from known default.
+			if abs64(qt.Threshold-ref.DefaultThreshold) > 15 {
+				qt.ThresholdDeviationNote = fmt.Sprintf("Threshold %.0f%% menyimpang >15 poin dari default umum tool (%s: %.0f%%). Pastikan justifikasi 3-lapis mendukung deviasi ini.",
+					qt.Threshold, qt.Tool, ref.DefaultThreshold)
+			}
+		}
+
 		logger.Logf(session.ID, "   [System] QA tool: %s, threshold %.0f%%.\n", qt.Tool, qt.Threshold)
 		session.Status = "M7_STEP3_QA_TOOL_WAITING_APPROVAL"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
@@ -393,7 +510,29 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 	kappa, details := qaKappa(rated)
 	session.QAThreshold.Kappa = kappa
 	session.QAThreshold.KappaDetails = details
-	session.SensitivityAnalysis = buildSensitivity(rated, session.QAThreshold.Threshold)
+
+	// Point 1: Calculate actual feasibility from rated data.
+	threshold := session.QAThreshold.Threshold
+	totalRateable := 0
+	actualPass := 0
+	for _, p := range rated {
+		cat := getStr(p, "qa_final_category")
+		if cat == "UNRATED" || cat == "ERROR" || cat == "" {
+			continue
+		}
+		totalRateable++
+		if sc, ok := toFloat(p["qa_total_score"]); ok && sc >= threshold {
+			actualPass++
+		}
+	}
+	if totalRateable > 0 {
+		session.QAThreshold.ActualFeasibility = float64(actualPass) / float64(totalRateable) * 100
+		session.QAThreshold.ActualFeasibilityNote = fmt.Sprintf("Dari %d studi yang berhasil dinilai, %d (%.1f%%) memenuhi threshold %.0f%%.",
+			totalRateable, actualPass, session.QAThreshold.ActualFeasibility, threshold)
+	}
+
+	// Point 2: Pass categorization to buildSensitivity for band-based scenarios.
+	session.SensitivityAnalysis = buildSensitivity(rated, threshold, session.QAThreshold.Categorization)
 
 	logger.Logf(session.ID, "   [System] QA kappa %.3f; sensitivity verdict %s.\n", kappa, session.SensitivityAnalysis.Verdict)
 	session.Status = "M7_STEP3_WAITING_APPROVAL"
@@ -544,7 +683,7 @@ func qaKappa(docs []bson.M) (float64, *model.QAKappaDetails) {
 	return cohensKappa(total, bothPass, bothFail, r1PassR2Fail, r1FailR2Pass), details
 }
 
-func buildSensitivity(docs []bson.M, threshold float64) *model.SensitivityAnalysis {
+func buildSensitivity(docs []bson.M, threshold float64, categorization string) *model.SensitivityAnalysis {
 	countAtLeast := func(t float64) int {
 		n := 0
 		for _, p := range docs {
@@ -554,9 +693,37 @@ func buildSensitivity(docs []bson.M, threshold float64) *model.SensitivityAnalys
 		}
 		return n
 	}
+
+	// Count total rateable (exclude UNRATED/ERROR).
+	totalRateable := 0
+	for _, p := range docs {
+		cat := getStr(p, "qa_final_category")
+		if cat != "UNRATED" && cat != "ERROR" && cat != "" {
+			totalRateable++
+		}
+	}
+
+	// Point 2: Determine strict/loose thresholds from categorization bands.
+	var strictThreshold, looseThreshold float64
+	bands := parseCategorization(categorization)
+	if bands != nil {
+		strictThreshold = bands.highMin                                    // only HIGH passes
+		looseThreshold = bands.moderateMin - (bands.highMin - bands.moderateMin) // symmetrical loosening
+		if looseThreshold < 0 {
+			looseThreshold = 0
+		}
+	} else {
+		// Fallback to fixed +/-10.
+		strictThreshold = threshold + 10
+		looseThreshold = threshold - 10
+		if looseThreshold < 0 {
+			looseThreshold = 0
+		}
+	}
+
 	base := countAtLeast(threshold)
-	strict := countAtLeast(threshold + 10)
-	loose := countAtLeast(threshold - 10)
+	strict := countAtLeast(strictThreshold)
+	loose := countAtLeast(looseThreshold)
 
 	verdict := "ROBUST"
 	if abs(strict-base) > 1 || abs(loose-base) > 1 {
@@ -566,25 +733,55 @@ func buildSensitivity(docs []bson.M, threshold float64) *model.SensitivityAnalys
 		verdict = "SENSITIVE"
 	}
 
-	reasoning := ""
-	switch verdict {
-	case "ROBUST":
-		reasoning = "Perubahan threshold (±10%) tidak memengaruhi jumlah studi yang lolos secara signifikan. Ini menunjukkan bahwa kesimpulan (pool) riset Anda kuat dan tidak mudah bias oleh penentuan batas kualitas metodologis."
-	case "CONDITIONALLY ROBUST":
-		reasoning = "Terdapat sedikit fluktuasi pada jumlah studi ketika threshold diubah, namun masih dalam batas wajar. Hasil akhir tetap dapat diandalkan dengan mempertimbangkan batasan tersebut."
-	case "SENSITIVE":
-		reasoning = "Perubahan batas kualitas mengeksklusi proporsi studi yang sangat besar (lebih dari 30%). Ini mengindikasikan bahwa hasil akhir riset sangat bergantung penuh pada batas kualitas (cutoff) yang Anda pilih."
+	// Point 3: Dynamic reasoning based on actual numbers.
+	pctChangeStrict := 0.0
+	pctChangeLoose := 0.0
+	if totalRateable > 0 {
+		pctChangeStrict = float64(abs(base-strict)) / float64(totalRateable) * 100
+		pctChangeLoose = float64(abs(loose-base)) / float64(totalRateable) * 100
 	}
 
+	var reasoning string
+	switch verdict {
+	case "ROBUST":
+		reasoning = fmt.Sprintf("Dari %d studi, pergeseran threshold dari %.0f%% (baseline) ke %.0f%% (ketat) hanya mengeksklusi %d studi (%.1f%%), dan pelonggaran ke %.0f%% hanya menambah %d studi (%.1f%%). Variasi ini tidak material terhadap kesimpulan.",
+			totalRateable, threshold, strictThreshold, base-strict, pctChangeStrict, looseThreshold, loose-base, pctChangeLoose)
+	case "CONDITIONALLY ROBUST":
+		reasoning = fmt.Sprintf("Terdapat pergeseran moderat: threshold ketat (%.0f%%) mengeksklusi %d dari %d studi (%.1f%%), sementara pelonggaran (%.0f%%) menambah %d (%.1f%%). Pool masih representatif namun kesimpulan perlu dicatat dengan batasan ini.",
+			strictThreshold, base-strict, totalRateable, pctChangeStrict, looseThreshold, loose-base, pctChangeLoose)
+	case "SENSITIVE":
+		reasoning = fmt.Sprintf("Analisis menunjukkan sensitivitas tinggi: threshold ketat (%.0f%%) mengeksklusi %d dari %d studi (%.1f%%), mengubah pool secara substansial. Ini mengindikasikan bahwa kesimpulan sangat bergantung pada nilai cutoff yang dipilih. Pembaca harus mempertimbangkan implikasi ini.",
+			strictThreshold, base-strict, totalRateable, pctChangeStrict)
+	}
+
+	// Build scenarios including the 4th "Exclude all LOW" scenario.
 	sc := []model.SensitivityScenario{
 		{Name: "Baseline", Threshold: fmt.Sprintf("%.0f%%", threshold), NIncluded: base, Findings: "set studi acuan"},
-		{Name: "Ketat", Threshold: fmt.Sprintf("%.0f%%", threshold+10), NIncluded: strict, Findings: fmt.Sprintf("%+d studi vs baseline", strict-base)},
-		{Name: "Longgar", Threshold: fmt.Sprintf("%.0f%%", threshold-10), NIncluded: loose, Findings: fmt.Sprintf("%+d studi vs baseline", loose-base)},
+		{Name: "Ketat", Threshold: fmt.Sprintf("%.0f%%", strictThreshold), NIncluded: strict, Findings: fmt.Sprintf("%+d studi vs baseline", strict-base)},
+		{Name: "Longgar", Threshold: fmt.Sprintf("%.0f%%", looseThreshold), NIncluded: loose, Findings: fmt.Sprintf("%+d studi vs baseline", loose-base)},
 	}
+
+	// 4th scenario: "Exclude all LOW" (only HIGH+MODERATE pass, using moderateMin if available).
+	if bands != nil {
+		excludeLow := countAtLeast(bands.moderateMin)
+		sc = append(sc, model.SensitivityScenario{
+			Name:      "Exclude all LOW",
+			Threshold: fmt.Sprintf("%.0f%%", bands.moderateMin),
+			NIncluded: excludeLow,
+			Findings:  fmt.Sprintf("hanya HIGH+MODERATE; %+d studi vs baseline", excludeLow-base),
+		})
+	}
+
 	md := fmt.Sprintf("## Sensitivity Analysis\n\n| Skenario | Threshold | n included | Catatan |\n|---|---|---|---|\n"+
-		"| Baseline | %.0f%% | %d | acuan |\n| Ketat | %.0f%% | %d | %+d |\n| Longgar | %.0f%% | %d | %+d |\n\n**Verdict:** %s\n\n**Penjelasan (xAI):** %s",
-		threshold, base, threshold+10, strict, strict-base, threshold-10, loose, loose-base, verdict, reasoning)
-	return &model.SensitivityAnalysis{Scenarios: sc, Verdict: verdict, Markdown: md}
+		"| Baseline | %.0f%% | %d | acuan |\n| Ketat | %.0f%% | %d | %+d |\n| Longgar | %.0f%% | %d | %+d |\n",
+		threshold, base, strictThreshold, strict, strict-base, looseThreshold, loose, loose-base)
+	if bands != nil {
+		excludeLow := countAtLeast(bands.moderateMin)
+		md += fmt.Sprintf("| Exclude all LOW | %.0f%% | %d | %+d |\n", bands.moderateMin, excludeLow, excludeLow-base)
+	}
+	md += fmt.Sprintf("\n**Verdict:** %s\n\n**Penjelasan (xAI):** %s", verdict, reasoning)
+
+	return &model.SensitivityAnalysis{Scenarios: sc, Verdict: verdict, Reasoning: reasoning, Markdown: md}
 }
 
 // ===== L4: Synthesis prep + meta-analysis feasibility + summary =====
