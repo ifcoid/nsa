@@ -1564,3 +1564,43 @@ func similarityRatio(s1, s2 string) float64 {
 	if maxLen == 0 { return 1.0 }
 	return 1.0 - float64(dist)/float64(maxLen)
 }
+
+// RecalculateQA recalculates ERROR papers that have valid R1+R2 scores without
+// restarting the full QA pipeline. Only works when session is at M7_STEP3.
+func (h *SessionHandler) RecalculateQA(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Safety check: only allow recalculation when at M7_STEP3 or M7_STEP4
+	if !strings.Contains(session.Status, "M7_STEP3") && !strings.Contains(session.Status, "M7_STEP4") {
+		sendJSONError(w, http.StatusBadRequest, fmt.Sprintf("Recalculation not allowed in status: %s (must be at M7_STEP3 or M7_STEP4)", session.Status))
+		return
+	}
+
+	fixedCount, err := modules.RecalculateQAErrors(ctx, h.mongoRepo, session)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Recalculation failed: %v", err))
+		return
+	}
+
+	msg := fmt.Sprintf("Recalculated %d ERROR papers with valid R1+R2 scores", fixedCount)
+	if fixedCount == 0 {
+		msg = "No ERROR papers found with valid R1+R2 scores to recalculate"
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"fixed_count": fixedCount,
+		"message":     msg,
+		"kappa":       session.QAThreshold.Kappa,
+	})
+}

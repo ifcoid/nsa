@@ -109,6 +109,9 @@ func (r *Router) registerRoutes() {
 	// Modul 7 Reset
 	protected.HandleFunc("POST /api/sessions/{id}/reset-m7", r.sessionHndlr.ResetModul7)
 
+	// Modul 7 QA Recalculation
+	protected.HandleFunc("POST /api/sessions/{id}/m7/recalculate-qa", r.sessionHndlr.RecalculateQA)
+
 	// Modul 8b (Bibliometric/SLNA)
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/vosviewer", r.sessionHndlr.SubmitVOSviewer)
 	
