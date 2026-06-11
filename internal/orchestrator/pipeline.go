@@ -160,6 +160,7 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 			if strings.Contains(session.Status, "WAITING") ||
 			   strings.Contains(session.Status, "NEEDS_REVISION") ||
 			   strings.Contains(session.Status, "ERROR") ||
+			   strings.Contains(session.Status, "LOW_KAPPA") ||
 			   (strings.Contains(session.Status, "DONE") && session.Status != "M5_DONE") ||
 			   session.Status == "COMPLETED" {
 				notify.Telegram(notify.GateMessage(sessionID, session.Status))
