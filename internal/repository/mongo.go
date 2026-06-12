@@ -620,6 +620,15 @@ func (r *MongoRepository) UpdateLLMRoles(ctx context.Context, roles *model.LLMRo
 	return err
 }
 
+// AppendXAIEntry appends an xAI audit entry to the session's xai_log array atomically using $push.
+func (r *MongoRepository) AppendXAIEntry(ctx context.Context, sessionID string, entry interface{}) error {
+	coll := r.client.Database(r.dbName).Collection("slr_sessions")
+	filter := bson.M{"_id": sessionID}
+	update := bson.M{"$push": bson.M{"xai_log": entry}}
+	_, err := coll.UpdateOne(ctx, filter, update)
+	return err
+}
+
 // ResetQAErrors mereset status qa_rated menjadi false untuk dokumen yang error agar dievaluasi ulang
 func (r *MongoRepository) ResetQAErrors(ctx context.Context, sessionID string) error {
 	filter := bson.M{

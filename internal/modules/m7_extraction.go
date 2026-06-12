@@ -31,6 +31,7 @@ const extractionBatchSize = 6
 
 func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) error {
 	logger.Logf(session.ID, ">> [MODUL 7: EXTRACTION + QA] State: %s\n", session.Status)
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "M7Extraction")
 
 	switch session.Status {
 	case "M7_EXTRACTION", "M7_INIT":

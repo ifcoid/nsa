@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 )
@@ -22,6 +23,7 @@ func (m *M8bBibliometric) Name() string { return "M8B_BIBLIO" }
 
 func (m *M8bBibliometric) Execute(ctx context.Context, session *model.SLRSession) error {
 	logger.Logf(session.ID, ">> [MODUL 8b: BIBLIOMETRIC/SLNA] State: %s\n", session.Status)
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "M8bBibliometric")
 
 	switch session.Status {
 	case "M8B_INIT", "M8B_BIBLIO":

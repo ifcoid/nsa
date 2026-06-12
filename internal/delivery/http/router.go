@@ -118,6 +118,9 @@ func (r *Router) registerRoutes() {
 	// Modul 7 QA Prompt (xAI transparency)
 	protected.HandleFunc("GET /api/sessions/{id}/m7/qa-prompt", r.sessionHndlr.GetQAPrompt)
 
+	// xAI Audit Log
+	protected.HandleFunc("GET /api/sessions/{id}/xai-log", r.sessionHndlr.GetXAILog)
+
 	// Modul 8b (Bibliometric/SLNA)
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/vosviewer", r.sessionHndlr.SubmitVOSviewer)
 	

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 )
@@ -23,6 +24,7 @@ func (m *M2Pico) Name() string { return "M2_PICO" }
 
 func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	logger.Logf(session.ID, ">> [MODUL 2: PICO] Memproses State: %s\n", session.Status)
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "M2Pico")
 
 	switch session.Status {
 
@@ -97,6 +99,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		topicContext := fmt.Sprintf("Judul: %s\nKesenjangan (Gap): %s\nTipe: %s (%s)\nBukti: %s\nAlasannya Mengapa Penting: %s", 
 			session.SelectedTopic.Name, session.SelectedTopic.Gap, session.SelectedTopic.Type, session.SelectedTopic.TypeReason, session.SelectedTopic.Evidence, session.SelectedTopic.Importance)
 
+		ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "GenerateMatrix")
 		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
@@ -128,6 +131,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		topicContext := fmt.Sprintf("Judul: %s\nKesenjangan (Gap): %s\nTipe: %s (%s)\nBukti: %s\nAlasannya Mengapa Penting: %s\n\n[INSTRUKSI REVISI DARI PENELITI]:\n%s\nTolong cari ulang literatur review yang lebih tepat / perbaiki matriks sebelumnya sesuai dengan keluhan di atas.", 
 			session.SelectedTopic.Name, session.SelectedTopic.Gap, session.SelectedTopic.Type, session.SelectedTopic.TypeReason, session.SelectedTopic.Evidence, session.SelectedTopic.Importance, session.Feedback)
 
+		ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "GenerateMatrix")
 		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
@@ -152,6 +156,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// =========================================================================
 	case "M2_STEP3_PICO":
 		logger.Log(session.ID, "   [Langkah 2.3] Menyusun PICO Framework 3-Lapis...")
+		ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "AnalyzePICO")
 		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 
@@ -190,6 +195,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	case "M2_STEP3_NEEDS_REVISION":
 		logger.Logf(session.ID, "   [Revisi 2.3] Memperbaiki PICO berdasarkan feedback: '%s'\n", session.Feedback)
 
+		ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "AnalyzePICO")
 		topicContext := session.Topic
 		if session.SelectedTopic != nil {
 			topicContext = fmt.Sprintf("Judul: %s\nKesenjangan (Gap): %s\nTipe: %s (%s)\nBukti: %s\nAlasannya Mengapa Penting: %s", 
@@ -266,6 +272,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 	// =========================================================================
 	case "M2_STEP4_SCOPE":
 		logger.Log(session.ID, "   [Langkah 2.4] Merumuskan Justifikasi Batasan Scope 3-Lapis...")
+		ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "GenerateJustifications")
 		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil { return err }
 

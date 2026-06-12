@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 )
@@ -21,6 +22,7 @@ func (m *M1Foundation) Name() string { return "M1_FOUNDATION" }
 
 func (m *M1Foundation) Execute(ctx context.Context, session *model.SLRSession) error {
 	logger.Logf(session.ID, ">> [MODUL 1: FONDASI TEORI] Memproses State: %s\n", session.Status)
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "M1Foundation")
 
 	switch session.Status {
 

@@ -12,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 )
@@ -24,6 +25,7 @@ const fulltextBatchSize = 10
 
 func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [Langkah 6.2] Full-Text Screening (dual-reviewer berbasis RAG Qdrant)...")
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "runFullTextScreeningBatch")
 
 	// 1. State machine: cek paper yang sudah di-screen tapi belum dievaluasi (kappa batch).
 	unevaluated, err := m.deps.MongoRepo.GetUnevaluatedFullTextPapers(ctx, session.ID)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 )
@@ -22,6 +23,7 @@ func (m *M3Search) Name() string {
 }
 
 func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error {
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "M3Search")
 	switch session.Status {
 	// =========================================================================
 	// LANGKAH 1: DATABASE SELECTION + JUSTIFICATION

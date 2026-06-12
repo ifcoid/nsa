@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 )
@@ -21,6 +22,7 @@ func (m *M9Manuscript) Name() string { return "M9_MANUSCRIPT" }
 
 func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) error {
 	logger.Logf(session.ID, ">> [MODUL 9: MANUSCRIPT] State: %s\n", session.Status)
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "M9Manuscript")
 
 	switch session.Status {
 	case "M9_MANUSCRIPT", "M9_INIT":

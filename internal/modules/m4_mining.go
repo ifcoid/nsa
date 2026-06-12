@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 	"strings"
@@ -24,6 +25,7 @@ func (m *M4Mining) Name() string {
 }
 
 func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error {
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "M4Mining")
 	switch session.Status {
 	// =========================================================================
 	// LANGKAH 1: EKSEKUSI FINAL SEARCH + SANITY CHECK

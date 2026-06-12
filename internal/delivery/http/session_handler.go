@@ -1673,3 +1673,35 @@ func (h *SessionHandler) GetQAPrompt(w http.ResponseWriter, req *http.Request) {
 		"threshold":      session.QAThreshold.Threshold,
 	})
 }
+
+// GetXAILog returns the xAI audit log for a session, optionally filtered by step.
+// GET /api/sessions/{id}/xai-log?step=M7_STEP1_FRAMEWORK
+func (h *SessionHandler) GetXAILog(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	entries := session.XAILog
+	if stepFilter := req.URL.Query().Get("step"); stepFilter != "" {
+		var filtered []model.XAIEntry
+		for _, e := range entries {
+			if e.Step == stepFilter {
+				filtered = append(filtered, e)
+			}
+		}
+		entries = filtered
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"xai_log": entries,
+	})
+}

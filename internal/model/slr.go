@@ -5,6 +5,17 @@ import (
 	"time"
 )
 
+// XAIEntry = satu catatan transparansi interaksi LLM (xAI audit log).
+type XAIEntry struct {
+	Step              string    `bson:"step" json:"step"`
+	AgentFunc         string    `bson:"agent_func" json:"agent_func"`
+	ModelName         string    `bson:"model_name" json:"model_name"`
+	SystemPrompt      string    `bson:"system_prompt" json:"system_prompt"`
+	UserPromptPreview string    `bson:"user_prompt_preview" json:"user_prompt_preview"`
+	Timestamp         time.Time `bson:"timestamp" json:"timestamp"`
+	DurationMs        int64     `bson:"duration_ms" json:"duration_ms"`
+}
+
 // FoundationBriefing = output Modul 1 (Fondasi Teori + Aturan Global).
 // Hybrid: bagian teori di-generate LLM (disesuaikan topik), sisanya kanonik statik.
 type FoundationBriefing struct {
@@ -464,6 +475,7 @@ type SLRSession struct {
 	Feedback          string            `bson:"feedback" json:"feedback"` // Catatan dari manusia jika butuh revisi
 	SystemError       string            `bson:"system_error" json:"system_error"` // Pesan error dari mesin/pipeline
 	EmbedError        string            `bson:"embed_error,omitempty" json:"embed_error,omitempty"` // alasan pause di M6_STEP2_WAITING_EMBED (endpoint embedding mati)
+	XAILog            []XAIEntry        `bson:"xai_log,omitempty" json:"xai_log,omitempty"`
 	UpdatedAt         time.Time         `bson:"updated_at" json:"updated_at"`
 }
 

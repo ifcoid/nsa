@@ -35,26 +35,30 @@ func (f *LLMFactory) CreateClient(ctx context.Context, providerID string) (LLMCl
 	}
 
 	// 2. Tentukan jenis adapter yang harus dibuat
+	var client LLMClient
 	switch config.ProviderName {
 	case "gemini":
-		return NewGeminiClient(config.APIKey, config.DefaultModel), nil
+		client = NewGeminiClient(config.APIKey, config.DefaultModel)
 
 	case "claude":
-		return NewClaudeClient(config.APIKey, config.DefaultModel), nil
+		client = NewClaudeClient(config.APIKey, config.DefaultModel)
 
 	case "cohere":
-		return NewCohereClient(config.APIKey, config.DefaultModel), nil
+		client = NewCohereClient(config.APIKey, config.DefaultModel)
 
 	case "xiaomi":
 		baseURL := config.BaseURL
 		if baseURL == "" {
 			baseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
 		}
-		return NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel), nil
+		client = NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel)
 
 	default:
-		return NewOpenAICompatibleClient(config.APIKey, config.BaseURL, config.DefaultModel), nil
+		client = NewOpenAICompatibleClient(config.APIKey, config.BaseURL, config.DefaultModel)
 	}
+
+	// Wrap with xAI logging (transparently records every LLM call)
+	return NewXAILoggingClient(client, f.mongoRepo), nil
 }
 
 // Roles mengembalikan pemetaan peran->provider (config-driven, default bila kosong).

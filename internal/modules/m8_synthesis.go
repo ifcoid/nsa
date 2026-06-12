@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 	"nsa/internal/publisher"
@@ -24,6 +25,7 @@ func (m *M8Synthesis) Name() string { return "M8_SYNTHESIS" }
 
 func (m *M8Synthesis) Execute(ctx context.Context, session *model.SLRSession) error {
 	logger.Logf(session.ID, ">> [MODUL 8: ANALYSIS + SYNTHESIS] State: %s\n", session.Status)
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "M8Synthesis")
 
 	switch session.Status {
 	case "M8_SYNTHESIS", "M8_INIT":

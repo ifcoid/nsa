@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	"nsa/internal/agent"
+	"nsa/internal/llm"
 	"nsa/internal/logger"
 	"nsa/internal/model"
 
@@ -17,6 +18,7 @@ type M5Screening struct { deps *ModuleDeps }
 func NewM5Screening(deps *ModuleDeps) *M5Screening { return &M5Screening{deps: deps} }
 func (m *M5Screening) Name() string { return "M5_SCREENING" }
 func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) error {
+	ctx = llm.WithXAIContext(ctx, session.ID, session.Status, "M5Screening")
 	switch session.Status {
 	// =========================================================================
 	// LANGKAH 1: SCREENER BRIEFING
