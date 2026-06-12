@@ -127,9 +127,19 @@ func RerateSinglePaper(ctx context.Context, mongoRepo *repository.MongoRepositor
 
 	// Run dual rating
 	logger.Logf(session.ID, "   [Rerate] Rating paper: %s (DOI: %s)\n", title, doi)
-	s1, e1 := r1.AppraiseQuality(ctx, tool, cat, justification, title, ft)
+
+	// Build enhanced justification with rubric + anchors
+	enhancedJustification := justification
+	if session.QAThreshold.QARubric != "" {
+		enhancedJustification += "\n\n[RUBRIK OPERASIONAL PENILAIAN]:\n" + session.QAThreshold.QARubric
+	}
+	if session.QACalibration != nil && len(session.QACalibration.Anchors) > 0 {
+		enhancedJustification += "\n\n" + formatAnchorContext(session.QACalibration.Anchors)
+	}
+
+	s1, e1 := r1.AppraiseQuality(ctx, tool, cat, enhancedJustification, title, ft)
 	time.Sleep(3 * time.Second)
-	s2, e2 := r2.AppraiseQuality(ctx, tool, cat, justification, title, ft)
+	s2, e2 := r2.AppraiseQuality(ctx, tool, cat, enhancedJustification, title, ft)
 
 	if e1 != nil && e2 != nil {
 		return nil, fmt.Errorf("both raters failed: R1=%v, R2=%v", e1, e2)
@@ -243,6 +253,19 @@ func BuildQASystemPrompt(session *model.SLRSession) string {
 	if session.QAThreshold == nil {
 		return ""
 	}
+
+	justification := session.QAThreshold.ToolJustification
+
+	// Include rubric if available
+	if session.QAThreshold.QARubric != "" {
+		justification += "\n\n[RUBRIK OPERASIONAL PENILAIAN]:\n" + session.QAThreshold.QARubric
+	}
+
+	// Include anchor examples if available
+	if session.QACalibration != nil && len(session.QACalibration.Anchors) > 0 {
+		justification += "\n\n" + formatAnchorContext(session.QACalibration.Anchors)
+	}
+
 	return fmt.Sprintf(`Anda penilai kualitas (rater) Systematic Literature Review.
 Nilai kualitas metodologis artikel memakai tool: %s.
 Detail/Framework/Justifikasi tool: %s
@@ -252,8 +275,19 @@ ATURAN: nilai HANYA dari full-text (konteks RAG). Skor 0-100 (dinormalisasi).
 Tetapkan category sesuai ambang.
 
 Keluarkan HANYA JSON MURNI tanpa markdown:
-{ "total_score": 78, "category": "MODERATE", "items_summary": "ringkas penilaian per item utama", "reasoning": "alasan skor dan kategori", "evidence": "kutipan bukti teks" }`,
+{
+  "total_score": 78,
+  "category": "MODERATE",
+  "items_summary": "Domain 1: Participants (18/20) - populasi jelas; Domain 2: Predictors (15/20) - variabel terdefinisi; Domain 3: Outcome (12/20) - kurang detail; Domain 4: Analysis (10/20) - bias selection; Domain 5: Overall (5/20) - moderate risk",
+  "reasoning": "Penjelasan logis mengapa paper mendapat skor ini, mengacu ke rubrik per domain dan threshold kategorisasi",
+  "evidence": "Kutipan langsung dari teks yang mendukung penilaian tiap domain: '[kutipan 1]' (Domain X), '[kutipan 2]' (Domain Y)"
+}
+
+PENTING:
+- items_summary HARUS breakdown per domain sesuai rubrik
+- evidence HARUS berisi kutipan langsung dari full-text, bukan ringkasan
+- total_score = hasil weighted sum sesuai rubrik operasional`,
 		session.QAThreshold.Tool,
-		session.QAThreshold.ToolJustification,
+		justification,
 		session.QAThreshold.Categorization)
 }

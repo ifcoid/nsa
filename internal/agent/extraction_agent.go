@@ -327,6 +327,52 @@ CATATAN PENTING:
 	return &res, nil
 }
 
+// GenerateQARubric asks Brain to generate an operational scoring rubric for the selected QA tool.
+// The rubric specifies each domain/item to evaluate, how to convert observations to a 0-100 score,
+// and what constitutes full marks vs partial vs zero for each item.
+func (a *ExtractionAgent) GenerateQARubric(ctx context.Context, tool, categorization, justification string) (string, error) {
+	systemPrompt := fmt.Sprintf(`Anda metodolog QA Systematic Literature Review.
+Buatkan RUBRIK OPERASIONAL PENILAIAN untuk tool: %s
+
+Konteks pemilihan tool:
+%s
+
+Kategorisasi threshold:
+%s
+
+INSTRUKSI:
+Buat rubrik operasional yang DETAIL dan ACTIONABLE agar rater (baik manusia maupun AI) bisa menilai secara KONSISTEN.
+
+FORMAT OUTPUT (plain text, BUKAN JSON):
+
+RUBRIK OPERASIONAL %s:
+Domain 1: [nama domain] (bobot: X/100)
+  - Skor 100%%: [kriteria spesifik untuk skor penuh]
+  - Skor 50%%: [kriteria spesifik untuk skor setengah]
+  - Skor 0%%: [kriteria spesifik untuk skor nol]
+Domain 2: [nama domain] (bobot: X/100)
+  - Skor 100%%: [kriteria spesifik]
+  - Skor 50%%: [kriteria spesifik]
+  - Skor 0%%: [kriteria spesifik]
+...
+(lanjutkan untuk SEMUA domain/item dalam tool)
+
+KONVERSI SKOR: Total = weighted sum semua domain (0-100)
+
+CATATAN:
+- Sesuaikan domain dengan item/checklist RESMI dari tool %s
+- Bobot harus berjumlah 100
+- Kriteria harus cukup spesifik agar dua rater independen bisa menghasilkan skor yang konsisten
+- Gunakan bahasa Indonesia`, tool, justification, categorization, tool, tool)
+
+	userPrompt := "Buatkan rubrik operasional penilaian sesuai instruksi di atas."
+	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return "", fmt.Errorf("GenerateQARubric LLM: %w", err)
+	}
+	return strings.TrimSpace(raw), nil
+}
+
 // validateToolAgainstDesign melakukan validasi sederhana: jika design mengandung banyak kata kunci AI,
 // pastikan tool bukan MMAT.
 func validateToolAgainstDesign(tool, designBreakdown string) error {
@@ -361,7 +407,18 @@ ATURAN: nilai HANYA dari full-text (konteks RAG). Skor 0-100 (dinormalisasi).
 Tetapkan category sesuai ambang.
 
 Keluarkan HANYA JSON MURNI tanpa markdown:
-{ "total_score": 78, "category": "MODERATE", "items_summary": "ringkas penilaian per item utama", "reasoning": "alasan skor dan kategori", "evidence": "kutipan bukti teks" }`, tool, justification, categorization)
+{
+  "total_score": 78,
+  "category": "MODERATE",
+  "items_summary": "Domain 1: Participants (18/20) - populasi jelas; Domain 2: Predictors (15/20) - variabel terdefinisi; Domain 3: Outcome (12/20) - kurang detail; Domain 4: Analysis (10/20) - bias selection; Domain 5: Overall (5/20) - moderate risk",
+  "reasoning": "Penjelasan logis mengapa paper mendapat skor ini, mengacu ke rubrik per domain dan threshold kategorisasi",
+  "evidence": "Kutipan langsung dari teks yang mendukung penilaian tiap domain: '[kutipan 1]' (Domain X), '[kutipan 2]' (Domain Y)"
+}
+
+PENTING:
+- items_summary HARUS breakdown per domain sesuai rubrik
+- evidence HARUS berisi kutipan langsung dari full-text, bukan ringkasan
+- total_score = hasil weighted sum sesuai rubrik operasional`, tool, justification, categorization)
 
 	userPrompt := fmt.Sprintf("Title: %s\n\n=== FULL-TEXT (RAG) ===\n%s", title, fulltext)
 	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)

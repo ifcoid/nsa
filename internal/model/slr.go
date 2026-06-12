@@ -590,6 +590,7 @@ type QAKappaDetails struct {
 type QAThresholdJustification struct {
 	Tool             string          `bson:"tool" json:"tool"`
 	ToolJustification string         `bson:"tool_justification" json:"tool_justification"`
+	QARubric         string          `bson:"qa_rubric,omitempty" json:"qa_rubric,omitempty"` // operational scoring rubric per domain
 	Threshold        float64         `bson:"threshold" json:"threshold"`
 	LayerLiterature  string          `bson:"layer_literature" json:"layer_literature"`
 	LayerDeveloper   string          `bson:"layer_developer" json:"layer_developer"`

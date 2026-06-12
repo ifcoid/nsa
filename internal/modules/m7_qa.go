@@ -428,6 +428,14 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		session.QAThreshold = qt
 		session.Feedback = "" // Bersihkan feedback setelah dipakai
 
+		// Generate operational scoring rubric for the selected tool.
+		rubric, rubricErr := agent.NewExtractionAgent(brain).GenerateQARubric(ctx, qt.Tool, qt.Categorization, qt.ToolJustification)
+		if rubricErr != nil {
+			logger.Logf(session.ID, "   [Warning] GenerateQARubric gagal: %v\n", rubricErr)
+		} else {
+			session.QAThreshold.QARubric = rubric
+		}
+
 		// Point 4: Enrich with literature grounding from known tool cutoffs.
 		if ref, ok := lookupToolCutoff(qt.Tool); ok {
 			qt.LiteratureReferences = ref.References
@@ -513,6 +521,17 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 				upd["qa_total_score"] = 0
 			} else {
 				justification := session.QAThreshold.ToolJustification
+
+				// Add scoring rubric
+				if session.QAThreshold.QARubric != "" {
+					justification += "\n\n[RUBRIK OPERASIONAL PENILAIAN]:\n" + session.QAThreshold.QARubric
+				}
+
+				// Add anchor examples from calibration
+				if session.QACalibration != nil && len(session.QACalibration.Anchors) > 0 {
+					justification += "\n\n" + formatAnchorContext(session.QACalibration.Anchors)
+				}
+
 				s1, e1 := r1.AppraiseQuality(ctx, tool, cat, justification, title, ft)
 				time.Sleep(3 * time.Second)
 				s2, e2 := r2.AppraiseQuality(ctx, tool, cat, justification, title, ft)
