@@ -322,6 +322,28 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 			time.Sleep(5 * time.Second)
 		}
 		_, _ = coll.UpdateByID(ctx, p["_id"], bson.M{"$set": update})
+
+		// Post-extraction enrichment: fill NOT_REPORTED design/geographic from CrossRef
+		if update["fields"] != nil {
+			// Convert []agent.ExtractedField to bson.A for the enrichment function
+			if extractedFields, ok := update["fields"].([]agent.ExtractedField); ok {
+				fieldsBsonA := make(bson.A, len(extractedFields))
+				for fi, ef := range extractedFields {
+					fieldsBsonA[fi] = bson.M{
+						"key":      ef.Key,
+						"value":    ef.Value,
+						"evidence": ef.Evidence,
+						"status":   ef.Status,
+					}
+				}
+				enrichDoc := bson.M{
+					"_id":    p["_id"],
+					"DOI":    doi,
+					"fields": fieldsBsonA,
+				}
+				EnrichNotReportedFields(ctx, coll, enrichDoc, session.ID)
+			}
+		}
 	}
 
 	session.Status = "M7_STEP2_EXTRACTION" // loop batch berikutnya / verifikasi

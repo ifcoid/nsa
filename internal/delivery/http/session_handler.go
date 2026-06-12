@@ -1704,3 +1704,31 @@ func (h *SessionHandler) GetXAILog(w http.ResponseWriter, req *http.Request) {
 		"xai_log": entries,
 	})
 }
+
+// EnrichMetadata triggers CrossRef metadata enrichment for extraction docs missing fields.
+// POST /api/sessions/{id}/m7/enrich-metadata
+func (h *SessionHandler) EnrichMetadata(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	_, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	enriched, err := modules.EnrichMetadataFromCrossRef(ctx, h.mongoRepo, id)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Enrichment failed: %v", err))
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message":        "Metadata enrichment completed",
+		"enriched_count": enriched,
+	})
+}

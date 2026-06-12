@@ -105,6 +105,14 @@ func (m *M8Synthesis) Execute(ctx context.Context, session *model.SLRSession) er
 
 func (m *M8Synthesis) runDescriptiveL1(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [Langkah 8.1] Descriptive analysis + figur + heterogeneity deep-dive...")
+
+	// Enrich metadata from CrossRef for docs with missing fields before analysis
+	if enriched, err := EnrichMetadataFromCrossRef(ctx, m.deps.MongoRepo, session.ID); err != nil {
+		logger.Logf(session.ID, "   [WARN] CrossRef enrichment error: %v", err)
+	} else if enriched > 0 {
+		logger.Logf(session.ID, "   [System] Pre-analysis enrichment: %d docs enriched from CrossRef.", enriched)
+	}
+
 	docs := m.extractionDocs(ctx, session)
 
 	designs := tallyExtField(docs, "design")
