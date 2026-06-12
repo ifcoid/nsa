@@ -1684,13 +1684,12 @@ func (h *SessionHandler) GetXAILog(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ctx := context.Background()
-	session, err := h.mongoRepo.GetSession(ctx, id)
+	entries, err := h.mongoRepo.GetXAILog(ctx, id)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Session not found")
 		return
 	}
 
-	entries := session.XAILog
 	if stepFilter := req.URL.Query().Get("step"); stepFilter != "" {
 		var filtered []model.XAIEntry
 		for _, e := range entries {

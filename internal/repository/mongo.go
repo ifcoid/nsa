@@ -621,12 +621,28 @@ func (r *MongoRepository) UpdateLLMRoles(ctx context.Context, roles *model.LLMRo
 }
 
 // AppendXAIEntry appends an xAI audit entry to the session's xai_log array atomically using $push.
+// The array is capped at the most recent 500 entries to prevent hitting MongoDB's 16 MB doc limit.
 func (r *MongoRepository) AppendXAIEntry(ctx context.Context, sessionID string, entry interface{}) error {
 	coll := r.client.Database(r.dbName).Collection("slr_sessions")
 	filter := bson.M{"_id": sessionID}
-	update := bson.M{"$push": bson.M{"xai_log": entry}}
+	update := bson.M{"$push": bson.M{"xai_log": bson.M{"$each": bson.A{entry}, "$slice": -500}}}
 	_, err := coll.UpdateOne(ctx, filter, update)
 	return err
+}
+
+// GetXAILog fetches only the xai_log field from a session using projection,
+// avoiding loading the entire session document.
+func (r *MongoRepository) GetXAILog(ctx context.Context, sessionID string) ([]model.XAIEntry, error) {
+	coll := r.client.Database(r.dbName).Collection("slr_sessions")
+	var result struct {
+		XAILog []model.XAIEntry `bson:"xai_log"`
+	}
+	opts := options.FindOne().SetProjection(bson.M{"xai_log": 1})
+	err := coll.FindOne(ctx, bson.M{"_id": sessionID}, opts).Decode(&result)
+	if err != nil {
+		return nil, err
+	}
+	return result.XAILog, nil
 }
 
 // ResetQAErrors mereset status qa_rated menjadi false untuk dokumen yang error agar dievaluasi ulang

@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"nsa/internal/model"
 	"nsa/internal/repository"
 )
 
@@ -45,14 +46,14 @@ func (c *xaiLoggingClient) Generate(ctx context.Context, systemPrompt, userPromp
 		preview = preview[:500] + "..."
 	}
 
-	entry := map[string]interface{}{
-		"step":               xaiCtx.Step,
-		"agent_func":         xaiCtx.AgentFunc,
-		"model_name":         c.inner.ModelName(),
-		"system_prompt":      systemPrompt,
-		"user_prompt_preview": preview,
-		"timestamp":          time.Now(),
-		"duration_ms":        duration,
+	entry := model.XAIEntry{
+		Step:              xaiCtx.Step,
+		AgentFunc:         xaiCtx.AgentFunc,
+		ModelName:         c.inner.ModelName(),
+		SystemPrompt:      systemPrompt,
+		UserPromptPreview: preview,
+		Timestamp:         time.Now(),
+		DurationMs:        duration,
 	}
 
 	// Non-blocking append: use a goroutine with a background context so that
