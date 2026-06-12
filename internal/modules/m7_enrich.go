@@ -24,8 +24,10 @@ func EnrichMetadataFromCrossRef(ctx context.Context, mongoRepo *repository.Mongo
 	filter := bson.M{
 		"session_id": sessionID,
 		"$or": bson.A{
+			bson.M{"fields": bson.M{"$exists": false}},
 			bson.M{"fields": nil},
 			bson.M{"fields": bson.A{}},
+			bson.M{"fields": bson.M{"$size": 0}},
 		},
 	}
 
