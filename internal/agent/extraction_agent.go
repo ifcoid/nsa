@@ -10,6 +10,30 @@ import (
 	"nsa/internal/model"
 )
 
+// SynthesisPrepSystemPrompt is the system prompt used by PrepareSynthesis (L4).
+// Exported for xAI transparency.
+const SynthesisPrepSystemPrompt = `Anda metodolog sintesis Systematic Literature Review.
+Berdasarkan ringkasan data ekstraksi + QA, susun PERSIAPAN SINTESIS untuk Modul 8.
+
+Tentukan:
+1. DESCRIPTIVE OVERVIEW (distribusi design/geografis/tahun/framework/kualitas).
+2. HETEROGENEITY VERDICT: LOW / MODERATE / HIGH / VERY HIGH (klinis+metodologis+statistik).
+3. META-ANALYSIS FEASIBILITY (5-criteria): heterogeneity LOW/MODERATE; >=3 studi outcome comparable; effect size tersedia; design sebanding; operational def outcome >=80% mirip.
+   - SEMUA ya -> "JALUR B" (meta-analysis); ada yang tidak -> "JALUR A" (narrative, default); subset homogen -> "HYBRID".
+4. FRAMEWORK-DRIVEN GROUPINGS untuk narrative (group per komponen framework).
+
+PERINGATAN: jangan klaim pooled effect tanpa meta-analysis formal; keputusan jalur harus tegas.
+
+Keluarkan HANYA JSON MURNI tanpa markdown:
+{
+  "descriptive_overview": "...",
+  "heterogeneity_verdict": "MODERATE",
+  "meta_feasibility": "JALUR A",
+  "criteria_check": "breakdown 5 kriteria (ya/tidak + alasan)",
+  "groupings": "Group 1: ...; Group 2: ...",
+  "markdown": "ringkasan rapi markdown gabungan semua poin di atas"
+}`
+
 // ExtractionAgent menangani Modul 7 (framework, ekstraksi, QA, synthesis prep).
 type ExtractionAgent struct {
 	client llm.LLMClient
@@ -435,27 +459,7 @@ PENTING:
 // ===== L4: Synthesis preparation =====
 
 func (a *ExtractionAgent) PrepareSynthesis(ctx context.Context, extractionSummaryJSON string) (*model.SynthesisPrep, error) {
-	systemPrompt := `Anda metodolog sintesis Systematic Literature Review.
-Berdasarkan ringkasan data ekstraksi + QA, susun PERSIAPAN SINTESIS untuk Modul 8.
-
-Tentukan:
-1. DESCRIPTIVE OVERVIEW (distribusi design/geografis/tahun/framework/kualitas).
-2. HETEROGENEITY VERDICT: LOW / MODERATE / HIGH / VERY HIGH (klinis+metodologis+statistik).
-3. META-ANALYSIS FEASIBILITY (5-criteria): heterogeneity LOW/MODERATE; >=3 studi outcome comparable; effect size tersedia; design sebanding; operational def outcome >=80% mirip.
-   - SEMUA ya -> "JALUR B" (meta-analysis); ada yang tidak -> "JALUR A" (narrative, default); subset homogen -> "HYBRID".
-4. FRAMEWORK-DRIVEN GROUPINGS untuk narrative (group per komponen framework).
-
-PERINGATAN: jangan klaim pooled effect tanpa meta-analysis formal; keputusan jalur harus tegas.
-
-Keluarkan HANYA JSON MURNI tanpa markdown:
-{
-  "descriptive_overview": "...",
-  "heterogeneity_verdict": "MODERATE",
-  "meta_feasibility": "JALUR A",
-  "criteria_check": "breakdown 5 kriteria (ya/tidak + alasan)",
-  "groupings": "Group 1: ...; Group 2: ...",
-  "markdown": "ringkasan rapi markdown gabungan semua poin di atas"
-}`
+	systemPrompt := SynthesisPrepSystemPrompt
 	userPrompt := fmt.Sprintf("=== RINGKASAN EKSTRAKSI + QA ===\n%s", extractionSummaryJSON)
 	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {

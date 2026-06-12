@@ -629,6 +629,8 @@ type SynthesisPrep struct {
 	CriteriaCheck        string `bson:"criteria_check" json:"criteria_check"`
 	Groupings            string `bson:"groupings" json:"groupings"`
 	Markdown             string `bson:"markdown" json:"markdown"`
+	ModelUsed            string `bson:"model_used,omitempty" json:"model_used,omitempty"`
+	SystemPrompt         string `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 }
 
 type Modul7Summary struct {

@@ -964,6 +964,20 @@ func (m *M7Extraction) runSynthesisL4(ctx context.Context, session *model.SLRSes
 	if err != nil {
 		return err
 	}
+
+	// xAI transparency: record model used and system prompt.
+	brainPrimary, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
+	cfgBrain, _ := m.deps.MongoRepo.GetLLMConfig(ctx, brainPrimary)
+	if cfgBrain != nil {
+		sp.ModelUsed = cfgBrain.ProviderName
+		if cfgBrain.DefaultModel != "" {
+			sp.ModelUsed += " (" + cfgBrain.DefaultModel + ")"
+		}
+	} else {
+		sp.ModelUsed = brainPrimary
+	}
+	sp.SystemPrompt = agent.SynthesisPrepSystemPrompt
+
 	session.SynthesisPrep = sp
 
 	// modul7_summary
