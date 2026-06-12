@@ -454,6 +454,7 @@ type SLRSession struct {
 	QACalibration         *QACalibration         `bson:"qa_calibration,omitempty" json:"qa_calibration,omitempty"`
 	SensitivityAnalysis   *SensitivityAnalysis   `bson:"sensitivity_analysis,omitempty" json:"sensitivity_analysis,omitempty"`
 	SynthesisPrep         *SynthesisPrep         `bson:"synthesis_prep,omitempty" json:"synthesis_prep,omitempty"`
+	GraphExtractionSummary *GraphExtractionSummary `bson:"graph_extraction_summary,omitempty" json:"graph_extraction_summary,omitempty"`
 	Modul7Summary         *Modul7Summary         `bson:"modul7_summary,omitempty" json:"modul7_summary,omitempty"`
 	DescriptiveAnalysis   *DescriptiveAnalysis   `bson:"descriptive_analysis,omitempty" json:"descriptive_analysis,omitempty"`
 	SynthesisPathDecision *SynthesisPathDecision `bson:"synthesis_path_decision,omitempty" json:"synthesis_path_decision,omitempty"`
@@ -631,6 +632,13 @@ type SensitivityAnalysis struct {
 	Verdict   string                `bson:"verdict" json:"verdict"` // ROBUST / CONDITIONALLY ROBUST / SENSITIVE
 	Reasoning string                `bson:"reasoning,omitempty" json:"reasoning,omitempty"`
 	Markdown  string                `bson:"markdown" json:"markdown"`
+}
+
+// GraphExtractionSummary = output L5 (graph extraction to Neo4j).
+type GraphExtractionSummary struct {
+	TotalGraphed   int  `bson:"total_graphed" json:"total_graphed"`
+	TotalEligible  int  `bson:"total_eligible" json:"total_eligible"`
+	Neo4jConnected bool `bson:"neo4j_connected" json:"neo4j_connected"`
 }
 
 // SynthesisPrep = output L4 (synthesis_prep, input Modul 8).

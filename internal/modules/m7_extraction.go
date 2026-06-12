@@ -587,6 +587,26 @@ func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.
 
 	if len(papers) == 0 {
 		logger.Log(session.ID, "   [Langkah 7.5] Seluruh ekstraksi Knowledge Graph selesai.")
+
+		// Hitung summary: total papers yang sudah graph_extracted vs total eligible
+		totalGraphed, _ := collExt.CountDocuments(ctx, bson.M{
+			"session_id":      session.ID,
+			"extracted":       true,
+			"qa_rated":        true,
+			"graph_extracted": true,
+		})
+		totalEligible, _ := collExt.CountDocuments(ctx, bson.M{
+			"session_id": session.ID,
+			"extracted":  true,
+			"qa_rated":   true,
+		})
+
+		session.GraphExtractionSummary = &model.GraphExtractionSummary{
+			TotalGraphed:   int(totalGraphed),
+			TotalEligible:  int(totalEligible),
+			Neo4jConnected: m.deps.Neo4jRepo != nil,
+		}
+
 		session.Status = "M7_STEP5_WAITING_APPROVAL"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	}
