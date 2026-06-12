@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -411,19 +413,218 @@ func formatStudyType(crossrefType string) string {
 	return strings.ReplaceAll(strings.Title(crossrefType), "-", " ")
 }
 
+// countryAliases maps common alternative names/spellings to canonical country names.
+var countryAliases = map[string]string{
+	"p. r. china":                  "China",
+	"people's republic of china":   "China",
+	"pr china":                     "China",
+	"p.r. china":                   "China",
+	"p.r.china":                    "China",
+	"peoples republic of china":    "China",
+	"republic of korea":            "South Korea",
+	"rok":                          "South Korea",
+	"korea":                        "South Korea",
+	"united states":                "USA",
+	"united states of america":     "USA",
+	"u.s.a.":                       "USA",
+	"u.s.a":                        "USA",
+	"us":                           "USA",
+	"united kingdom":               "UK",
+	"england":                      "UK",
+	"scotland":                     "UK",
+	"wales":                        "UK",
+	"northern ireland":             "UK",
+	"great britain":                "UK",
+	"türkiye":                      "Turkey",
+	"turkiye":                      "Turkey",
+	"russian federation":           "Russia",
+	"viet nam":                     "Vietnam",
+	"republic of china":            "Taiwan",
+	"czech republic":               "Czechia",
+	"republic of ireland":          "Ireland",
+	"islamic republic of iran":     "Iran",
+	"iran, islamic republic of":    "Iran",
+	"kingdom of saudi arabia":      "Saudi Arabia",
+	"ksa":                          "Saudi Arabia",
+	"uae":                          "United Arab Emirates",
+	"dprk":                         "North Korea",
+	"democratic people's republic of korea": "North Korea",
+	"republic of the philippines":  "Philippines",
+	"brasil":                       "Brazil",
+	"deutschland":                  "Germany",
+	"bundesrepublik deutschland":   "Germany",
+	"republic of singapore":        "Singapore",
+	"hellenic republic":            "Greece",
+	"new zealand":                  "New Zealand",
+	"south africa":                 "South Africa",
+	"sri lanka":                    "Sri Lanka",
+	"the netherlands":              "Netherlands",
+	"holland":                      "Netherlands",
+	"ivory coast":                  "Ivory Coast",
+	"cote d'ivoire":                "Ivory Coast",
+	"republic of india":            "India",
+	"kingdom of thailand":          "Thailand",
+	"republic of indonesia":        "Indonesia",
+	"federation of malaysia":       "Malaysia",
+	"republic of turkey":           "Turkey",
+	"republic of poland":           "Poland",
+	"hong kong":                    "Hong Kong",
+	"hong kong sar":                "Hong Kong",
+	"macau":                        "Macau",
+	"macao":                        "Macau",
+	"republic of south africa":     "South Africa",
+	"saudi arabia":                 "Saudi Arabia",
+	"south korea":                  "South Korea",
+	"north korea":                  "North Korea",
+	"costa rica":                   "Costa Rica",
+	"puerto rico":                  "Puerto Rico",
+	"trinidad and tobago":          "Trinidad and Tobago",
+	"papua new guinea":             "Papua New Guinea",
+	"dominican republic":           "Dominican Republic",
+	"el salvador":                  "El Salvador",
+	"burkina faso":                 "Burkina Faso",
+	"sierra leone":                 "Sierra Leone",
+	"equatorial guinea":            "Equatorial Guinea",
+	"bosnia and herzegovina":       "Bosnia and Herzegovina",
+	"united arab emirates":         "United Arab Emirates",
+}
+
+// validCountries is a set of recognized country names (lowercase -> canonical).
+var validCountries = func() map[string]string {
+	countries := []string{
+		"Afghanistan", "Albania", "Algeria", "Andorra", "Angola",
+		"Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria",
+		"Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados",
+		"Belarus", "Belgium", "Belize", "Benin", "Bhutan",
+		"Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei",
+		"Bulgaria", "Burkina Faso", "Burundi", "Cambodia", "Cameroon",
+		"Canada", "Cape Verde", "Central African Republic", "Chad", "Chile",
+		"China", "Colombia", "Comoros", "Congo", "Costa Rica",
+		"Croatia", "Cuba", "Cyprus", "Czechia", "Denmark",
+		"Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt",
+		"El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini",
+		"Ethiopia", "Fiji", "Finland", "France", "Gabon",
+		"Gambia", "Georgia", "Germany", "Ghana", "Greece",
+		"Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana",
+		"Haiti", "Honduras", "Hong Kong", "Hungary", "Iceland",
+		"India", "Indonesia", "Iran", "Iraq", "Ireland",
+		"Israel", "Italy", "Ivory Coast", "Jamaica", "Japan",
+		"Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kuwait",
+		"Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho",
+		"Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
+		"Macau", "Madagascar", "Malawi", "Malaysia", "Maldives",
+		"Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius",
+		"Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia",
+		"Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia",
+		"Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua",
+		"Niger", "Nigeria", "North Korea", "North Macedonia", "Norway",
+		"Oman", "Pakistan", "Palau", "Palestine", "Panama",
+		"Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland",
+		"Portugal", "Puerto Rico", "Qatar", "Romania", "Russia",
+		"Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Samoa", "San Marino",
+		"Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles",
+		"Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands",
+		"Somalia", "South Africa", "South Korea", "South Sudan", "Spain",
+		"Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland",
+		"Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand",
+		"Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia",
+		"Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine",
+		"United Arab Emirates", "UK", "USA", "Uruguay", "Uzbekistan",
+		"Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen",
+		"Zambia", "Zimbabwe",
+	}
+	m := make(map[string]string, len(countries))
+	for _, c := range countries {
+		m[strings.ToLower(c)] = c
+	}
+	return m
+}()
+
+// rejectKeywords contains substrings that disqualify a component from being a country.
+var rejectKeywords = []string{
+	"university", "laboratory", "institute", "school",
+	"department", "college", "center", "centre",
+	"hospital", "faculty", "division", "program",
+	"academy", "research", "science", "technology",
+	"corporation", "company", "ltd", "inc",
+}
+
+// containsDigit returns true if the string contains any digit character.
+func containsDigit(s string) bool {
+	for _, r := range s {
+		if unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// shouldRejectComponent returns true if the component should not be considered a country.
+func shouldRejectComponent(s string) bool {
+	if len(s) < 3 {
+		return true
+	}
+	if containsDigit(s) {
+		return true
+	}
+	lower := strings.ToLower(s)
+	for _, kw := range rejectKeywords {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeCountry attempts to map a string to a canonical country name.
+// Returns the canonical name and true if found, or empty string and false.
+func normalizeCountry(s string) (string, bool) {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return "", false
+	}
+
+	// Remove trailing periods and extra whitespace
+	trimmed = strings.TrimRight(trimmed, ".")
+	trimmed = strings.TrimSpace(trimmed)
+
+	lower := strings.ToLower(trimmed)
+
+	// Check aliases first
+	if canonical, ok := countryAliases[lower]; ok {
+		return canonical, true
+	}
+
+	// Check valid countries list
+	if canonical, ok := validCountries[lower]; ok {
+		return canonical, true
+	}
+
+	return "", false
+}
+
 // extractGeographic extracts country/location information from author affiliations.
+// It scans all comma-separated components of each affiliation, validates against
+// a whitelist of known countries, normalizes aliases, and returns deduplicated
+// semicolon-separated country names.
 func extractGeographic(authors []refs.CrossrefAuthor) string {
 	locations := map[string]bool{}
 	for _, a := range authors {
 		for _, aff := range a.Affiliation {
-			if aff.Name != "" {
-				// Extract last component (usually country) from affiliation
-				parts := strings.Split(aff.Name, ",")
-				if len(parts) > 0 {
-					country := strings.TrimSpace(parts[len(parts)-1])
-					if country != "" {
-						locations[country] = true
-					}
+			if aff.Name == "" {
+				continue
+			}
+			parts := strings.Split(aff.Name, ",")
+			for _, part := range parts {
+				component := strings.TrimSpace(part)
+				if component == "" {
+					continue
+				}
+				if shouldRejectComponent(component) {
+					continue
+				}
+				if country, ok := normalizeCountry(component); ok {
+					locations[country] = true
 				}
 			}
 		}
@@ -435,6 +636,7 @@ func extractGeographic(authors []refs.CrossrefAuthor) string {
 	for loc := range locations {
 		result = append(result, loc)
 	}
+	sort.Strings(result)
 	return strings.Join(result, "; ")
 }
 
