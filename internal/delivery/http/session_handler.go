@@ -1693,7 +1693,7 @@ func (h *SessionHandler) GetXAILog(w http.ResponseWriter, req *http.Request) {
 	if stepFilter := req.URL.Query().Get("step"); stepFilter != "" {
 		var filtered []model.XAIEntry
 		for _, e := range entries {
-			if e.Step == stepFilter {
+			if strings.HasPrefix(e.Step, stepFilter) || strings.Contains(e.Step, stepFilter) {
 				filtered = append(filtered, e)
 			}
 		}
