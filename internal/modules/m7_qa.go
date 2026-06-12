@@ -1041,20 +1041,46 @@ func frameworkName(session *model.SLRSession) string {
 	return "CUSTOM"
 }
 
+// extFieldAliases maps a primary keySub to additional aliases that should also
+// be tried when searching extraction fields. This handles variations in
+// framework templates that may use different key names for the same concept.
+var extFieldAliases = map[string][]string{
+	"design": {
+		"study_type", "study type", "methodology", "research_approach",
+		"tipe_studi", "desain", "type_of_study", "research_design", "metode",
+	},
+	"geographic": {
+		"country", "countries", "location", "region",
+		"negara", "lokasi", "setting", "geographical",
+	},
+}
+
 func extFieldValue(p bson.M, keySub string) string {
 	arr, ok := p["fields"].(bson.A)
 	if !ok {
 		return ""
 	}
+
+	// Build the list of substrings to try: primary keySub first, then aliases
+	candidates := []string{strings.ToLower(keySub)}
+	if aliases, ok := extFieldAliases[strings.ToLower(keySub)]; ok {
+		for _, a := range aliases {
+			candidates = append(candidates, strings.ToLower(a))
+		}
+	}
+
 	for _, it := range arr {
 		f, ok := it.(bson.M)
 		if !ok {
 			continue
 		}
 		k, _ := f["key"].(string)
-		if strings.Contains(strings.ToLower(k), strings.ToLower(keySub)) {
-			v, _ := f["value"].(string)
-			return v
+		kLower := strings.ToLower(k)
+		for _, candidate := range candidates {
+			if strings.Contains(kLower, candidate) {
+				v, _ := f["value"].(string)
+				return v
+			}
 		}
 	}
 	return ""
