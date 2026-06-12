@@ -64,7 +64,8 @@ func hasValidGeographic(doc bson.M) bool {
 		if v == "" || v == "[NOT REPORTED]" {
 			return false
 		}
-		// Split by "; " and validate each country
+		// Split by "; " and validate each country — require CANONICAL names only.
+		// If any part is an alias (not canonical), the paper needs re-enrichment to normalize.
 		parts := strings.Split(v, "; ")
 		for _, part := range parts {
 			trimmed := strings.TrimSpace(part)
@@ -73,9 +74,8 @@ func hasValidGeographic(doc bson.M) bool {
 			}
 			lower := strings.ToLower(trimmed)
 			_, inCountries := validCountries[lower]
-			_, inAliases := countryAliases[lower]
-			if !inCountries && !inAliases {
-				return false
+			if !inCountries {
+				return false // Alias or invalid = needs re-normalization
 			}
 		}
 		return true
