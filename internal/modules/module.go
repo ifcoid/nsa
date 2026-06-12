@@ -15,7 +15,8 @@ type Module interface {
 
 // ModuleDeps berisi dependency injection yang dibutuhkan oleh setiap modul
 type ModuleDeps struct {
-	MongoRepo  *repository.MongoRepository
-	Neo4jRepo  *repository.Neo4jRepository
-	LLMFactory *llm.LLMFactory
+	MongoRepo    *repository.MongoRepository
+	Neo4jRepo    *repository.Neo4jRepository
+	Neo4jConnErr string // menyimpan error koneksi Neo4j saat startup untuk diagnostik
+	LLMFactory   *llm.LLMFactory
 }

@@ -73,13 +73,33 @@ func main() {
 	neo4jURI := os.Getenv("NEO4JURI") // sesuai file .env user
 	neo4jUser := os.Getenv("NEO4JUSER")
 	neo4jPass := os.Getenv("NEO4JPASSWORD")
-	
+
 	var neo4jRepo *repository.Neo4jRepository
-	if neo4jURI != "" {
+	var neo4jConnErr string
+
+	// Log diagnostik: apakah env vars terbaca?
+	if neo4jURI == "" {
+		log.Println("⚠️  [Neo4j] NEO4JURI env kosong - Knowledge Graph (GraphRAG) tidak aktif.")
+		neo4jConnErr = "NEO4JURI env var kosong (tidak terbaca dari environment)"
+	} else {
+		maskedURI := neo4jURI
+		if len(maskedURI) > 10 {
+			maskedURI = maskedURI[:10] + "..."
+		}
+		log.Printf("[Neo4j] NEO4JURI terbaca: %s (user=%q, pass_len=%d)", maskedURI, neo4jUser, len(neo4jPass))
+
+		if neo4jUser == "" {
+			log.Println("⚠️  [Neo4j] NEO4JUSER env kosong")
+		}
+		if neo4jPass == "" {
+			log.Println("⚠️  [Neo4j] NEO4JPASSWORD env kosong")
+		}
+
 		var err error
 		neo4jRepo, err = repository.NewNeo4jRepository(neo4jURI, neo4jUser, neo4jPass)
 		if err != nil {
-			log.Printf("⚠️  Info: Gagal terhubung ke Neo4j: %v", err)
+			neo4jConnErr = fmt.Sprintf("Neo4j connection failed (uri=%s, user=%q): %v", maskedURI, neo4jUser, err)
+			log.Printf("❌ [Neo4j] %s", neo4jConnErr)
 		} else {
 			fmt.Println("✅ Berhasil terhubung ke Neo4j (GraphRAG Ready).")
 			defer neo4jRepo.Close(ctx)
@@ -88,7 +108,7 @@ func main() {
 
 	// 5. Inisialisasi Main Orchestrator (State Machine Pipeline)
 	// Kita perbarui pipeline agar menerima factory dinamis dan neo4j
-	pipeline := orchestrator.NewSLRPipeline(mongoRepo, llmFactory, neo4jRepo)
+	pipeline := orchestrator.NewSLRPipeline(mongoRepo, llmFactory, neo4jRepo, neo4jConnErr)
 
 	// 6. Inisialisasi HTTP Router
 	router := httpapi.NewRouter(mongoRepo, pipeline)

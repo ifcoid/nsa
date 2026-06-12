@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -536,8 +537,34 @@ func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.
 	logger.Log(session.ID, "   [Langkah 7.5] Ekstraksi Knowledge Graph (Neo4j) berjalan...")
 
 	if m.deps.Neo4jRepo == nil {
-		logger.Log(session.ID, "   [ERROR] Kredensial Neo4j AuraDB belum diset di file .env (NEO4JURI, NEO4JUSER, NEO4JPASSWORD). Silakan lengkapi dan restart server.")
-		return fmt.Errorf("kredensial Neo4j AuraDB belum diset")
+		// Coba reconnect: baca ulang env vars dan coba koneksi sekali lagi
+		logger.Log(session.ID, "   [Neo4j] Koneksi nil saat startup, mencoba reconnect...")
+		neo4jURI := os.Getenv("NEO4JURI")
+		neo4jUser := os.Getenv("NEO4JUSER")
+		neo4jPass := os.Getenv("NEO4JPASSWORD")
+
+		if neo4jURI == "" {
+			errMsg := fmt.Sprintf("NEO4JURI env var kosong. Pastikan secret NEO4JURI sudah di-set di environment (Fly.io secrets / .env). Error startup sebelumnya: %s", m.deps.Neo4jConnErr)
+			logger.Logf(session.ID, "   [ERROR] %s", errMsg)
+			return fmt.Errorf("neo4j: %s", errMsg)
+		}
+
+		maskedURI := neo4jURI
+		if len(maskedURI) > 10 {
+			maskedURI = maskedURI[:10] + "..."
+		}
+		logger.Logf(session.ID, "   [Neo4j] Reconnect attempt: uri=%s, user=%q, pass_len=%d", maskedURI, neo4jUser, len(neo4jPass))
+
+		repo, err := repository.NewNeo4jRepository(neo4jURI, neo4jUser, neo4jPass)
+		if err != nil {
+			errDetail := fmt.Sprintf("Neo4j reconnect gagal (uri=%s, user=%q): %v. Error startup: %s", maskedURI, neo4jUser, err, m.deps.Neo4jConnErr)
+			logger.Logf(session.ID, "   [ERROR] %s", errDetail)
+			return fmt.Errorf("neo4j: %s", errDetail)
+		}
+
+		// Reconnect berhasil!
+		m.deps.Neo4jRepo = repo
+		logger.Log(session.ID, "   [Neo4j] Reconnect BERHASIL! Melanjutkan ekstraksi graph...")
 	}
 
 	collExt := m.deps.MongoRepo.GetExtractionCollection()

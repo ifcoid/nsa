@@ -23,11 +23,12 @@ type SLRPipeline struct {
 	mu                sync.Mutex
 }
 
-func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory, neo4jRepo *repository.Neo4jRepository) *SLRPipeline {
+func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory, neo4jRepo *repository.Neo4jRepository, neo4jConnErr string) *SLRPipeline {
 	deps := &modules.ModuleDeps{
-		MongoRepo:  mongo,
-		Neo4jRepo:  neo4jRepo,
-		LLMFactory: factory,
+		MongoRepo:    mongo,
+		Neo4jRepo:    neo4jRepo,
+		Neo4jConnErr: neo4jConnErr,
+		LLMFactory:   factory,
 	}
 
 	// Mendaftarkan semua modul dari 1 hingga 9
