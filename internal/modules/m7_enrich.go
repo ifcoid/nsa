@@ -2,11 +2,13 @@ package modules
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/ifcoid/refs"
@@ -14,26 +16,41 @@ import (
 	"nsa/internal/repository"
 )
 
-// EnrichMetadataFromCrossRef queries the extraction collection for docs that have a DOI
-// but missing/empty fields, then populates them from CrossRef metadata.
+// hasStudyDesign checks whether a doc already has a non-empty study_design value
+// in its fields array. Returns true if enrichment can be skipped.
+func hasStudyDesign(doc bson.M) bool {
+	arr, ok := doc["fields"].(primitive.A)
+	if !ok {
+		return false
+	}
+	for _, it := range arr {
+		f, ok := it.(bson.M)
+		if !ok {
+			continue
+		}
+		k, _ := f["key"].(string)
+		if strings.Contains(strings.ToLower(k), "design") || strings.Contains(strings.ToLower(k), "study_type") {
+			v, _ := f["value"].(string)
+			if v != "" && v != "[NOT REPORTED]" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// EnrichMetadataFromCrossRef queries ALL extraction docs for this session, checks
+// which ones are missing study_design data, and enriches them from CrossRef.
+// It tries DOI lookup first, then falls back to title search.
 // It returns the number of documents enriched.
 func EnrichMetadataFromCrossRef(ctx context.Context, mongoRepo *repository.MongoRepository, sessionID string) (int, error) {
 	coll := mongoRepo.GetExtractionCollection()
 
-	// Count total docs for this session before filtering
-	totalDocs, _ := coll.CountDocuments(ctx, bson.M{"session_id": sessionID})
-	logger.Logf(sessionID, "   [Enrich] Session: %s, total docs in collection: %d", sessionID, totalDocs)
+	// Query ALL docs for this session
+	filter := bson.M{"session_id": sessionID}
 
-	// Find docs with DOI but nil/empty fields
-	filter := bson.M{
-		"session_id": sessionID,
-		"$or": bson.A{
-			bson.M{"fields": bson.M{"$exists": false}},
-			bson.M{"fields": nil},
-			bson.M{"fields": bson.A{}},
-			bson.M{"fields": bson.M{"$size": 0}},
-		},
-	}
+	totalDocs, _ := coll.CountDocuments(ctx, filter)
+	logger.Logf(sessionID, "   [Enrich] Session: %s, total docs in collection: %d", sessionID, totalDocs)
 
 	cur, err := coll.Find(ctx, filter)
 	if err != nil {
@@ -44,77 +61,176 @@ func EnrichMetadataFromCrossRef(ctx context.Context, mongoRepo *repository.Mongo
 		return 0, err
 	}
 
-	logger.Logf(sessionID, "   [Enrich] Filter matched %d docs (will enrich these)", len(docs))
-
-	if len(docs) == 0 {
-		var sample bson.M
-		_ = coll.FindOne(ctx, bson.M{"session_id": sessionID}).Decode(&sample)
-		if sample != nil {
-			_, hasFields := sample["fields"]
-			logger.Logf(sessionID, "   [Enrich DEBUG] Sample doc has 'fields' key: %v, fields value type: %T", hasFields, sample["fields"])
-			logger.Logf(sessionID, "   [Enrich DEBUG] Sample DOI: %s", getStr(sample, "DOI", "doi"))
+	// Filter to only docs that need enrichment (missing study_design)
+	var needsEnrich []bson.M
+	for _, doc := range docs {
+		if !hasStudyDesign(doc) {
+			needsEnrich = append(needsEnrich, doc)
 		}
 	}
 
+	logger.Logf(sessionID, "   [Enrich] %d/%d docs need enrichment (missing study_design)", len(needsEnrich), len(docs))
+
+	if len(needsEnrich) == 0 {
+		logger.Logf(sessionID, "   [Enrich] All docs already have study_design. Nothing to do.")
+		return 0, nil
+	}
+
 	enriched := 0
-	for _, doc := range docs {
+	for i, doc := range needsEnrich {
 		if ctx.Err() != nil {
 			return enriched, ctx.Err()
 		}
 
+		title := getStr(doc, "Title", "title")
 		doi := getStr(doc, "DOI", "doi")
-		if doi == "" {
-			continue
-		}
 
 		// Normalize DOI (strip URL prefix)
 		doi = strings.TrimPrefix(doi, "https://doi.org/")
 		doi = strings.TrimPrefix(doi, "http://doi.org/")
 		doi = strings.TrimSpace(doi)
+		if doi == "-" {
+			doi = ""
+		}
 
-		if doi == "" || doi == "-" {
+		logger.Logf(sessionID, "   [Enrich] [%d/%d] Processing: %s (DOI: %s)", i+1, len(needsEnrich), truncTitle(title, 60), doi)
+
+		var work *refs.CrossrefWork
+
+		// Strategy 1: DOI lookup
+		if doi != "" {
+			w, err := refs.GetCrossrefWork(doi)
+			if err != nil {
+				logger.Logf(sessionID, "   [Enrich] DOI lookup failed for %s: %v, trying title search...", doi, err)
+			} else {
+				work = w
+			}
+		}
+
+		// Strategy 2: Title search fallback
+		if work == nil && title != "" {
+			logger.Logf(sessionID, "   [Enrich] Searching CrossRef by title: %s", truncTitle(title, 80))
+			resp, err := refs.SearchCrossrefWorks(title, 1, 0)
+			if err != nil {
+				logger.Logf(sessionID, "   [Enrich] Title search failed: %v", err)
+			} else if resp != nil && len(resp.Message.Items) > 0 {
+				work = &resp.Message.Items[0]
+				logger.Logf(sessionID, "   [Enrich] Title search found match (type: %s)", work.Type)
+			} else {
+				logger.Logf(sessionID, "   [Enrich] Title search returned no results")
+			}
+		}
+
+		if work == nil {
+			logger.Logf(sessionID, "   [Enrich] [%d/%d] No CrossRef data found, skipping", i+1, len(needsEnrich))
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
-		logger.Logf(sessionID, "   [Enrich] CrossRef lookup: %s", doi)
-
-		work, err := refs.GetCrossrefWork(doi)
-		if err != nil {
-			logger.Logf(sessionID, "   [Enrich] CrossRef error for %s: %v", doi, err)
-			time.Sleep(1 * time.Second)
+		// Build enrichment fields from CrossRef work
+		newFields := buildFieldsFromCrossRef(work)
+		if len(newFields) == 0 {
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
-		fieldsArray := buildFieldsFromCrossRef(work)
+		// Merge new fields into existing fields array
+		existingArr, _ := doc["fields"].(primitive.A)
+		mergedFields := mergeEnrichFields(existingArr, newFields)
 
 		update := bson.M{
 			"$set": bson.M{
-				"fields":        fieldsArray,
+				"fields":        mergedFields,
 				"enriched_from": "crossref",
 			},
 		}
-		_, err = coll.UpdateByID(ctx, doc["_id"], update)
+		_, err := coll.UpdateByID(ctx, doc["_id"], update)
 		if err != nil {
 			logger.Logf(sessionID, "   [Enrich] MongoDB update error: %v", err)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
 		enriched++
+		logger.Logf(sessionID, "   [Enrich] [%d/%d] Enriched successfully (type: %s)", i+1, len(needsEnrich), work.Type)
 
 		// Optionally enrich with Scopus if API key is available
-		scopusKey := os.Getenv("SCOPUS_API_KEY")
-		if scopusKey != "" {
-			enrichWithScopus(doi, scopusKey, sessionID)
+		if doi != "" {
+			scopusKey := os.Getenv("SCOPUS_API_KEY")
+			if scopusKey != "" {
+				enrichWithScopus(doi, scopusKey, sessionID)
+			}
 		}
 
-		// Rate limiting: sleep 1-2 seconds between CrossRef calls
-		time.Sleep(1500 * time.Millisecond)
+		// Rate limiting: 2 seconds between CrossRef calls (polite pool)
+		time.Sleep(2 * time.Second)
 	}
 
-	if enriched > 0 {
-		logger.Logf(sessionID, "   [Enrich] Enriched %d docs from CrossRef metadata.", enriched)
-	}
+	logger.Logf(sessionID, "   [Enrich] Done. Enriched %d/%d docs from CrossRef.", enriched, len(needsEnrich))
 	return enriched, nil
+}
+
+// mergeEnrichFields merges newly enriched fields into an existing fields array.
+// It replaces fields with matching keys that have empty/NOT_REPORTED values,
+// and appends new keys that don't exist yet.
+func mergeEnrichFields(existing primitive.A, enriched bson.A) bson.A {
+	if len(existing) == 0 {
+		return enriched
+	}
+
+	// Build a map of enriched fields by key
+	enrichMap := map[string]bson.M{}
+	for _, it := range enriched {
+		f, ok := it.(bson.M)
+		if !ok {
+			continue
+		}
+		k, _ := f["key"].(string)
+		if k != "" {
+			enrichMap[k] = f
+		}
+	}
+
+	// Update existing fields where value is empty or NOT_REPORTED
+	merged := make(bson.A, 0, len(existing))
+	usedKeys := map[string]bool{}
+	for _, it := range existing {
+		f, ok := it.(bson.M)
+		if !ok {
+			merged = append(merged, it)
+			continue
+		}
+		k, _ := f["key"].(string)
+		v, _ := f["value"].(string)
+
+		if enrichData, found := enrichMap[k]; found {
+			usedKeys[k] = true
+			if v == "" || v == "[NOT REPORTED]" {
+				merged = append(merged, enrichData)
+			} else {
+				merged = append(merged, f)
+			}
+		} else {
+			merged = append(merged, f)
+		}
+	}
+
+	// Append new keys not already in existing
+	for k, enrichData := range enrichMap {
+		if !usedKeys[k] {
+			merged = append(merged, enrichData)
+		}
+	}
+
+	return merged
+}
+
+// truncTitle truncates a title string to maxLen characters for logging.
+func truncTitle(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return fmt.Sprintf("%s...", s[:maxLen])
 }
 
 // EnrichNotReportedFields enriches specific NOT_REPORTED fields (design, geographic)
