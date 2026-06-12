@@ -20,6 +20,10 @@ import (
 func EnrichMetadataFromCrossRef(ctx context.Context, mongoRepo *repository.MongoRepository, sessionID string) (int, error) {
 	coll := mongoRepo.GetExtractionCollection()
 
+	// Count total docs for this session before filtering
+	totalDocs, _ := coll.CountDocuments(ctx, bson.M{"session_id": sessionID})
+	logger.Logf(sessionID, "   [Enrich] Session: %s, total docs in collection: %d", sessionID, totalDocs)
+
 	// Find docs with DOI but nil/empty fields
 	filter := bson.M{
 		"session_id": sessionID,
@@ -38,6 +42,18 @@ func EnrichMetadataFromCrossRef(ctx context.Context, mongoRepo *repository.Mongo
 	var docs []bson.M
 	if err := cur.All(ctx, &docs); err != nil {
 		return 0, err
+	}
+
+	logger.Logf(sessionID, "   [Enrich] Filter matched %d docs (will enrich these)", len(docs))
+
+	if len(docs) == 0 {
+		var sample bson.M
+		_ = coll.FindOne(ctx, bson.M{"session_id": sessionID}).Decode(&sample)
+		if sample != nil {
+			_, hasFields := sample["fields"]
+			logger.Logf(sessionID, "   [Enrich DEBUG] Sample doc has 'fields' key: %v, fields value type: %T", hasFields, sample["fields"])
+			logger.Logf(sessionID, "   [Enrich DEBUG] Sample DOI: %s", getStr(sample, "DOI", "doi"))
+		}
 	}
 
 	enriched := 0
