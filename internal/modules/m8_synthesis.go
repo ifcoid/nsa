@@ -137,6 +137,26 @@ func (m *M8Synthesis) runDescriptiveL1(ctx context.Context, session *model.SLRSe
 		logger.Logf(session.ID, "   [DEBUG M8] tallyExtField('geographic')=%v", geo)
 	}
 
+	// Debug: breakdown coverage status
+	coverageBreakdown := map[string]int{}
+	for _, p := range docs {
+		cov := getStr(p, "coverage")
+		if cov == "" {
+			cov = "(empty)"
+		}
+		coverageBreakdown[cov]++
+	}
+	logger.Logf(session.ID, "   [DEBUG M8] Total docs: %d, coverage breakdown: %v", len(docs), coverageBreakdown)
+
+	// Debug: check m7_fields
+	if len(docs) > 0 {
+		if docs[0]["m7_fields"] != nil {
+			logger.Logf(session.ID, "   [DEBUG M8] m7_fields type: %T", docs[0]["m7_fields"])
+		} else {
+			logger.Log(session.ID, "   [DEBUG M8] m7_fields juga nil")
+		}
+	}
+
 	md := fmt.Sprintf("## Descriptive Analysis\n\n- Total studi: **%d**\n- Study design: %s\n- Distribusi tahun: %s\n- Geografis: %s\n- Kualitas: %s\n",
 		len(docs), fmtCounts(designs), fmtCounts(years), fmtCounts(geo), fmtCounts(quality))
 
