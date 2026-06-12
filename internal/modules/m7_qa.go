@@ -1058,6 +1058,20 @@ var extFieldAliases = map[string][]string{
 func extFieldValue(p bson.M, keySub string) string {
 	arr, ok := p["fields"].(bson.A)
 	if !ok {
+		// Fallback: try as []interface{}
+		if arr2, ok2 := p["fields"].([]interface{}); ok2 {
+			arr = bson.A(arr2)
+		}
+	}
+	// Jika "fields" tidak ada atau kosong, coba "m7_fields" sebagai fallback
+	if len(arr) == 0 {
+		if arr2, ok := p["m7_fields"].(bson.A); ok {
+			arr = arr2
+		} else if arr3, ok3 := p["m7_fields"].([]interface{}); ok3 {
+			arr = bson.A(arr3)
+		}
+	}
+	if len(arr) == 0 {
 		return ""
 	}
 

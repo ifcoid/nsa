@@ -118,6 +118,25 @@ func (m *M8Synthesis) runDescriptiveL1(ctx context.Context, session *model.SLRSe
 		quality[c]++
 	}
 
+	// Debug: log field keys dari sample paper
+	if len(docs) > 0 {
+		if arr, ok := docs[0]["fields"].(bson.A); ok {
+			var keys []string
+			for _, it := range arr {
+				if f, ok := it.(bson.M); ok {
+					if k, ok := f["key"].(string); ok {
+						keys = append(keys, k)
+					}
+				}
+			}
+			logger.Logf(session.ID, "   [DEBUG M8] Sample paper field keys: %v", keys)
+		} else {
+			logger.Logf(session.ID, "   [DEBUG M8] docs[0]['fields'] type: %T (not bson.A)", docs[0]["fields"])
+		}
+		logger.Logf(session.ID, "   [DEBUG M8] tallyExtField('design')=%v", designs)
+		logger.Logf(session.ID, "   [DEBUG M8] tallyExtField('geographic')=%v", geo)
+	}
+
 	md := fmt.Sprintf("## Descriptive Analysis\n\n- Total studi: **%d**\n- Study design: %s\n- Distribusi tahun: %s\n- Geografis: %s\n- Kualitas: %s\n",
 		len(docs), fmtCounts(designs), fmtCounts(years), fmtCounts(geo), fmtCounts(quality))
 
