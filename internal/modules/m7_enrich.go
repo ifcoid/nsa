@@ -41,6 +41,48 @@ func hasStudyDesign(doc bson.M) bool {
 	return false
 }
 
+// hasValidGeographic checks whether a doc already has a geographic field with
+// all values being valid countries from the whitelist. It splits the geographic
+// value by "; " and validates each part against validCountries.
+// Returns true only if the geographic field exists, is non-empty, not NOT_REPORTED,
+// and every semicolon-separated part is a recognized country.
+func hasValidGeographic(doc bson.M) bool {
+	arr, ok := doc["fields"].(primitive.A)
+	if !ok {
+		return false
+	}
+	for _, it := range arr {
+		f, ok := it.(bson.M)
+		if !ok {
+			continue
+		}
+		k, _ := f["key"].(string)
+		if strings.ToLower(k) != "geographic" {
+			continue
+		}
+		v, _ := f["value"].(string)
+		if v == "" || v == "[NOT REPORTED]" {
+			return false
+		}
+		// Split by "; " and validate each country
+		parts := strings.Split(v, "; ")
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed == "" {
+				return false
+			}
+			lower := strings.ToLower(trimmed)
+			_, inCountries := validCountries[lower]
+			_, inAliases := countryAliases[lower]
+			if !inCountries && !inAliases {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // EnrichMetadataFromCrossRef queries ALL extraction docs for this session, checks
 // which ones are missing study_design data, and enriches them from CrossRef.
 // It tries DOI lookup first, then falls back to title search.
@@ -63,15 +105,17 @@ func EnrichMetadataFromCrossRef(ctx context.Context, mongoRepo *repository.Mongo
 		return 0, err
 	}
 
-	// Filter to only docs that need enrichment (missing study_design)
+	// Filter to only docs that need enrichment.
+	// A doc is skipped ONLY if it has BOTH a valid study_design AND valid geographic.
 	var needsEnrich []bson.M
 	for _, doc := range docs {
-		if !hasStudyDesign(doc) {
-			needsEnrich = append(needsEnrich, doc)
+		if hasStudyDesign(doc) && hasValidGeographic(doc) {
+			continue
 		}
+		needsEnrich = append(needsEnrich, doc)
 	}
 
-	logger.Logf(sessionID, "   [Enrich] %d/%d docs need enrichment (missing study_design)", len(needsEnrich), len(docs))
+	logger.Logf(sessionID, "   [Enrich] %d/%d docs need enrichment (missing study_design or invalid geographic)", len(needsEnrich), len(docs))
 
 	if len(needsEnrich) == 0 {
 		logger.Logf(sessionID, "   [Enrich] All docs already have study_design. Nothing to do.")
@@ -173,11 +217,18 @@ func EnrichMetadataFromCrossRef(ctx context.Context, mongoRepo *repository.Mongo
 }
 
 // mergeEnrichFields merges newly enriched fields into an existing fields array.
-// It replaces fields with matching keys that have empty/NOT_REPORTED values,
-// and appends new keys that don't exist yet.
+// For "study_design" and "geographic" keys, it ALWAYS uses the enriched data
+// (overwrites stale/existing values). For other keys, it only replaces fields
+// that have empty/NOT_REPORTED values, and appends new keys that don't exist yet.
 func mergeEnrichFields(existing primitive.A, enriched bson.A) bson.A {
 	if len(existing) == 0 {
 		return enriched
+	}
+
+	// Keys that should always be overwritten with fresh enriched data
+	alwaysOverwrite := map[string]bool{
+		"study_design": true,
+		"geographic":   true,
 	}
 
 	// Build a map of enriched fields by key
@@ -193,7 +244,7 @@ func mergeEnrichFields(existing primitive.A, enriched bson.A) bson.A {
 		}
 	}
 
-	// Update existing fields where value is empty or NOT_REPORTED
+	// Update existing fields
 	merged := make(bson.A, 0, len(existing))
 	usedKeys := map[string]bool{}
 	for _, it := range existing {
@@ -207,7 +258,7 @@ func mergeEnrichFields(existing primitive.A, enriched bson.A) bson.A {
 
 		if enrichData, found := enrichMap[k]; found {
 			usedKeys[k] = true
-			if v == "" || v == "[NOT REPORTED]" {
+			if alwaysOverwrite[k] || v == "" || v == "[NOT REPORTED]" {
 				merged = append(merged, enrichData)
 			} else {
 				merged = append(merged, f)
