@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -155,6 +156,16 @@ func (m *M8Synthesis) runDescriptiveL1(ctx context.Context, session *model.SLRSe
 		} else {
 			logger.Log(session.ID, "   [DEBUG M8] m7_fields juga nil")
 		}
+	}
+
+	// Debug: dump all top-level keys of first doc
+	if len(docs) > 0 {
+		var allKeys []string
+		for k := range docs[0] {
+			allKeys = append(allKeys, k)
+		}
+		sort.Strings(allKeys)
+		logger.Logf(session.ID, "   [DEBUG M8] docs[0] ALL KEYS: %v", allKeys)
 	}
 
 	md := fmt.Sprintf("## Descriptive Analysis\n\n- Total studi: **%d**\n- Study design: %s\n- Distribusi tahun: %s\n- Geografis: %s\n- Kualitas: %s\n",
