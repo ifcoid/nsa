@@ -32,6 +32,11 @@ func normalizeDOIForRAG(d string) string {
 	return d
 }
 
+// NormalizeDOIForRAG is the exported version of normalizeDOIForRAG for use outside the modules package.
+func NormalizeDOIForRAG(d string) string {
+	return normalizeDOIForRAG(d)
+}
+
 type ragChunk struct {
 	idx     float64
 	content string

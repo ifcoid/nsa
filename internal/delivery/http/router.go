@@ -112,6 +112,12 @@ func (r *Router) registerRoutes() {
 	// Modul 7 QA Recalculation
 	protected.HandleFunc("POST /api/sessions/{id}/m7/recalculate-qa", r.sessionHndlr.RecalculateQA)
 
+	// Modul 7 QA Re-rate single paper
+	protected.HandleFunc("POST /api/sessions/{id}/m7/rerate-paper", r.sessionHndlr.ReratePaper)
+
+	// Modul 7 QA Prompt (xAI transparency)
+	protected.HandleFunc("GET /api/sessions/{id}/m7/qa-prompt", r.sessionHndlr.GetQAPrompt)
+
 	// Modul 8b (Bibliometric/SLNA)
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/vosviewer", r.sessionHndlr.SubmitVOSviewer)
 	

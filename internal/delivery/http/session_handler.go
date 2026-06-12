@@ -1604,3 +1604,72 @@ func (h *SessionHandler) RecalculateQA(w http.ResponseWriter, req *http.Request)
 		"kappa":       session.QAThreshold.Kappa,
 	})
 }
+
+// ReratePaper re-rates a single paper using dual raters.
+// POST /api/sessions/{id}/m7/rerate-paper
+func (h *SessionHandler) ReratePaper(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	var payload struct {
+		PaperID string `json:"paper_id"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil || payload.PaperID == "" {
+		sendJSONError(w, http.StatusBadRequest, "paper_id is required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Safety check: only allow re-rating when at M7_STEP3 or beyond
+	if !strings.Contains(session.Status, "M7_STEP3") && !strings.Contains(session.Status, "M7_STEP4") {
+		sendJSONError(w, http.StatusBadRequest, fmt.Sprintf("Re-rating not allowed in status: %s (must be at M7_STEP3 or later)", session.Status))
+		return
+	}
+
+	result, err := modules.RerateSinglePaper(ctx, h.mongoRepo, h.pipeline.GetLLMFactory(), session, payload.PaperID)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Re-rating failed: %v", err))
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, result)
+}
+
+// GetQAPrompt returns the system prompt used by QA raters for xAI transparency.
+// GET /api/sessions/{id}/m7/qa-prompt
+func (h *SessionHandler) GetQAPrompt(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	if session.QAThreshold == nil {
+		sendJSONError(w, http.StatusBadRequest, "QA threshold not configured for this session")
+		return
+	}
+
+	prompt := modules.BuildQASystemPrompt(session)
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"system_prompt":  prompt,
+		"tool":           session.QAThreshold.Tool,
+		"categorization": session.QAThreshold.Categorization,
+		"threshold":      session.QAThreshold.Threshold,
+	})
+}
