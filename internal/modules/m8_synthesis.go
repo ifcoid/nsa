@@ -248,6 +248,22 @@ func (m *M8Synthesis) runSynthesisL2(ctx context.Context, session *model.SLRSess
 	if err != nil {
 		return err
 	}
+
+	// Capture model name for xAI transparency.
+	brainPrimary, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
+	cfgBrain, _ := m.deps.MongoRepo.GetLLMConfig(ctx, brainPrimary)
+	var modelName string
+	if cfgBrain != nil {
+		modelName = cfgBrain.ProviderName
+		if cfgBrain.DefaultModel != "" {
+			modelName += " (" + cfgBrain.DefaultModel + ")"
+		}
+	} else {
+		modelName = brainPrimary
+	}
+
+	decision.ModelUsed = modelName
+	decision.SystemPrompt = agent.DecidePathSystemPrompt
 	session.SynthesisPathDecision = decision
 
 	dataJSON := m.dataSummaryJSON(ctx, session)
@@ -256,14 +272,26 @@ func (m *M8Synthesis) runSynthesisL2(ctx context.Context, session *model.SLRSess
 		if err != nil {
 			return err
 		}
-		session.SynthesisResults = &model.SynthesisResults{Path: decision.Verdict, Markdown: scaf.Markdown, ForestPlotScript: scaf.ForestPlotScript}
+		session.SynthesisResults = &model.SynthesisResults{
+			Path:             decision.Verdict,
+			Markdown:         scaf.Markdown,
+			ForestPlotScript: scaf.ForestPlotScript,
+			ModelUsed:        modelName,
+			SystemPrompt:     agent.MetaScaffoldSystemPrompt,
+		}
 	} else {
 		rqJSON, _ := json.Marshal(session.ResearchQuestions)
-		md, err := ag.NarrativeSynthesis(ctx, frameworkName(session), dataJSON, string(rqJSON))
+		framework := frameworkName(session)
+		md, err := ag.NarrativeSynthesis(ctx, framework, dataJSON, string(rqJSON))
 		if err != nil {
 			return err
 		}
-		session.SynthesisResults = &model.SynthesisResults{Path: decision.Verdict, Markdown: md}
+		session.SynthesisResults = &model.SynthesisResults{
+			Path:         decision.Verdict,
+			Markdown:     md,
+			ModelUsed:    modelName,
+			SystemPrompt: fmt.Sprintf(agent.NarrativeSynthesisSystemPromptTemplate, framework),
+		}
 	}
 
 	logger.Logf(session.ID, "   [System] Synthesis path: %s.\n", decision.Verdict)

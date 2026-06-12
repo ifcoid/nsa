@@ -21,6 +21,8 @@ type SynthesisPathDecision struct {
 	Verdict       string `bson:"verdict" json:"verdict"` // JALUR A / JALUR B / HYBRID
 	CriteriaCheck string `bson:"criteria_check" json:"criteria_check"`
 	Rationale     string `bson:"rationale" json:"rationale"`
+	ModelUsed     string `bson:"model_used,omitempty" json:"model_used,omitempty"`
+	SystemPrompt  string `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 }
 
 // SynthesisResults = output L2 fase 2/3 (synthesis_results).
@@ -28,6 +30,8 @@ type SynthesisResults struct {
 	Path             string `bson:"path" json:"path"`
 	Markdown         string `bson:"markdown" json:"markdown"`
 	ForestPlotScript string `bson:"forest_plot_script,omitempty" json:"forest_plot_script,omitempty"`
+	ModelUsed        string `bson:"model_used,omitempty" json:"model_used,omitempty"`
+	SystemPrompt     string `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 }
 
 // GradeEvidence = output L3 (grade_evidence_table + robustness).
