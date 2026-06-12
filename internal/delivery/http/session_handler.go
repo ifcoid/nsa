@@ -1721,14 +1721,19 @@ func (h *SessionHandler) EnrichMetadata(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	enriched, err := modules.EnrichMetadataFromCrossRef(ctx, h.mongoRepo, id)
-	if err != nil {
-		sendJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Enrichment failed: %v", err))
-		return
-	}
+	// Jalankan enrichment di background agar log stream ke WebSocket
+	go func() {
+		bgCtx := context.Background()
+		enriched, err := modules.EnrichMetadataFromCrossRef(bgCtx, h.mongoRepo, id)
+		if err != nil {
+			logger.Logf(id, "   [Enrich] ERROR: %v", err)
+		} else {
+			logger.Logf(id, "   [Enrich] SELESAI: %d paper diperkaya metadata-nya.", enriched)
+		}
+	}()
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"message":        "Metadata enrichment completed",
-		"enriched_count": enriched,
+		"message":        "Enrichment sedang berjalan di background. Lihat Agent Real-Time Logs.",
+		"enriched_count": -1, // -1 indicates async/in-progress
 	})
 }
