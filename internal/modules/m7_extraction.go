@@ -613,8 +613,7 @@ func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.
 
 	logger.Logf(session.ID, "   [Graph] Memproses batch %d dokumen untuk GraphRAG...\n", len(papers))
 
-	rp1, _ := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
-	brain, err := m.deps.LLMFactory.CreateClient(ctx, rp1)
+	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
 		return fmt.Errorf("llm init: %w", err)
 	}
