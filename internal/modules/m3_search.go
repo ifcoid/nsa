@@ -195,6 +195,8 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 
 	case "M3_STEP3_APPROVED":
 		logger.Log(session.ID, "   [Langkah 3.3] Search String disetujui! Lanjut ke Pre-Validasi & Eksekusi...")
+		// Clear feedback from M4 revision to avoid polluting M3_STEP4_EVALUATION
+		session.Feedback = ""
 		session.Status = "M3_STEP4_PRE_VALIDATION"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 

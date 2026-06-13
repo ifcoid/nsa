@@ -97,8 +97,10 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 	case "M4_STEP1_NEEDS_REVISION":
 		logger.Log(session.ID, "   [System] Mengembalikan status riset ke perbaikan Search String (Modul 3).")
 		session.Status = "M3_STEP3_NEEDS_REVISION" 
-		// Set feedback agar agen tahu kenapa kita balik
+		// Set feedback untuk revisi M3, tapi clear SearchLog agar M3 Step 4 tidak skip execution
 		session.Feedback = fmt.Sprintf("Sanity check gagal di Modul 4. Rekomendasi: %s", session.DataMiningLog.SanityCheck.Recommendation)
+		session.SearchLog = nil
+		session.Modul3Summary = nil
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M4_STEP1_APPROVED":
