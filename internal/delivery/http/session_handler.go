@@ -1828,7 +1828,17 @@ func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 		year := risGetStr(p, "Year", "year")
 		journal := risGetStr(p, "Journal", "journal")
 		doi := risGetStr(p, "DOI", "doi")
-		keywords := risGetStr(p, "Keywords", "keywords")
+		authorKw := risGetStr(p, "Keywords", "keywords")
+		indexKw := risGetStr(p, "IndexKeywords", "index_keywords")
+		// Combine author keywords and index keywords
+		var kwParts []string
+		if authorKw != "" {
+			kwParts = append(kwParts, authorKw)
+		}
+		if indexKw != "" {
+			kwParts = append(kwParts, indexKw)
+		}
+		keywords := strings.Join(kwParts, "; ")
 		abstract := risGetStr(p, "Abstract", "abstract")
 
 		// If keywords empty, try extraction docs subject field
