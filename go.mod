@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	aidanwoods.dev/go-paseto v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/ifcoid/refs v0.3.0
+	github.com/ifcoid/refs v0.3.1-0.20260613101101-7568d818db1a
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.54.1
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
@@ -13,8 +13,6 @@ require (
 	golang.org/x/crypto v0.52.0
 	google.golang.org/genai v1.57.0
 )
-
-replace github.com/ifcoid/refs => ../refs
 
 require (
 	aidanwoods.dev/go-result v0.3.1 // indirect
