@@ -1737,3 +1737,243 @@ func (h *SessionHandler) EnrichMetadata(w http.ResponseWriter, req *http.Request
 		"enriched_count": -1, // -1 indicates async/in-progress
 	})
 }
+
+// ExportBibTeX generates a BibTeX file (.bib) compatible with VOSviewer from all screening papers.
+// GET /api/sessions/{id}/m8b/export-bibtex
+func (h *SessionHandler) ExportBibTeX(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	_, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Get all screening papers
+	papers, err := h.mongoRepo.GetAllScreeningPapers(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to retrieve papers: "+err.Error())
+		return
+	}
+
+	// Get extraction docs for fallback keywords (subject field from enrichment)
+	extKeywordsMap := make(map[string]string) // DOI -> keywords from extraction subject
+	extColl := h.mongoRepo.GetExtractionCollection()
+	if extColl != nil {
+		cur, err := extColl.Find(ctx, bson.M{"session_id": id})
+		if err == nil {
+			var extDocs []bson.M
+			_ = cur.All(ctx, &extDocs)
+			for _, doc := range extDocs {
+				doi := bibGetExtDOI(doc)
+				if doi == "" {
+					continue
+				}
+				subj := bibExtFieldValue(doc, "subject")
+				if subj != "" {
+					extKeywordsMap[strings.ToLower(doi)] = subj
+				}
+			}
+		}
+	}
+
+	// Generate BibTeX entries
+	var buf bytes.Buffer
+	for i, p := range papers {
+		title := bibGetStr(p, "Title", "title")
+		authors := bibGetStr(p, "Authors", "authors")
+		year := bibGetStr(p, "Year", "year")
+		journal := bibGetStr(p, "Journal", "journal")
+		doi := bibGetStr(p, "DOI", "doi")
+		keywords := bibGetStr(p, "Keywords", "keywords")
+		abstract := bibGetStr(p, "Abstract", "abstract")
+
+		// If keywords empty, try extraction docs subject field
+		if keywords == "" && doi != "" {
+			if subj, ok := extKeywordsMap[strings.ToLower(doi)]; ok {
+				keywords = subj
+			}
+		}
+
+		// Generate citation key: first author last name + year + letter
+		citeKey := bibMakeCiteKey(authors, year, i)
+
+		// Determine entry type
+		entryType := "article"
+		if strings.Contains(strings.ToLower(journal), "conference") ||
+			strings.Contains(strings.ToLower(journal), "proceedings") ||
+			strings.Contains(strings.ToLower(journal), "symposium") ||
+			strings.Contains(strings.ToLower(journal), "workshop") {
+			entryType = "inproceedings"
+		}
+
+		buf.WriteString(fmt.Sprintf("@%s{%s,\n", entryType, citeKey))
+		if authors != "" {
+			buf.WriteString(fmt.Sprintf("  author = {%s},\n", bibFormatAuthors(authors)))
+		}
+		if title != "" {
+			buf.WriteString(fmt.Sprintf("  title = {%s},\n", bibEscapeStr(title)))
+		}
+		if entryType == "inproceedings" {
+			if journal != "" {
+				buf.WriteString(fmt.Sprintf("  booktitle = {%s},\n", bibEscapeStr(journal)))
+			}
+		} else {
+			if journal != "" {
+				buf.WriteString(fmt.Sprintf("  journal = {%s},\n", bibEscapeStr(journal)))
+			}
+		}
+		if year != "" {
+			buf.WriteString(fmt.Sprintf("  year = {%s},\n", year))
+		}
+		if doi != "" {
+			buf.WriteString(fmt.Sprintf("  doi = {%s},\n", doi))
+		}
+		if keywords != "" {
+			buf.WriteString(fmt.Sprintf("  keywords = {%s},\n", bibFormatKeywords(keywords)))
+		}
+		if abstract != "" {
+			buf.WriteString(fmt.Sprintf("  abstract = {%s},\n", bibEscapeStr(abstract)))
+		}
+		buf.WriteString("}\n\n")
+	}
+
+	// Return as file download
+	w.Header().Set("Content-Type", "application/x-bibtex")
+	w.Header().Set("Content-Disposition", `attachment; filename="slr_papers.bib"`)
+	w.WriteHeader(http.StatusOK)
+	w.Write(buf.Bytes())
+}
+
+// --- BibTeX helper functions ---
+
+func bibGetStr(p map[string]interface{}, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := p[k].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func bibGetExtDOI(doc bson.M) string {
+	if d, ok := doc["doi"].(string); ok && d != "" {
+		return d
+	}
+	if d, ok := doc["DOI"].(string); ok && d != "" {
+		return d
+	}
+	return ""
+}
+
+func bibExtFieldValue(doc bson.M, keySub string) string {
+	arr, ok := doc["fields"].(bson.A)
+	if !ok {
+		if arr2, ok2 := doc["fields"].([]interface{}); ok2 {
+			arr = bson.A(arr2)
+		}
+	}
+	if len(arr) == 0 {
+		if arr2, ok := doc["m7_fields"].(bson.A); ok {
+			arr = arr2
+		} else if arr3, ok3 := doc["m7_fields"].([]interface{}); ok3 {
+			arr = bson.A(arr3)
+		}
+	}
+	if len(arr) == 0 {
+		return ""
+	}
+	target := strings.ToLower(keySub)
+	for _, it := range arr {
+		f, ok := it.(bson.M)
+		if !ok {
+			continue
+		}
+		key := ""
+		if k, ok := f["key"].(string); ok {
+			key = strings.ToLower(k)
+		}
+		if strings.Contains(key, target) {
+			if v, ok := f["value"].(string); ok && v != "" {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+func bibMakeCiteKey(authors, year string, idx int) string {
+	// Extract first author's last name
+	lastName := "unknown"
+	if authors != "" {
+		// Handle "LastName, F." or "LastName F" or "F. LastName"
+		parts := strings.Split(authors, ",")
+		first := strings.TrimSpace(parts[0])
+		// Take first word as potential last name
+		words := strings.Fields(first)
+		if len(words) > 0 {
+			// Use last word if it looks like initials come first (e.g. "F. LastName")
+			candidate := words[0]
+			if len(candidate) <= 2 || strings.HasSuffix(candidate, ".") {
+				if len(words) > 1 {
+					candidate = words[len(words)-1]
+				}
+			}
+			lastName = strings.ToLower(candidate)
+			// Remove non-alphanumeric
+			cleaned := strings.Map(func(r rune) rune {
+				if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+					return r
+				}
+				return -1
+			}, lastName)
+			if cleaned != "" {
+				lastName = cleaned
+			}
+		}
+	}
+	if year == "" {
+		year = "0000"
+	}
+	// Add suffix letter to avoid duplicates
+	suffix := string(rune('a' + (idx % 26)))
+	return lastName + year + suffix
+}
+
+func bibFormatAuthors(authors string) string {
+	// VOSviewer expects "LastName, F. and LastName, F." format
+	// If already semicolon-separated, convert to " and "
+	authors = strings.ReplaceAll(authors, " ; ", " and ")
+	authors = strings.ReplaceAll(authors, "; ", " and ")
+	authors = strings.ReplaceAll(authors, ";", " and ")
+	return bibEscapeStr(authors)
+}
+
+func bibFormatKeywords(kw string) string {
+	// Normalize keyword separators to semicolons for VOSviewer
+	kw = strings.ReplaceAll(kw, "|", ";")
+	// Ensure space after semicolons
+	parts := strings.Split(kw, ";")
+	var cleaned []string
+	for _, p := range parts {
+		t := strings.TrimSpace(p)
+		if t != "" {
+			cleaned = append(cleaned, t)
+		}
+	}
+	return bibEscapeStr(strings.Join(cleaned, "; "))
+}
+
+func bibEscapeStr(s string) string {
+	// Escape special BibTeX characters
+	s = strings.ReplaceAll(s, "&", "\\&")
+	s = strings.ReplaceAll(s, "%", "\\%")
+	s = strings.ReplaceAll(s, "#", "\\#")
+	s = strings.ReplaceAll(s, "_", "\\_")
+	return s
+}
