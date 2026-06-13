@@ -609,6 +609,28 @@ func (r *MongoRepository) UpdateEmbedConfig(ctx context.Context, cfg *model.Embe
 	return err
 }
 
+// GetScopusConfig mengambil konfigurasi API key Scopus (runtime, _id="default").
+func (r *MongoRepository) GetScopusConfig(ctx context.Context) *model.ScopusConfig {
+	var cfg model.ScopusConfig
+	err := r.client.Database(r.dbName).Collection("scopus_config").
+		FindOne(ctx, bson.M{"_id": "default"}).Decode(&cfg)
+	if err != nil {
+		return &model.ScopusConfig{}
+	}
+	return &cfg
+}
+
+// UpdateScopusConfig menyimpan API key Scopus (upsert, _id="default").
+func (r *MongoRepository) UpdateScopusConfig(ctx context.Context, cfg *model.ScopusConfig) error {
+	cfg.ID = "default"
+	cfg.UpdatedAt = time.Now()
+	filter := bson.M{"_id": "default"}
+	update := bson.M{"$set": cfg}
+	opts := options.Update().SetUpsert(true)
+	_, err := r.client.Database(r.dbName).Collection("scopus_config").UpdateOne(ctx, filter, update, opts)
+	return err
+}
+
 // UpdateLLMRoles menyimpan pemetaan peran->provider (upsert, _id="default").
 func (r *MongoRepository) UpdateLLMRoles(ctx context.Context, roles *model.LLMRoles) error {
 	roles.ID = "default"

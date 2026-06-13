@@ -7,10 +7,12 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"go.mongodb.org/mongo-driver/bson"
 
+	"github.com/ifcoid/refs"
 	"nsa/internal/agent"
 	"nsa/internal/llm"
 	"nsa/internal/logger"
@@ -138,6 +140,38 @@ func (m *M8bBibliometric) runThesaurusL1(ctx context.Context, session *model.SLR
 		}
 	}
 
+	// ---- Fallback source 1b: Scopus author keywords via API ----
+	kwFromScopus := 0
+	scopusCfg := m.deps.MongoRepo.GetScopusConfig(ctx)
+	if scopusCfg.APIKey != "" {
+		scopusPaperCount := 0
+		for _, p := range papers {
+			doi := getStr(p, "DOI", "doi")
+			if doi == "" {
+				continue
+			}
+			ftResp, err := refs.RetrieveFullText(doi, scopusCfg.APIKey)
+			if err != nil {
+				continue
+			}
+			subjects := ftResp.FullTextRetrievalResponse.CoreData.Subjects
+			for _, subj := range subjects {
+				t := strings.ToLower(strings.TrimSpace(subj.Name))
+				if len(t) > 1 {
+					if _, exists := freq[t]; !exists {
+						kwFromScopus++
+					}
+					freq[t]++
+				}
+			}
+			if len(subjects) > 0 {
+				scopusPaperCount++
+			}
+			time.Sleep(2 * time.Second) // Scopus rate limit
+		}
+		logger.Logf(session.ID, "   [Biblio] Scopus keywords fetched: %d terms from %d papers\n", kwFromScopus, scopusPaperCount)
+	}
+
 	// ---- Fallback source 2: extract meaningful terms from Title ----
 	kwFromTitles := 0
 	for _, p := range papers {
@@ -168,8 +202,8 @@ func (m *M8bBibliometric) runThesaurusL1(ctx context.Context, session *model.SLR
 		}
 	}
 
-	logger.Logf(session.ID, "   [Biblio] Keyword sources: Keywords=%d, Subjects=%d, Titles=%d, Abstracts=%d\n",
-		kwFromKeywords, kwFromSubjects, kwFromTitles, kwFromAbstracts)
+	logger.Logf(session.ID, "   [Biblio] Keyword sources: Keywords=%d, Subjects=%d, Scopus=%d, Titles=%d, Abstracts=%d\n",
+		kwFromKeywords, kwFromSubjects, kwFromScopus, kwFromTitles, kwFromAbstracts)
 	// Ambil sampel top-150 untuk LLM.
 	type kv struct {
 		k string

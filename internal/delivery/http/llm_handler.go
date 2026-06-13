@@ -137,6 +137,31 @@ func (h *LLMHandler) UpdateEmbedConfig(w http.ResponseWriter, req *http.Request)
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "Embed config updated"})
 }
 
+// GetScopusConfig mengembalikan konfigurasi Scopus API key (api_key disembunyikan).
+func (h *LLMHandler) GetScopusConfig(w http.ResponseWriter, req *http.Request) {
+	cfg := h.mongoRepo.GetScopusConfig(context.Background())
+	keySet := cfg.APIKey != ""
+	cfg.APIKey = ""
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"config": cfg, "key_set": keySet})
+}
+
+// UpdateScopusConfig menyimpan API key Scopus (runtime). api_key kosong -> pertahankan lama.
+func (h *LLMHandler) UpdateScopusConfig(w http.ResponseWriter, req *http.Request) {
+	var cfg model.ScopusConfig
+	if err := json.NewDecoder(req.Body).Decode(&cfg); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if cfg.APIKey == "" {
+		cfg.APIKey = h.mongoRepo.GetScopusConfig(context.Background()).APIKey // preserve
+	}
+	if err := h.mongoRepo.UpdateScopusConfig(context.Background(), &cfg); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update scopus config: "+err.Error())
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "Scopus config updated"})
+}
+
 // GetRoles mengembalikan pemetaan peran->provider (Model Routing).
 func (h *LLMHandler) GetRoles(w http.ResponseWriter, req *http.Request) {
 	roles := h.mongoRepo.GetLLMRoles(context.Background())

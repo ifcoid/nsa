@@ -141,6 +141,8 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("PUT /api/github/config", r.llmHndlr.UpdateGitHubConfig)
 	protected.HandleFunc("GET /api/embed/config", r.llmHndlr.GetEmbedConfig)
 	protected.HandleFunc("PUT /api/embed/config", r.llmHndlr.UpdateEmbedConfig)
+	protected.HandleFunc("GET /api/scopus/config", r.llmHndlr.GetScopusConfig)
+	protected.HandleFunc("PUT /api/scopus/config", r.llmHndlr.UpdateScopusConfig)
 	
 	// Apply Auth Middleware to all protected routes
 	r.mux.Handle("/api/sessions", middleware.AuthMiddleware(protected))
@@ -148,6 +150,7 @@ func (r *Router) registerRoutes() {
 	r.mux.Handle("/api/llm/", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/github/", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/embed/", middleware.AuthMiddleware(protected))
+	r.mux.Handle("/api/scopus/", middleware.AuthMiddleware(protected))
 	
 	// WebSocket endpoint untuk logs (Tidak diproteksi ketat karena via URL /ws/, jika butuh auth bisa pasang token di query)
 	r.mux.HandleFunc("GET /api/ws/logs/{id}", LogStreamHandler)
