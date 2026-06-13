@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +21,6 @@ import (
 	"nsa/internal/parser"
 	"nsa/internal/repository"
 
-	"github.com/ifcoid/refs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -1895,10 +1895,16 @@ func (h *SessionHandler) ExportBibTeX(w http.ResponseWriter, req *http.Request) 
 	h.ExportRIS(w, req)
 }
 
-// EnrichScopusKeywords fetches keywords from Scopus API for each paper's DOI and stores
-// them in the extraction doc field "scopus_keywords". Runs asynchronously in a goroutine.
+// EnrichScopusKeywords - DEPRECATED. This endpoint has been replaced by CSV upload.
 // POST /api/sessions/{id}/m8b/enrich-scopus-keywords
 func (h *SessionHandler) EnrichScopusKeywords(w http.ResponseWriter, req *http.Request) {
+	sendJSONError(w, http.StatusGone, "Fitur ini telah diganti dengan Upload CSV Scopus")
+}
+
+// UploadScopusCSV accepts a multipart CSV file exported from Scopus, parses it,
+// matches rows by DOI to extraction docs, and stores keywords/affiliations/document_type.
+// POST /api/sessions/{id}/m8b/upload-scopus-csv
+func (h *SessionHandler) UploadScopusCSV(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {
 		sendJSONError(w, http.StatusBadRequest, "Session ID required")
@@ -1912,161 +1918,168 @@ func (h *SessionHandler) EnrichScopusKeywords(w http.ResponseWriter, req *http.R
 		return
 	}
 
-	// Check Scopus API key
-	scopusCfg := h.mongoRepo.GetScopusConfig(ctx)
-	if scopusCfg == nil || scopusCfg.APIKey == "" {
-		sendJSONError(w, http.StatusBadRequest, "Scopus API key belum di-set di Pengaturan")
+	// Parse multipart form (max 10MB)
+	if err := req.ParseMultipartForm(10 << 20); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Gagal parse form: "+err.Error())
 		return
 	}
 
-	// Spawn goroutine for async enrichment
-	go func() {
-		bgCtx := context.Background()
-		apiKey := scopusCfg.APIKey
+	file, _, err := req.FormFile("file")
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, "File 'file' tidak ditemukan dalam form")
+		return
+	}
+	defer file.Close()
 
-		// Get all screening papers with DOI
-		papers, err := h.mongoRepo.GetAllScreeningPapers(bgCtx, id)
+	// Read all content
+	rawBytes, err := io.ReadAll(file)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal membaca file: "+err.Error())
+		return
+	}
+
+	// Strip UTF-8 BOM if present
+	rawBytes = bytes.TrimPrefix(rawBytes, []byte("\xef\xbb\xbf"))
+
+	// Parse CSV
+	reader := csv.NewReader(bytes.NewReader(rawBytes))
+	reader.LazyQuotes = true
+	reader.FieldsPerRecord = -1 // allow variable field count
+
+	records, err := reader.ReadAll()
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Gagal parse CSV: "+err.Error())
+		return
+	}
+
+	if len(records) < 2 {
+		sendJSONError(w, http.StatusBadRequest, "CSV kosong atau hanya header")
+		return
+	}
+
+	// Build header index map
+	header := records[0]
+	colIdx := make(map[string]int)
+	for i, col := range header {
+		colIdx[strings.TrimSpace(col)] = i
+	}
+
+	// Check required DOI column
+	doiCol, hasDOI := colIdx["DOI"]
+	if !hasDOI {
+		sendJSONError(w, http.StatusBadRequest, "Kolom 'DOI' tidak ditemukan di header CSV")
+		return
+	}
+
+	// Get column indices for fields we want
+	authorKwCol, hasAuthorKw := colIdx["Author Keywords"]
+	indexKwCol, hasIndexKw := colIdx["Index Keywords"]
+	affiliationsCol, hasAffiliations := colIdx["Affiliations"]
+	docTypeCol, hasDocType := colIdx["Document Type"]
+
+	extColl := h.mongoRepo.GetExtractionCollection()
+	if extColl == nil {
+		sendJSONError(w, http.StatusInternalServerError, "Extraction collection tidak tersedia")
+		return
+	}
+
+	matched := 0
+	skipped := 0
+	totalRows := len(records) - 1 // exclude header
+
+	for _, row := range records[1:] {
+		if doiCol >= len(row) {
+			skipped++
+			continue
+		}
+
+		doi := strings.TrimSpace(row[doiCol])
+		if doi == "" {
+			skipped++
+			continue
+		}
+
+		// Normalize DOI
+		doi = strings.TrimPrefix(doi, "https://doi.org/")
+		doi = strings.TrimPrefix(doi, "http://doi.org/")
+		doi = strings.TrimSpace(doi)
+
+		if doi == "" {
+			skipped++
+			continue
+		}
+
+		doiLower := strings.ToLower(doi)
+
+		// Build keywords string: Author Keywords + "; " + Index Keywords
+		var kwParts []string
+		if hasAuthorKw && authorKwCol < len(row) {
+			ak := strings.TrimSpace(row[authorKwCol])
+			if ak != "" {
+				kwParts = append(kwParts, ak)
+			}
+		}
+		if hasIndexKw && indexKwCol < len(row) {
+			ik := strings.TrimSpace(row[indexKwCol])
+			if ik != "" {
+				kwParts = append(kwParts, ik)
+			}
+		}
+		keywords := strings.Join(kwParts, "; ")
+
+		// Build update set
+		updateSet := bson.M{}
+		if keywords != "" {
+			updateSet["scopus_keywords"] = keywords
+		}
+		if hasAffiliations && affiliationsCol < len(row) {
+			aff := strings.TrimSpace(row[affiliationsCol])
+			if aff != "" {
+				updateSet["scopus_affiliations"] = aff
+			}
+		}
+		if hasDocType && docTypeCol < len(row) {
+			dt := strings.TrimSpace(row[docTypeCol])
+			if dt != "" {
+				updateSet["scopus_document_type"] = dt
+			}
+		}
+
+		if len(updateSet) == 0 {
+			skipped++
+			continue
+		}
+
+		// Match extraction doc by DOI (case-insensitive)
+		filter := bson.M{
+			"session_id": id,
+			"$or": bson.A{
+				bson.M{"doi": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+				bson.M{"DOI": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+			},
+		}
+		update := bson.M{"$set": updateSet}
+
+		res, err := extColl.UpdateOne(ctx, filter, update)
 		if err != nil {
-			logger.Logf(id, "[Scopus Enrich] ERROR: gagal ambil papers: %v", err)
-			return
+			logger.Logf(id, "[Scopus CSV] DOI %s error update: %v", doi, err)
+			skipped++
+			continue
 		}
 
-		extColl := h.mongoRepo.GetExtractionCollection()
-		if extColl == nil {
-			logger.Logf(id, "[Scopus Enrich] ERROR: extraction collection nil")
-			return
+		if res.MatchedCount == 0 {
+			skipped++
+		} else {
+			matched++
 		}
+	}
 
-		// Build list of papers with DOI
-		type paperDOI struct {
-			DOI string
-		}
-		var targets []paperDOI
-		for _, p := range papers {
-			doi := risGetStr(p, "DOI", "doi")
-			if doi != "" {
-				targets = append(targets, paperDOI{DOI: doi})
-			}
-		}
-
-		total := len(targets)
-		if total == 0 {
-			logger.Logf(id, "[Scopus Enrich] Tidak ada paper dengan DOI.")
-			return
-		}
-
-		logger.Logf(id, "[Scopus Enrich] Mulai enrichment %d paper...", total)
-
-		enriched := 0
-		for i, t := range targets {
-			doiLower := strings.ToLower(t.DOI)
-
-			// Check if extraction doc already has scopus_keywords
-			var extDoc bson.M
-			err := extColl.FindOne(bgCtx, bson.M{
-				"session_id": id,
-				"$or": bson.A{
-					bson.M{"doi": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
-					bson.M{"DOI": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
-				},
-			}).Decode(&extDoc)
-
-			if err == nil {
-				// Check if already has scopus_keywords
-				if kw, ok := extDoc["scopus_keywords"].(string); ok && kw != "" {
-					logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → sudah ada keywords, skip", i+1, total, t.DOI)
-					continue
-				}
-			}
-
-			// Normalize DOI (strip URL prefix)
-			cleanDOI := t.DOI
-			cleanDOI = strings.TrimPrefix(cleanDOI, "https://doi.org/")
-			cleanDOI = strings.TrimPrefix(cleanDOI, "http://doi.org/")
-			cleanDOI = strings.TrimSpace(cleanDOI)
-
-			// Call Scopus Abstract API
-			absResp, err := refs.RetrieveScopusAbstract(cleanDOI, apiKey)
-			if err != nil {
-				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → error: %v", i+1, total, cleanDOI, err)
-				time.Sleep(2 * time.Second)
-				continue
-			}
-
-			var names []string
-			// Author keywords (primary - paling spesifik)
-			for _, kw := range absResp.AbstractsRetrievalResponse.AuthKeywords.AuthorKeyword {
-				if kw.Value != "" {
-					names = append(names, kw.Value)
-				}
-			}
-			// Index terms (secondary, jika author keywords kosong)
-			if len(names) == 0 {
-				for _, term := range absResp.AbstractsRetrievalResponse.IdxTerms.MainTerm {
-					if term.Value != "" {
-						names = append(names, term.Value)
-					}
-				}
-			}
-			// Subject areas (tertiary fallback)
-			if len(names) == 0 {
-				for _, sa := range absResp.AbstractsRetrievalResponse.SubjectAreas.SubjectArea {
-					if sa.Value != "" {
-						names = append(names, sa.Value)
-					}
-				}
-			}
-			// Debug: log first successful response structure
-			if i < 3 && len(names) == 0 {
-				logger.Logf(id, "[Scopus Enrich] [%d/%d] DEBUG raw struct: AuthKW=%d, IdxTerms=%d, SubjAreas=%d",
-					i+1, total,
-					len(absResp.AbstractsRetrievalResponse.AuthKeywords.AuthorKeyword),
-					len(absResp.AbstractsRetrievalResponse.IdxTerms.MainTerm),
-					len(absResp.AbstractsRetrievalResponse.SubjectAreas.SubjectArea))
-			}
-
-			keywords := strings.Join(names, "; ")
-
-			if keywords == "" {
-				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → tidak ada keywords", i+1, total, t.DOI)
-				time.Sleep(2 * time.Second)
-				continue
-			}
-
-			// Save to extraction doc
-			filter := bson.M{
-				"session_id": id,
-				"$or": bson.A{
-					bson.M{"doi": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
-					bson.M{"DOI": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
-				},
-			}
-			update := bson.M{"$set": bson.M{"scopus_keywords": keywords}}
-
-			res, err := extColl.UpdateOne(bgCtx, filter, update)
-			if err != nil {
-				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → error save: %v", i+1, total, t.DOI, err)
-			} else if res.MatchedCount == 0 {
-				// No extraction doc exists for this DOI, create one
-				_, _ = extColl.InsertOne(bgCtx, bson.M{
-					"session_id":      id,
-					"doi":             t.DOI,
-					"scopus_keywords": keywords,
-				})
-				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → keywords: %s (new doc)", i+1, total, t.DOI, keywords)
-			} else {
-				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → keywords: %s", i+1, total, t.DOI, keywords)
-			}
-
-			enriched++
-			time.Sleep(2 * time.Second)
-		}
-
-		logger.Logf(id, "[Scopus Enrich] SELESAI: %d/%d paper berhasil diperkaya keywords.", enriched, total)
-	}()
+	logger.Logf(id, "[Scopus CSV] Selesai: matched=%d, skipped=%d, total_rows=%d", matched, skipped, totalRows)
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"message": "Enrichment sedang berjalan...",
+		"matched":    matched,
+		"skipped":    skipped,
+		"total_rows": totalRows,
 	})
 }
 

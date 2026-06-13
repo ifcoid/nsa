@@ -129,6 +129,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("GET /api/sessions/{id}/m8b/export-ris", r.sessionHndlr.ExportRIS)
 	protected.HandleFunc("GET /api/sessions/{id}/m8b/export-bibtex", r.sessionHndlr.ExportBibTeX) // alias for backward compat
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/enrich-scopus-keywords", r.sessionHndlr.EnrichScopusKeywords)
+	protected.HandleFunc("POST /api/sessions/{id}/m8b/upload-scopus-csv", r.sessionHndlr.UploadScopusCSV)
 	
 	// LLM config endpoints
 	protected.HandleFunc("GET /api/llm/health", r.llmHndlr.CheckHealth)
