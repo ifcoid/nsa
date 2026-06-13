@@ -1820,10 +1820,15 @@ func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
-		// Fallback 2: Scopus API subjects
+		// Fallback 2: Scopus keywords from extraction docs or screening paper itself
 		if keywords == "" && doi != "" {
 			if subj, ok := scopusKeywordsMap[strings.ToLower(doi)]; ok {
 				keywords = subj
+			}
+		}
+		if keywords == "" {
+			if sk := risGetStr(p, "scopus_keywords"); sk != "" {
+				keywords = sk
 			}
 		}
 
@@ -2050,7 +2055,7 @@ func (h *SessionHandler) UploadScopusCSV(w http.ResponseWriter, req *http.Reques
 			continue
 		}
 
-		// Match extraction doc by DOI (case-insensitive)
+		// Match by DOI (case-insensitive) in BOTH extraction and screening collections
 		filter := bson.M{
 			"session_id": id,
 			"$or": bson.A{
@@ -2060,17 +2065,17 @@ func (h *SessionHandler) UploadScopusCSV(w http.ResponseWriter, req *http.Reques
 		}
 		update := bson.M{"$set": updateSet}
 
-		res, err := extColl.UpdateOne(ctx, filter, update)
-		if err != nil {
-			logger.Logf(id, "[Scopus CSV] DOI %s error update: %v", doi, err)
-			skipped++
-			continue
-		}
+		// Update extraction collection
+		extRes, _ := extColl.UpdateOne(ctx, filter, update)
 
-		if res.MatchedCount == 0 {
-			skipped++
-		} else {
+		// Update screening collection too (for RIS export)
+		screenColl := h.mongoRepo.GetScreeningCollection()
+		screenRes, _ := screenColl.UpdateMany(ctx, filter, update)
+
+		if (extRes != nil && extRes.MatchedCount > 0) || (screenRes != nil && screenRes.MatchedCount > 0) {
 			matched++
+		} else {
+			skipped++
 		}
 	}
 
