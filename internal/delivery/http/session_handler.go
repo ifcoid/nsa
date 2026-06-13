@@ -2231,35 +2231,46 @@ func (h *SessionHandler) UploadIEEECSV(w http.ResponseWriter, req *http.Request)
 
 		doiLower := strings.ToLower(doi)
 
-		// Build keywords: combine Author Keywords + IEEE Terms + Mesh_Terms (semicolon separated)
-		var kwParts []string
+		// Extract Author Keywords and Index Keywords (IEEE Terms + Mesh_Terms) SEPARATELY
+		var authorKeywords string
 		if hasAuthorKw && authorKwCol < len(row) {
-			ak := strings.TrimSpace(row[authorKwCol])
-			if ak != "" {
-				kwParts = append(kwParts, ak)
-			}
+			authorKeywords = strings.TrimSpace(row[authorKwCol])
 		}
+		var indexParts []string
 		if hasIEEETerms && ieeeTermsCol < len(row) {
 			it := strings.TrimSpace(row[ieeeTermsCol])
 			if it != "" {
-				kwParts = append(kwParts, it)
+				indexParts = append(indexParts, it)
 			}
 		}
 		if hasMeshTerms && meshTermsCol < len(row) {
 			mt := strings.TrimSpace(row[meshTermsCol])
 			if mt != "" {
-				kwParts = append(kwParts, mt)
+				indexParts = append(indexParts, mt)
 			}
 		}
-		keywords := strings.Join(kwParts, "; ")
+		indexKeywords := strings.Join(indexParts, "; ")
 
-		if keywords == "" {
+		if authorKeywords == "" && indexKeywords == "" {
 			skipped++
 			continue
 		}
 
-		updateSet := bson.M{
-			"scopus_keywords": keywords,
+		updateSet := bson.M{}
+		if authorKeywords != "" {
+			updateSet["Keywords"] = authorKeywords
+			updateSet["keywords"] = authorKeywords
+		}
+		if indexKeywords != "" {
+			updateSet["IndexKeywords"] = indexKeywords
+			updateSet["index_keywords"] = indexKeywords
+		}
+		// Keep combined for backward compat
+		combined := strings.TrimSpace(authorKeywords + "; " + indexKeywords)
+		combined = strings.TrimPrefix(combined, "; ")
+		combined = strings.TrimSuffix(combined, "; ")
+		if combined != "" {
+			updateSet["scopus_keywords"] = combined
 		}
 
 		// Match by DOI (case-insensitive) in screening and extraction collections
@@ -2345,13 +2356,15 @@ func (h *SessionHandler) UploadPubMedTXT(w http.ResponseWriter, req *http.Reques
 	// Records are separated by empty lines
 	// Tags: AID/LID for DOI (contains "[doi]"), OT for other terms, MH for MeSH headings
 	type pubmedRecord struct {
-		DOI      string
-		Keywords []string
+		DOI            string
+		AuthorKeywords []string // OT tags
+		MeSHKeywords   []string // MH tags
 	}
 
 	var records []pubmedRecord
 	var currentDOI string
-	var currentKeywords []string
+	var currentAuthorKW []string
+	var currentMeSH []string
 
 	scanner := bufio.NewScanner(bytes.NewReader(rawBytes))
 	// Increase buffer for long lines
@@ -2364,11 +2377,12 @@ func (h *SessionHandler) UploadPubMedTXT(w http.ResponseWriter, req *http.Reques
 
 		// Empty line = end of record
 		if strings.TrimSpace(line) == "" {
-			if currentDOI != "" && len(currentKeywords) > 0 {
-				records = append(records, pubmedRecord{DOI: currentDOI, Keywords: currentKeywords})
+			if currentDOI != "" && (len(currentAuthorKW) > 0 || len(currentMeSH) > 0) {
+				records = append(records, pubmedRecord{DOI: currentDOI, AuthorKeywords: currentAuthorKW, MeSHKeywords: currentMeSH})
 			}
 			currentDOI = ""
-			currentKeywords = nil
+			currentAuthorKW = nil
+			currentMeSH = nil
 			currentTag = ""
 			continue
 		}
@@ -2391,10 +2405,10 @@ func (h *SessionHandler) UploadPubMedTXT(w http.ResponseWriter, req *http.Reques
 			case "OT":
 				// Other Term (author keyword)
 				if value != "" {
-					currentKeywords = append(currentKeywords, value)
+					currentAuthorKW = append(currentAuthorKW, value)
 				}
 			case "MH":
-				// MeSH Heading
+				// MeSH Heading (index keyword)
 				// Remove subheadings after / and asterisks
 				mh := value
 				if idx := strings.Index(mh, "/"); idx > 0 {
@@ -2403,15 +2417,15 @@ func (h *SessionHandler) UploadPubMedTXT(w http.ResponseWriter, req *http.Reques
 				mh = strings.TrimRight(mh, "*")
 				mh = strings.TrimSpace(mh)
 				if mh != "" {
-					currentKeywords = append(currentKeywords, mh)
+					currentMeSH = append(currentMeSH, mh)
 				}
 			}
 		}
 		// Continuation lines (start with spaces) - we skip them for simplicity
 	}
 	// Don't forget last record if file doesn't end with empty line
-	if currentDOI != "" && len(currentKeywords) > 0 {
-		records = append(records, pubmedRecord{DOI: currentDOI, Keywords: currentKeywords})
+	if currentDOI != "" && (len(currentAuthorKW) > 0 || len(currentMeSH) > 0) {
+		records = append(records, pubmedRecord{DOI: currentDOI, AuthorKeywords: currentAuthorKW, MeSHKeywords: currentMeSH})
 	}
 
 	if len(records) == 0 {
@@ -2440,15 +2454,29 @@ func (h *SessionHandler) UploadPubMedTXT(w http.ResponseWriter, req *http.Reques
 		}
 
 		doiLower := strings.ToLower(doi)
-		keywords := strings.Join(rec.Keywords, "; ")
+		authorKwStr := strings.Join(rec.AuthorKeywords, "; ")
+		meshKwStr := strings.Join(rec.MeSHKeywords, "; ")
 
-		if keywords == "" {
+		if authorKwStr == "" && meshKwStr == "" {
 			skipped++
 			continue
 		}
 
-		updateSet := bson.M{
-			"scopus_keywords": keywords,
+		updateSet := bson.M{}
+		if authorKwStr != "" {
+			updateSet["Keywords"] = authorKwStr
+			updateSet["keywords"] = authorKwStr
+		}
+		if meshKwStr != "" {
+			updateSet["IndexKeywords"] = meshKwStr
+			updateSet["index_keywords"] = meshKwStr
+		}
+		// Keep combined for backward compat
+		combined := strings.TrimSpace(authorKwStr + "; " + meshKwStr)
+		combined = strings.TrimPrefix(combined, "; ")
+		combined = strings.TrimSuffix(combined, "; ")
+		if combined != "" {
+			updateSet["scopus_keywords"] = combined
 		}
 
 		// Match by DOI (case-insensitive) in screening and extraction collections
