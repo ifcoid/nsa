@@ -14,6 +14,8 @@ require (
 	google.golang.org/genai v1.57.0
 )
 
+replace github.com/ifcoid/refs => ../refs
+
 require (
 	aidanwoods.dev/go-result v0.3.1 // indirect
 	cloud.google.com/go v0.116.0 // indirect

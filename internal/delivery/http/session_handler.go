@@ -1979,19 +1979,27 @@ func (h *SessionHandler) EnrichScopusKeywords(w http.ResponseWriter, req *http.R
 				}
 			}
 
-			// Call Scopus API
-			ftResp, err := refs.RetrieveFullText(t.DOI, apiKey)
+			// Call Scopus Abstract API
+			absResp, err := refs.RetrieveScopusAbstract(t.DOI, apiKey)
 			if err != nil {
 				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → error: %v", i+1, total, t.DOI, err)
 				time.Sleep(2 * time.Second)
 				continue
 			}
 
-			subjects := ftResp.FullTextRetrievalResponse.CoreData.Subjects
 			var names []string
-			for _, s := range subjects {
-				if s.Name != "" {
-					names = append(names, s.Name)
+			// Author keywords (primary - paling spesifik)
+			for _, kw := range absResp.AbstractsRetrievalResponse.AuthKeywords.AuthorKeyword {
+				if kw.Value != "" {
+					names = append(names, kw.Value)
+				}
+			}
+			// Index terms (secondary, jika author keywords kosong)
+			if len(names) == 0 {
+				for _, term := range absResp.AbstractsRetrievalResponse.IdxTerms.MainTerm {
+					if term.Value != "" {
+						names = append(names, term.Value)
+					}
 				}
 			}
 
