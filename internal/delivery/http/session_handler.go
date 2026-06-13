@@ -2039,26 +2039,31 @@ func (h *SessionHandler) UploadScopusCSV(w http.ResponseWriter, req *http.Reques
 
 		doiLower := strings.ToLower(doi)
 
-		// Build keywords string: Author Keywords + "; " + Index Keywords
-		var kwParts []string
+		// Extract Author Keywords and Index Keywords SEPARATELY
+		var authorKeywords, indexKeywords string
 		if hasAuthorKw && authorKwCol < len(row) {
-			ak := strings.TrimSpace(row[authorKwCol])
-			if ak != "" {
-				kwParts = append(kwParts, ak)
-			}
+			authorKeywords = strings.TrimSpace(row[authorKwCol])
 		}
 		if hasIndexKw && indexKwCol < len(row) {
-			ik := strings.TrimSpace(row[indexKwCol])
-			if ik != "" {
-				kwParts = append(kwParts, ik)
-			}
+			indexKeywords = strings.TrimSpace(row[indexKwCol])
 		}
-		keywords := strings.Join(kwParts, "; ")
 
-		// Build update set
+		// Build update set — store separately for proper RIS export (KW vs ID tags)
 		updateSet := bson.M{}
-		if keywords != "" {
-			updateSet["scopus_keywords"] = keywords
+		if authorKeywords != "" {
+			updateSet["Keywords"] = authorKeywords
+			updateSet["keywords"] = authorKeywords
+		}
+		if indexKeywords != "" {
+			updateSet["IndexKeywords"] = indexKeywords
+			updateSet["index_keywords"] = indexKeywords
+		}
+		// Keep combined scopus_keywords for backward compat
+		combined := strings.TrimSpace(authorKeywords + "; " + indexKeywords)
+		combined = strings.TrimPrefix(combined, "; ")
+		combined = strings.TrimSuffix(combined, "; ")
+		if combined != "" {
+			updateSet["scopus_keywords"] = combined
 		}
 		if hasAffiliations && affiliationsCol < len(row) {
 			aff := strings.TrimSpace(row[affiliationsCol])
