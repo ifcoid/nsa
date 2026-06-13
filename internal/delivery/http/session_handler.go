@@ -2055,8 +2055,8 @@ func (h *SessionHandler) UploadScopusCSV(w http.ResponseWriter, req *http.Reques
 			continue
 		}
 
-		// Match by DOI (case-insensitive) in BOTH extraction and screening collections
-		filter := bson.M{
+		// Match by DOI (case-insensitive) in slr_papers (primary), extraction, and screening
+		doiFilter := bson.M{
 			"session_id": id,
 			"$or": bson.A{
 				bson.M{"doi": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
@@ -2065,14 +2065,26 @@ func (h *SessionHandler) UploadScopusCSV(w http.ResponseWriter, req *http.Reques
 		}
 		update := bson.M{"$set": updateSet}
 
-		// Update extraction collection
-		extRes, _ := extColl.UpdateOne(ctx, filter, update)
+		anyMatched := false
 
-		// Update screening collection too (for RIS export)
+		// Update slr_papers collection (primary source — all imported papers)
+		papersColl := h.mongoRepo.GetPapersCollection()
+		if res, _ := papersColl.UpdateMany(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
+			anyMatched = true
+		}
+
+		// Update screening collection
 		screenColl := h.mongoRepo.GetScreeningCollection()
-		screenRes, _ := screenColl.UpdateMany(ctx, filter, update)
+		if res, _ := screenColl.UpdateMany(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
+			anyMatched = true
+		}
 
-		if (extRes != nil && extRes.MatchedCount > 0) || (screenRes != nil && screenRes.MatchedCount > 0) {
+		// Update extraction collection
+		if res, _ := extColl.UpdateOne(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
+			anyMatched = true
+		}
+
+		if anyMatched {
 			matched++
 		} else {
 			skipped++
