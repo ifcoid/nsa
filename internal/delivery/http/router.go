@@ -126,7 +126,8 @@ func (r *Router) registerRoutes() {
 
 	// Modul 8b (Bibliometric/SLNA)
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/vosviewer", r.sessionHndlr.SubmitVOSviewer)
-	protected.HandleFunc("GET /api/sessions/{id}/m8b/export-bibtex", r.sessionHndlr.ExportBibTeX)
+	protected.HandleFunc("GET /api/sessions/{id}/m8b/export-ris", r.sessionHndlr.ExportRIS)
+	protected.HandleFunc("GET /api/sessions/{id}/m8b/export-bibtex", r.sessionHndlr.ExportBibTeX) // alias for backward compat
 	
 	// LLM config endpoints
 	protected.HandleFunc("GET /api/llm/health", r.llmHndlr.CheckHealth)

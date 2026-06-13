@@ -1738,9 +1738,9 @@ func (h *SessionHandler) EnrichMetadata(w http.ResponseWriter, req *http.Request
 	})
 }
 
-// ExportBibTeX generates a BibTeX file (.bib) compatible with VOSviewer from all screening papers.
-// GET /api/sessions/{id}/m8b/export-bibtex
-func (h *SessionHandler) ExportBibTeX(w http.ResponseWriter, req *http.Request) {
+// ExportRIS generates an RIS file (.ris) compatible with VOSviewer from all screening papers.
+// GET /api/sessions/{id}/m8b/export-ris
+func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {
 		sendJSONError(w, http.StatusBadRequest, "Session ID required")
@@ -1770,11 +1770,11 @@ func (h *SessionHandler) ExportBibTeX(w http.ResponseWriter, req *http.Request) 
 			var extDocs []bson.M
 			_ = cur.All(ctx, &extDocs)
 			for _, doc := range extDocs {
-				doi := bibGetExtDOI(doc)
+				doi := risGetExtDOI(doc)
 				if doi == "" {
 					continue
 				}
-				subj := bibExtFieldValue(doc, "subject")
+				subj := risExtFieldValue(doc, "subject")
 				if subj != "" {
 					extKeywordsMap[strings.ToLower(doi)] = subj
 				}
@@ -1782,16 +1782,16 @@ func (h *SessionHandler) ExportBibTeX(w http.ResponseWriter, req *http.Request) 
 		}
 	}
 
-	// Generate BibTeX entries
+	// Generate RIS entries
 	var buf bytes.Buffer
-	for i, p := range papers {
-		title := bibGetStr(p, "Title", "title")
-		authors := bibGetStr(p, "Authors", "authors")
-		year := bibGetStr(p, "Year", "year")
-		journal := bibGetStr(p, "Journal", "journal")
-		doi := bibGetStr(p, "DOI", "doi")
-		keywords := bibGetStr(p, "Keywords", "keywords")
-		abstract := bibGetStr(p, "Abstract", "abstract")
+	for _, p := range papers {
+		title := risGetStr(p, "Title", "title")
+		authors := risGetStr(p, "Authors", "authors")
+		year := risGetStr(p, "Year", "year")
+		journal := risGetStr(p, "Journal", "journal")
+		doi := risGetStr(p, "DOI", "doi")
+		keywords := risGetStr(p, "Keywords", "keywords")
+		abstract := risGetStr(p, "Abstract", "abstract")
 
 		// If keywords empty, try extraction docs subject field
 		if keywords == "" && doi != "" {
@@ -1800,59 +1800,72 @@ func (h *SessionHandler) ExportBibTeX(w http.ResponseWriter, req *http.Request) 
 			}
 		}
 
-		// Generate citation key: first author last name + year + letter
-		citeKey := bibMakeCiteKey(authors, year, i)
-
-		// Determine entry type
-		entryType := "article"
+		// Determine TY value
+		tyValue := "JOUR"
 		if strings.Contains(strings.ToLower(journal), "conference") ||
 			strings.Contains(strings.ToLower(journal), "proceedings") ||
 			strings.Contains(strings.ToLower(journal), "symposium") ||
 			strings.Contains(strings.ToLower(journal), "workshop") {
-			entryType = "inproceedings"
+			tyValue = "CONF"
+		} else if strings.Contains(strings.ToLower(journal), "book") ||
+			strings.Contains(strings.ToLower(journal), "chapter") {
+			tyValue = "CHAP"
 		}
 
-		buf.WriteString(fmt.Sprintf("@%s{%s,\n", entryType, citeKey))
+		buf.WriteString(fmt.Sprintf("TY  - %s\n", tyValue))
+
+		// AU - one line per author
 		if authors != "" {
-			buf.WriteString(fmt.Sprintf("  author = {%s},\n", bibFormatAuthors(authors)))
+			authorList := risParseAuthors(authors)
+			for _, au := range authorList {
+				buf.WriteString(fmt.Sprintf("AU  - %s\n", au))
+			}
 		}
+
 		if title != "" {
-			buf.WriteString(fmt.Sprintf("  title = {%s},\n", bibEscapeStr(title)))
+			buf.WriteString(fmt.Sprintf("TI  - %s\n", title))
 		}
-		if entryType == "inproceedings" {
-			if journal != "" {
-				buf.WriteString(fmt.Sprintf("  booktitle = {%s},\n", bibEscapeStr(journal)))
-			}
-		} else {
-			if journal != "" {
-				buf.WriteString(fmt.Sprintf("  journal = {%s},\n", bibEscapeStr(journal)))
-			}
+		if journal != "" {
+			buf.WriteString(fmt.Sprintf("JO  - %s\n", journal))
 		}
 		if year != "" {
-			buf.WriteString(fmt.Sprintf("  year = {%s},\n", year))
+			buf.WriteString(fmt.Sprintf("PY  - %s\n", year))
 		}
 		if doi != "" {
-			buf.WriteString(fmt.Sprintf("  doi = {%s},\n", doi))
+			buf.WriteString(fmt.Sprintf("DO  - %s\n", doi))
 		}
+
+		// KW - one line per keyword
 		if keywords != "" {
-			buf.WriteString(fmt.Sprintf("  keywords = {%s},\n", bibFormatKeywords(keywords)))
+			kwList := risParseKeywords(keywords)
+			for _, kw := range kwList {
+				buf.WriteString(fmt.Sprintf("KW  - %s\n", kw))
+			}
 		}
+
 		if abstract != "" {
-			buf.WriteString(fmt.Sprintf("  abstract = {%s},\n", bibEscapeStr(abstract)))
+			buf.WriteString(fmt.Sprintf("AB  - %s\n", abstract))
 		}
-		buf.WriteString("}\n\n")
+
+		buf.WriteString("ER  - \n\n")
 	}
 
 	// Return as file download
-	w.Header().Set("Content-Type", "application/x-bibtex")
-	w.Header().Set("Content-Disposition", `attachment; filename="slr_papers.bib"`)
+	w.Header().Set("Content-Type", "application/x-research-info-systems")
+	w.Header().Set("Content-Disposition", `attachment; filename="slr_papers.ris"`)
 	w.WriteHeader(http.StatusOK)
 	w.Write(buf.Bytes())
 }
 
-// --- BibTeX helper functions ---
+// ExportBibTeX is kept as an alias for backward compatibility, now exports RIS format.
+// GET /api/sessions/{id}/m8b/export-bibtex
+func (h *SessionHandler) ExportBibTeX(w http.ResponseWriter, req *http.Request) {
+	h.ExportRIS(w, req)
+}
 
-func bibGetStr(p map[string]interface{}, keys ...string) string {
+// --- RIS helper functions ---
+
+func risGetStr(p map[string]interface{}, keys ...string) string {
 	for _, k := range keys {
 		if v, ok := p[k].(string); ok && v != "" {
 			return v
@@ -1861,7 +1874,7 @@ func bibGetStr(p map[string]interface{}, keys ...string) string {
 	return ""
 }
 
-func bibGetExtDOI(doc bson.M) string {
+func risGetExtDOI(doc bson.M) string {
 	if d, ok := doc["doi"].(string); ok && d != "" {
 		return d
 	}
@@ -1871,7 +1884,7 @@ func bibGetExtDOI(doc bson.M) string {
 	return ""
 }
 
-func bibExtFieldValue(doc bson.M, keySub string) string {
+func risExtFieldValue(doc bson.M, keySub string) string {
 	arr, ok := doc["fields"].(bson.A)
 	if !ok {
 		if arr2, ok2 := doc["fields"].([]interface{}); ok2 {
@@ -1907,73 +1920,35 @@ func bibExtFieldValue(doc bson.M, keySub string) string {
 	return ""
 }
 
-func bibMakeCiteKey(authors, year string, idx int) string {
-	// Extract first author's last name
-	lastName := "unknown"
-	if authors != "" {
-		// Handle "LastName, F." or "LastName F" or "F. LastName"
-		parts := strings.Split(authors, ",")
-		first := strings.TrimSpace(parts[0])
-		// Take first word as potential last name
-		words := strings.Fields(first)
-		if len(words) > 0 {
-			// Use last word if it looks like initials come first (e.g. "F. LastName")
-			candidate := words[0]
-			if len(candidate) <= 2 || strings.HasSuffix(candidate, ".") {
-				if len(words) > 1 {
-					candidate = words[len(words)-1]
-				}
-			}
-			lastName = strings.ToLower(candidate)
-			// Remove non-alphanumeric
-			cleaned := strings.Map(func(r rune) rune {
-				if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-					return r
-				}
-				return -1
-			}, lastName)
-			if cleaned != "" {
-				lastName = cleaned
-			}
-		}
-	}
-	if year == "" {
-		year = "0000"
-	}
-	// Add suffix letter to avoid duplicates
-	suffix := string(rune('a' + (idx % 26)))
-	return lastName + year + suffix
-}
-
-func bibFormatAuthors(authors string) string {
-	// VOSviewer expects "LastName, F. and LastName, F." format
-	// If already semicolon-separated, convert to " and "
-	authors = strings.ReplaceAll(authors, " ; ", " and ")
-	authors = strings.ReplaceAll(authors, "; ", " and ")
-	authors = strings.ReplaceAll(authors, ";", " and ")
-	return bibEscapeStr(authors)
-}
-
-func bibFormatKeywords(kw string) string {
-	// Normalize keyword separators to semicolons for VOSviewer
-	kw = strings.ReplaceAll(kw, "|", ";")
-	// Ensure space after semicolons
-	parts := strings.Split(kw, ";")
-	var cleaned []string
+func risParseAuthors(authors string) []string {
+	// Split by semicolons or " and "
+	authors = strings.ReplaceAll(authors, " ; ", ";")
+	authors = strings.ReplaceAll(authors, "; ", ";")
+	authors = strings.ReplaceAll(authors, " and ", ";")
+	parts := strings.Split(authors, ";")
+	var result []string
 	for _, p := range parts {
 		t := strings.TrimSpace(p)
 		if t != "" {
-			cleaned = append(cleaned, t)
+			result = append(result, t)
 		}
 	}
-	return bibEscapeStr(strings.Join(cleaned, "; "))
+	if len(result) == 0 && authors != "" {
+		result = append(result, strings.TrimSpace(authors))
+	}
+	return result
 }
 
-func bibEscapeStr(s string) string {
-	// Escape special BibTeX characters
-	s = strings.ReplaceAll(s, "&", "\\&")
-	s = strings.ReplaceAll(s, "%", "\\%")
-	s = strings.ReplaceAll(s, "#", "\\#")
-	s = strings.ReplaceAll(s, "_", "\\_")
-	return s
+func risParseKeywords(keywords string) []string {
+	// Split by semicolons or pipes
+	keywords = strings.ReplaceAll(keywords, "|", ";")
+	parts := strings.Split(keywords, ";")
+	var result []string
+	for _, p := range parts {
+		t := strings.TrimSpace(p)
+		if t != "" {
+			result = append(result, t)
+		}
+	}
+	return result
 }
