@@ -1830,39 +1830,26 @@ func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 		doi := risGetStr(p, "DOI", "doi")
 		authorKw := risGetStr(p, "Keywords", "keywords")
 		indexKw := risGetStr(p, "IndexKeywords", "index_keywords")
-		// Combine author keywords and index keywords
-		var kwParts []string
-		if authorKw != "" {
-			kwParts = append(kwParts, authorKw)
-		}
-		if indexKw != "" {
-			kwParts = append(kwParts, indexKw)
-		}
-		keywords := strings.Join(kwParts, "; ")
 		abstract := risGetStr(p, "Abstract", "abstract")
 
-		// If keywords empty, try extraction docs subject field
-		if keywords == "" && doi != "" {
+		// Fallback for author keywords
+		if authorKw == "" && doi != "" {
 			if subj, ok := extKeywordsMap[strings.ToLower(doi)]; ok {
-				keywords = subj
+				authorKw = subj
 			}
 		}
-
-		// Fallback 2: Scopus keywords from extraction docs or screening paper itself
-		if keywords == "" && doi != "" {
+		if authorKw == "" && doi != "" {
 			if subj, ok := scopusKeywordsMap[strings.ToLower(doi)]; ok {
-				keywords = subj
+				authorKw = subj
 			}
 		}
-		if keywords == "" {
+		if authorKw == "" {
 			if sk := risGetStr(p, "scopus_keywords"); sk != "" {
-				keywords = sk
+				authorKw = sk
 			}
 		}
-
-		// Fallback 3: extract keywords from title if still empty
-		if keywords == "" && title != "" {
-			keywords = risExtractTitleKeywords(title)
+		if authorKw == "" && title != "" {
+			authorKw = risExtractTitleKeywords(title)
 		}
 
 		// Determine TY value
@@ -1900,11 +1887,19 @@ func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 			buf.WriteString(fmt.Sprintf("DO  - %s\n", doi))
 		}
 
-		// KW - one line per keyword
-		if keywords != "" {
-			kwList := risParseKeywords(keywords)
+		// KW - Author Keywords (one per line)
+		if authorKw != "" {
+			kwList := risParseKeywords(authorKw)
 			for _, kw := range kwList {
 				buf.WriteString(fmt.Sprintf("KW  - %s\n", kw))
+			}
+		}
+
+		// ID - Index Keywords (one per line) — VOSviewer reads this as separate keyword source
+		if indexKw != "" {
+			idList := risParseKeywords(indexKw)
+			for _, id := range idList {
+				buf.WriteString(fmt.Sprintf("ID  - %s\n", id))
 			}
 		}
 
