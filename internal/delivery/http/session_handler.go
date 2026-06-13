@@ -2055,7 +2055,7 @@ func (h *SessionHandler) UploadScopusCSV(w http.ResponseWriter, req *http.Reques
 			continue
 		}
 
-		// Match by DOI (case-insensitive) in slr_papers (primary), extraction, and screening
+		// Match by DOI (case-insensitive) in screening (primary for RIS) and extraction collections
 		doiFilter := bson.M{
 			"session_id": id,
 			"$or": bson.A{
@@ -2067,19 +2067,13 @@ func (h *SessionHandler) UploadScopusCSV(w http.ResponseWriter, req *http.Reques
 
 		anyMatched := false
 
-		// Update slr_papers collection (primary source — all imported papers)
-		papersColl := h.mongoRepo.GetPapersCollection()
-		if res, _ := papersColl.UpdateMany(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
-			anyMatched = true
-		}
-
-		// Update screening collection
+		// Update screening collection (primary — RIS export reads from here)
 		screenColl := h.mongoRepo.GetScreeningCollection()
 		if res, _ := screenColl.UpdateMany(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
 			anyMatched = true
 		}
 
-		// Update extraction collection
+		// Update extraction collection (for descriptive analysis)
 		if res, _ := extColl.UpdateOne(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
 			anyMatched = true
 		}
