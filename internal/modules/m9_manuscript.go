@@ -84,6 +84,39 @@ func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) e
 	}
 }
 
+// ===== Multi-pass pipeline =====
+
+// generateWithMultiPass orchestrates a 3-pass generation pipeline:
+// Pass 1: Initial draft generation with RAG data + paper catalog.
+// Pass 2: Claim verification -- cross-references claims against Qdrant, Neo4j, and MongoDB,
+//
+//	then asks LLM to remove/flag unverified claims and strengthen verified ones.
+//
+// Pass 3: Style cleanup -- removes AI-like phrasing, em dashes, and redundancies.
+func (m *M9Manuscript) generateWithMultiPass(ctx context.Context, ag *agent.ManuscriptAgent, session *model.SLRSession, systemPrompt, userBundle, lang string, citations []PaperCitation) (string, error) {
+	// Pass 1: Generate initial draft
+	draft, err := ag.Write(ctx, systemPrompt+lang, userBundle)
+	if err != nil {
+		return "", fmt.Errorf("multi-pass P1 (draft): %w", err)
+	}
+
+	// Pass 2: Verify claims and ask LLM to fix unverified ones
+	verResults := m.verifyClaims(ctx, session, draft, citations)
+	verSummary := formatVerificationResults(verResults)
+	verifiedDraft, err := ag.Write(ctx, promptVerification+lang, draft+verSummary)
+	if err != nil {
+		return "", fmt.Errorf("multi-pass P2 (verify): %w", err)
+	}
+
+	// Pass 3: Style cleanup
+	finalDraft, err := ag.Write(ctx, promptStyleCleanup+lang, verifiedDraft)
+	if err != nil {
+		return "", fmt.Errorf("multi-pass P3 (style): %w", err)
+	}
+
+	return finalDraft, nil
+}
+
 // ===== Group generators =====
 
 func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSession) error {
@@ -104,28 +137,38 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 	citations := m.buildPaperCatalog(ctx, session)
 	paperBundle := buildPaperDataBundle(papers, citations)
 
-	userCtx := bundle + paperBundle
+	// Integrate Qdrant fulltext snippets for top papers in the catalog
+	fulltextCtx := m.buildFulltextSnippets(ctx, session.ID, citations)
 
-	methods, err := ag.Write(ctx, promptMethods+lang, userCtx)
+	userCtx := bundle + paperBundle + fulltextCtx
+
+	// Multi-pass: Methods
+	methods, err := m.generateWithMultiPass(ctx, ag, session, promptMethods, userCtx, lang, citations)
 	if err != nil {
 		return err
 	}
-	logger.Log(session.ID, "      ✓ Methods")
-	results, err := ag.Write(ctx, promptResults+lang, userCtx+sectionCtx("METHODS (sudah ditulis)", methods))
+	logger.Log(session.ID, "      ✓ Methods (3-pass)")
+
+	// Multi-pass: Results
+	results, err := m.generateWithMultiPass(ctx, ag, session, promptResults, userCtx+sectionCtx("METHODS (sudah ditulis)", methods), lang, citations)
 	if err != nil {
 		return err
 	}
-	logger.Log(session.ID, "      ✓ Results")
-	discussion, err := ag.Write(ctx, promptDiscussion+lang, userCtx+sectionCtx("RESULTS (sudah ditulis -- jangan diulang)", results))
+	logger.Log(session.ID, "      ✓ Results (3-pass)")
+
+	// Multi-pass: Discussion
+	discussion, err := m.generateWithMultiPass(ctx, ag, session, promptDiscussion, userCtx+sectionCtx("RESULTS (sudah ditulis -- jangan diulang)", results), lang, citations)
 	if err != nil {
 		return err
 	}
-	logger.Log(session.ID, "      ✓ Discussion")
-	future, err := ag.Write(ctx, promptFuture+lang, userCtx+sectionCtx("DISCUSSION (limitations -- agenda harus beda/actionable)", discussion))
+	logger.Log(session.ID, "      ✓ Discussion (3-pass)")
+
+	// Multi-pass: Future Research
+	future, err := m.generateWithMultiPass(ctx, ag, session, promptFuture, userCtx+sectionCtx("DISCUSSION (limitations -- agenda harus beda/actionable)", discussion), lang, citations)
 	if err != nil {
 		return err
 	}
-	logger.Log(session.ID, "      ✓ Future Research")
+	logger.Log(session.ID, "      ✓ Future Research (3-pass)")
 
 	session.Manuscript.Methods = methods
 	session.Manuscript.Results = results
@@ -151,23 +194,33 @@ func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSes
 	citations := m.buildPaperCatalog(ctx, session)
 	paperBundle := buildPaperDataBundle(papers, citations)
 
-	userCtx := bundle + paperBundle
+	// Integrate Qdrant fulltext snippets for top papers in the catalog
+	fulltextCtx := m.buildFulltextSnippets(ctx, session.ID, citations)
 
-	intro, err := ag.Write(ctx, promptIntro+lang, userCtx+sectionCtx("RESULTS (untuk tune preview, JANGAN bocorkan angka spesifik di Intro)", trim(ms.Results, 4000)))
+	userCtx := bundle + paperBundle + fulltextCtx
+
+	// Multi-pass: Introduction
+	intro, err := m.generateWithMultiPass(ctx, ag, session, promptIntro, userCtx+sectionCtx("RESULTS (untuk tune preview, JANGAN bocorkan angka spesifik di Intro)", trim(ms.Results, 4000)), lang, citations)
 	if err != nil {
 		return err
 	}
-	logger.Log(session.ID, "      ✓ Introduction")
-	conclusions, err := ag.Write(ctx, promptConclusions+lang, userCtx+sectionCtx("DISCUSSION", trim(ms.Discussion, 5000))+sectionCtx("FUTURE RESEARCH", trim(ms.FutureResearch, 2500)))
+	logger.Log(session.ID, "      ✓ Introduction (3-pass)")
+
+	// Multi-pass: Conclusions
+	conclusions, err := m.generateWithMultiPass(ctx, ag, session, promptConclusions, userCtx+sectionCtx("DISCUSSION", trim(ms.Discussion, 5000))+sectionCtx("FUTURE RESEARCH", trim(ms.FutureResearch, 2500)), lang, citations)
 	if err != nil {
 		return err
 	}
-	logger.Log(session.ID, "      ✓ Conclusions")
-	abstract, err := ag.Write(ctx, promptAbstract+lang, userCtx+sectionCtx("METHODS", trim(ms.Methods, 3000))+sectionCtx("RESULTS", trim(ms.Results, 4000))+sectionCtx("DISCUSSION", trim(ms.Discussion, 3000)))
+	logger.Log(session.ID, "      ✓ Conclusions (3-pass)")
+
+	// Multi-pass: Abstract
+	abstract, err := m.generateWithMultiPass(ctx, ag, session, promptAbstract, userCtx+sectionCtx("METHODS", trim(ms.Methods, 3000))+sectionCtx("RESULTS", trim(ms.Results, 4000))+sectionCtx("DISCUSSION", trim(ms.Discussion, 3000)), lang, citations)
 	if err != nil {
 		return err
 	}
-	logger.Log(session.ID, "      ✓ Abstract")
+	logger.Log(session.ID, "      ✓ Abstract (3-pass)")
+
+	// Title uses single-pass (no citations to verify in a title)
 	title, err := ag.Write(ctx, promptTitle+lang, sectionCtx("ABSTRACT", abstract)+m.geoFrameworkHint(session))
 	if err != nil {
 		return err
@@ -183,6 +236,48 @@ func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSes
 }
 
 // ===== context helpers =====
+
+// buildFulltextSnippets uses BuildFulltextIndex to get fulltext for included papers,
+// then returns a context block with trimmed snippets (first 500 chars) for each paper
+// in the catalog that has fulltext available in Qdrant.
+func (m *M9Manuscript) buildFulltextSnippets(ctx context.Context, sessionID string, citations []PaperCitation) string {
+	if len(citations) == 0 {
+		return ""
+	}
+
+	index, available, err := BuildFulltextIndex(ctx)
+	if !available || err != nil || len(index) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\n== RAG FULLTEXT SNIPPETS (evidence from papers) ==\n")
+	count := 0
+	for _, c := range citations {
+		if c.DOI == "" {
+			continue
+		}
+		normalized := normalizeDOIForRAG(c.DOI)
+		fulltext, ok := index[normalized]
+		if !ok || fulltext == "" {
+			continue
+		}
+		// Trim to first 500 chars
+		snippet := fulltext
+		if len(snippet) > 500 {
+			snippet = snippet[:500] + "..."
+		}
+		b.WriteString(fmt.Sprintf("[%s] %s\n", c.Key, snippet))
+		count++
+	}
+
+	if count == 0 {
+		return ""
+	}
+	b.WriteString("== END RAG FULLTEXT ==\n")
+	logger.Logf(sessionID, "      [RAG] Included fulltext snippets for %d/%d papers", count, len(citations))
+	return b.String()
+}
 
 // langDirective menentukan bahasa output manuskrip (default Bahasa Indonesia untuk draft).
 func langDirective(session *model.SLRSession) string {
