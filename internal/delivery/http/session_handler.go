@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/csv"
@@ -2091,6 +2092,374 @@ func (h *SessionHandler) UploadScopusCSV(w http.ResponseWriter, req *http.Reques
 		"matched":    matched,
 		"skipped":    skipped,
 		"total_rows": totalRows,
+	})
+}
+
+// UploadIEEECSV accepts a multipart CSV file exported from IEEE Xplore, parses it,
+// matches rows by DOI to screening+extraction docs, and stores keywords to scopus_keywords.
+// POST /api/sessions/{id}/m8b/upload-ieee-csv
+func (h *SessionHandler) UploadIEEECSV(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	_, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Parse multipart form (max 10MB)
+	if err := req.ParseMultipartForm(10 << 20); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Gagal parse form: "+err.Error())
+		return
+	}
+
+	file, _, err := req.FormFile("file")
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, "File 'file' tidak ditemukan dalam form")
+		return
+	}
+	defer file.Close()
+
+	// Read all content
+	rawBytes, err := io.ReadAll(file)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal membaca file: "+err.Error())
+		return
+	}
+
+	// Strip UTF-8 BOM if present
+	rawBytes = bytes.TrimPrefix(rawBytes, []byte("\xef\xbb\xbf"))
+
+	// Parse CSV
+	reader := csv.NewReader(bytes.NewReader(rawBytes))
+	reader.LazyQuotes = true
+	reader.FieldsPerRecord = -1
+
+	records, err := reader.ReadAll()
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Gagal parse CSV: "+err.Error())
+		return
+	}
+
+	if len(records) < 2 {
+		sendJSONError(w, http.StatusBadRequest, "CSV kosong atau hanya header")
+		return
+	}
+
+	// Build header index map
+	header := records[0]
+	colIdx := make(map[string]int)
+	for i, col := range header {
+		colIdx[strings.TrimSpace(col)] = i
+	}
+
+	// Check required DOI column
+	doiCol, hasDOI := colIdx["DOI"]
+	if !hasDOI {
+		sendJSONError(w, http.StatusBadRequest, "Kolom 'DOI' tidak ditemukan di header CSV")
+		return
+	}
+
+	// IEEE keyword columns: "Author Keywords" and "IEEE Terms" (semicolon separated)
+	authorKwCol, hasAuthorKw := colIdx["Author Keywords"]
+	ieeeTermsCol, hasIEEETerms := colIdx["IEEE Terms"]
+	meshTermsCol, hasMeshTerms := colIdx["Mesh_Terms"]
+
+	extColl := h.mongoRepo.GetExtractionCollection()
+	if extColl == nil {
+		sendJSONError(w, http.StatusInternalServerError, "Extraction collection tidak tersedia")
+		return
+	}
+
+	matched := 0
+	skipped := 0
+	totalRows := len(records) - 1
+
+	for _, row := range records[1:] {
+		if doiCol >= len(row) {
+			skipped++
+			continue
+		}
+
+		doi := strings.TrimSpace(row[doiCol])
+		if doi == "" {
+			skipped++
+			continue
+		}
+
+		// Normalize DOI
+		doi = strings.TrimPrefix(doi, "https://doi.org/")
+		doi = strings.TrimPrefix(doi, "http://doi.org/")
+		doi = strings.TrimSpace(doi)
+
+		if doi == "" {
+			skipped++
+			continue
+		}
+
+		doiLower := strings.ToLower(doi)
+
+		// Build keywords: combine Author Keywords + IEEE Terms + Mesh_Terms (semicolon separated)
+		var kwParts []string
+		if hasAuthorKw && authorKwCol < len(row) {
+			ak := strings.TrimSpace(row[authorKwCol])
+			if ak != "" {
+				kwParts = append(kwParts, ak)
+			}
+		}
+		if hasIEEETerms && ieeeTermsCol < len(row) {
+			it := strings.TrimSpace(row[ieeeTermsCol])
+			if it != "" {
+				kwParts = append(kwParts, it)
+			}
+		}
+		if hasMeshTerms && meshTermsCol < len(row) {
+			mt := strings.TrimSpace(row[meshTermsCol])
+			if mt != "" {
+				kwParts = append(kwParts, mt)
+			}
+		}
+		keywords := strings.Join(kwParts, "; ")
+
+		if keywords == "" {
+			skipped++
+			continue
+		}
+
+		updateSet := bson.M{
+			"scopus_keywords": keywords,
+		}
+
+		// Match by DOI (case-insensitive) in screening and extraction collections
+		doiFilter := bson.M{
+			"session_id": id,
+			"$or": bson.A{
+				bson.M{"doi": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+				bson.M{"DOI": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+			},
+		}
+		update := bson.M{"$set": updateSet}
+
+		anyMatched := false
+
+		// Update screening collection
+		screenColl := h.mongoRepo.GetScreeningCollection()
+		if res, _ := screenColl.UpdateMany(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
+			anyMatched = true
+		}
+
+		// Update extraction collection
+		if res, _ := extColl.UpdateOne(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
+			anyMatched = true
+		}
+
+		if anyMatched {
+			matched++
+		} else {
+			skipped++
+		}
+	}
+
+	logger.Logf(id, "[IEEE CSV] Selesai: matched=%d, skipped=%d, total_rows=%d", matched, skipped, totalRows)
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"matched":    matched,
+		"skipped":    skipped,
+		"total_rows": totalRows,
+	})
+}
+
+// UploadPubMedTXT accepts a MEDLINE/PubMed tagged format text file, parses it,
+// matches records by DOI to screening+extraction docs, and stores keywords to scopus_keywords.
+// POST /api/sessions/{id}/m8b/upload-pubmed-txt
+func (h *SessionHandler) UploadPubMedTXT(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	_, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Parse multipart form (max 10MB)
+	if err := req.ParseMultipartForm(10 << 20); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Gagal parse form: "+err.Error())
+		return
+	}
+
+	file, _, err := req.FormFile("file")
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, "File 'file' tidak ditemukan dalam form")
+		return
+	}
+	defer file.Close()
+
+	// Read all content
+	rawBytes, err := io.ReadAll(file)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal membaca file: "+err.Error())
+		return
+	}
+
+	// Strip UTF-8 BOM if present
+	rawBytes = bytes.TrimPrefix(rawBytes, []byte("\xef\xbb\xbf"))
+
+	// Parse PubMed/MEDLINE tagged format
+	// Records are separated by empty lines
+	// Tags: AID/LID for DOI (contains "[doi]"), OT for other terms, MH for MeSH headings
+	type pubmedRecord struct {
+		DOI      string
+		Keywords []string
+	}
+
+	var records []pubmedRecord
+	var currentDOI string
+	var currentKeywords []string
+
+	scanner := bufio.NewScanner(bytes.NewReader(rawBytes))
+	// Increase buffer for long lines
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	var currentTag string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Empty line = end of record
+		if strings.TrimSpace(line) == "" {
+			if currentDOI != "" && len(currentKeywords) > 0 {
+				records = append(records, pubmedRecord{DOI: currentDOI, Keywords: currentKeywords})
+			}
+			currentDOI = ""
+			currentKeywords = nil
+			currentTag = ""
+			continue
+		}
+
+		// MEDLINE format: tag starts at column 0-3, followed by "- " and value
+		// Continuation lines start with spaces
+		if len(line) >= 6 && line[4] == '-' && line[5] == ' ' {
+			currentTag = strings.TrimSpace(line[:4])
+			value := strings.TrimSpace(line[6:])
+
+			switch currentTag {
+			case "AID", "LID":
+				// DOI format: "10.1088/1741-2552/ac28d4 [doi]"
+				if strings.HasSuffix(value, "[doi]") {
+					doi := strings.TrimSpace(strings.TrimSuffix(value, "[doi]"))
+					if doi != "" {
+						currentDOI = doi
+					}
+				}
+			case "OT":
+				// Other Term (author keyword)
+				if value != "" {
+					currentKeywords = append(currentKeywords, value)
+				}
+			case "MH":
+				// MeSH Heading
+				// Remove subheadings after / and asterisks
+				mh := value
+				if idx := strings.Index(mh, "/"); idx > 0 {
+					mh = mh[:idx]
+				}
+				mh = strings.TrimRight(mh, "*")
+				mh = strings.TrimSpace(mh)
+				if mh != "" {
+					currentKeywords = append(currentKeywords, mh)
+				}
+			}
+		}
+		// Continuation lines (start with spaces) - we skip them for simplicity
+	}
+	// Don't forget last record if file doesn't end with empty line
+	if currentDOI != "" && len(currentKeywords) > 0 {
+		records = append(records, pubmedRecord{DOI: currentDOI, Keywords: currentKeywords})
+	}
+
+	if len(records) == 0 {
+		sendJSONError(w, http.StatusBadRequest, "Tidak ada record dengan DOI dan keywords ditemukan dalam file PubMed")
+		return
+	}
+
+	extColl := h.mongoRepo.GetExtractionCollection()
+	if extColl == nil {
+		sendJSONError(w, http.StatusInternalServerError, "Extraction collection tidak tersedia")
+		return
+	}
+
+	matched := 0
+	skipped := 0
+	totalRows := len(records)
+
+	for _, rec := range records {
+		doi := strings.TrimPrefix(rec.DOI, "https://doi.org/")
+		doi = strings.TrimPrefix(doi, "http://doi.org/")
+		doi = strings.TrimSpace(doi)
+
+		if doi == "" {
+			skipped++
+			continue
+		}
+
+		doiLower := strings.ToLower(doi)
+		keywords := strings.Join(rec.Keywords, "; ")
+
+		if keywords == "" {
+			skipped++
+			continue
+		}
+
+		updateSet := bson.M{
+			"scopus_keywords": keywords,
+		}
+
+		// Match by DOI (case-insensitive) in screening and extraction collections
+		doiFilter := bson.M{
+			"session_id": id,
+			"$or": bson.A{
+				bson.M{"doi": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+				bson.M{"DOI": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+			},
+		}
+		update := bson.M{"$set": updateSet}
+
+		anyMatched := false
+
+		// Update screening collection
+		screenColl := h.mongoRepo.GetScreeningCollection()
+		if res, _ := screenColl.UpdateMany(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
+			anyMatched = true
+		}
+
+		// Update extraction collection
+		if res, _ := extColl.UpdateOne(ctx, doiFilter, update); res != nil && res.MatchedCount > 0 {
+			anyMatched = true
+		}
+
+		if anyMatched {
+			matched++
+		} else {
+			skipped++
+		}
+	}
+
+	logger.Logf(id, "[PubMed TXT] Selesai: matched=%d, skipped=%d, total_records=%d", matched, skipped, totalRows)
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"matched":       matched,
+		"skipped":       skipped,
+		"total_records": totalRows,
 	})
 }
 
