@@ -82,7 +82,24 @@ func (m *M8Synthesis) runInterpretationL4(ctx context.Context, session *model.SL
 	if err != nil {
 		return err
 	}
-	session.InterpretationPackage = &model.InterpretationPackage{Markdown: pkg}
+
+	// Capture model name for xAI transparency.
+	brainPrimary, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
+	cfgBrain, _ := m.deps.MongoRepo.GetLLMConfig(ctx, brainPrimary)
+	var modelName string
+	if cfgBrain != nil {
+		modelName = cfgBrain.ProviderName
+		if cfgBrain.DefaultModel != "" {
+			modelName += " (" + cfgBrain.DefaultModel + ")"
+		}
+	} else {
+		modelName = brainPrimary
+	}
+	session.InterpretationPackage = &model.InterpretationPackage{
+		Markdown:     pkg,
+		ModelUsed:    modelName,
+		SystemPrompt: agent.InterpretationSystemPrompt,
+	}
 
 	// modul8_summary
 	het, robust, path := "-", "-", "-"

@@ -46,7 +46,9 @@ type GradeEvidence struct {
 
 // InterpretationPackage = output L4 (untuk Modul 9).
 type InterpretationPackage struct {
-	Markdown string `bson:"markdown" json:"markdown"`
+	Markdown     string `bson:"markdown" json:"markdown"`
+	ModelUsed    string `bson:"model_used,omitempty" json:"model_used,omitempty"`
+	SystemPrompt string `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 }
 
 type Modul8Summary struct {

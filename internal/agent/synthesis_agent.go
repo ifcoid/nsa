@@ -184,8 +184,8 @@ func (a *SynthesisAgent) Grade(ctx context.Context, synthesisJSON, qaJSON string
 
 // ===== L4: interpretation package =====
 
-func (a *SynthesisAgent) Interpretation(ctx context.Context, bundleJSON string) (string, error) {
-	systemPrompt := `Anda penyintesis akhir Systematic Literature Review.
+// InterpretationSystemPrompt is the exported system prompt constant for the Interpretation agent (xAI transparency).
+const InterpretationSystemPrompt = `Anda penyintesis akhir Systematic Literature Review.
 Susun INTERPRETATION PACKAGE (Markdown, Bahasa Indonesia) untuk Modul 9, mencakup:
 1. Answers to RQs (primary + secondary, grounded + GRADE confidence)
 2. 3-5 key findings (headline)
@@ -197,6 +197,9 @@ Susun INTERPRETATION PACKAGE (Markdown, Bahasa Indonesia) untuk Modul 9, mencaku
 8. Limitations self-audit 3-tier (review/study/synthesis level)
 
 Keluarkan HANYA Markdown (tanpa code fence).`
+
+func (a *SynthesisAgent) Interpretation(ctx context.Context, bundleJSON string) (string, error) {
+	systemPrompt := InterpretationSystemPrompt
 	raw, err := a.client.Generate(ctx, systemPrompt, fmt.Sprintf("=== BUNDLE (descriptive+synthesis+grade) ===\n%s", bundleJSON))
 	if err != nil {
 		return "", fmt.Errorf("Interpretation LLM: %w", err)
