@@ -60,7 +60,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		logger.Log(session.ID, "   3. Jika sudah lengkap terisi, ubah 'status' menjadi 'M4_STEP1_EVALUATE' dan Update.")
 		return nil
 
-	case "M4_STEP1_EVALUATE":
+	case "M4_STEP1_EVALUATE", "M4_STEP1_EVALUATION":
 		logger.Log(session.ID, "   [Langkah 4.1] Mengevaluasi Sanity Check hasil pencarian awal...")
 		
 		if session.DataMiningLog == nil || strings.Contains(session.DataMiningLog.InitialSample.TotalHitsPreFilter, "[ISI") {
