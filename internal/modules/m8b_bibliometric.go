@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+
+	"go.mongodb.org/mongo-driver/bson"
 
 	"nsa/internal/agent"
 	"nsa/internal/llm"
@@ -106,6 +110,66 @@ func (m *M8bBibliometric) runThesaurusL1(ctx context.Context, session *model.SLR
 			}
 		}
 	}
+	kwFromKeywords := len(freq)
+
+	// ---- Fallback source 1: extraction "subject" field ----
+	kwFromSubjects := 0
+	extColl := m.deps.MongoRepo.GetExtractionCollection()
+	if extColl != nil {
+		cur, err := extColl.Find(ctx, bson.M{"session_id": session.ID})
+		if err == nil {
+			var extDocs []bson.M
+			_ = cur.All(ctx, &extDocs)
+			for _, doc := range extDocs {
+				subj := extFieldValue(doc, "subject")
+				if subj == "" {
+					continue
+				}
+				for _, raw := range strings.FieldsFunc(subj, func(r rune) bool { return r == ';' || r == ',' || r == '|' }) {
+					t := strings.ToLower(strings.TrimSpace(raw))
+					if len(t) > 1 {
+						if _, exists := freq[t]; !exists {
+							kwFromSubjects++
+						}
+						freq[t]++
+					}
+				}
+			}
+		}
+	}
+
+	// ---- Fallback source 2: extract meaningful terms from Title ----
+	kwFromTitles := 0
+	for _, p := range papers {
+		title := getStr(p, "Title", "title")
+		if title == "" {
+			continue
+		}
+		for _, term := range extractTitleTerms(title) {
+			if _, exists := freq[term]; !exists {
+				kwFromTitles++
+			}
+			freq[term]++
+		}
+	}
+
+	// ---- Fallback source 3: extract terms from Abstract ----
+	kwFromAbstracts := 0
+	for _, p := range papers {
+		abs := getStr(p, "Abstract", "abstract")
+		if abs == "" {
+			continue
+		}
+		for _, term := range extractTitleTerms(abs) {
+			if _, exists := freq[term]; !exists {
+				kwFromAbstracts++
+			}
+			freq[term]++
+		}
+	}
+
+	logger.Logf(session.ID, "   [Biblio] Keyword sources: Keywords=%d, Subjects=%d, Titles=%d, Abstracts=%d\n",
+		kwFromKeywords, kwFromSubjects, kwFromTitles, kwFromAbstracts)
 	// Ambil sampel top-150 untuk LLM.
 	type kv struct {
 		k string
@@ -255,4 +319,67 @@ func (m *M8bBibliometric) runIntegrationL4(ctx context.Context, session *model.S
 	logger.Log(session.ID, "   [System] slna_integration + modul_bibliometric_summary tersimpan.")
 	session.Status = "M8B_STEP4_WAITING_APPROVAL"
 	return m.deps.MongoRepo.UpdateSession(ctx, session)
+}
+
+// ===== Helpers for keyword extraction =====
+
+// academicStopwords contains common English stopwords plus academic filler words.
+var academicStopwords = map[string]bool{
+	"the": true, "and": true, "for": true, "with": true, "from": true,
+	"that": true, "this": true, "are": true, "was": true, "were": true,
+	"been": true, "have": true, "has": true, "will": true, "can": true,
+	"not": true, "but": true, "its": true, "their": true, "our": true,
+	"than": true, "into": true, "also": true, "each": true, "both": true,
+	"more": true, "most": true, "some": true, "all": true, "new": true,
+	"first": true, "two": true, "one": true, "very": true, "when": true,
+	"only": true, "how": true, "where": true, "what": true, "used": true,
+	"using": true, "based": true, "through": true, "under": true, "over": true,
+	"about": true, "after": true, "before": true, "during": true, "such": true,
+	"which": true, "these": true, "those": true, "other": true, "between": true,
+	"use": true, "method": true, "approach": true, "proposed": true, "paper": true,
+	"study": true, "results": true, "show": true, "analysis": true, "via": true,
+	"novel": true,
+}
+
+// splitWordsRe splits text into words by non-letter/non-digit boundaries.
+var splitWordsRe = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+
+// extractTitleTerms extracts meaningful unigrams and bigrams from text.
+// It splits by spaces/punctuation, lowercases, filters stopwords and short words (<4 chars),
+// then generates bigrams from adjacent non-stopword words.
+func extractTitleTerms(text string) []string {
+	words := splitWordsRe.Split(text, -1)
+	var filtered []string
+	for _, w := range words {
+		w = strings.ToLower(strings.TrimSpace(w))
+		if len(w) < 4 {
+			continue
+		}
+		// Must contain at least one letter
+		hasLetter := false
+		for _, r := range w {
+			if unicode.IsLetter(r) {
+				hasLetter = true
+				break
+			}
+		}
+		if !hasLetter {
+			continue
+		}
+		if academicStopwords[w] {
+			continue
+		}
+		filtered = append(filtered, w)
+	}
+
+	// Collect unigrams
+	terms := make([]string, len(filtered))
+	copy(terms, filtered)
+
+	// Generate bigrams from adjacent non-stopword words
+	for i := 0; i < len(filtered)-1; i++ {
+		bigram := filtered[i] + " " + filtered[i+1]
+		terms = append(terms, bigram)
+	}
+	return terms
 }
