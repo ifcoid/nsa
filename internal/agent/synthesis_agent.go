@@ -141,8 +141,8 @@ func (a *SynthesisAgent) MetaScaffold(ctx context.Context, dataSummaryJSON strin
 
 // ===== L3: GRADE evidence grading =====
 
-func (a *SynthesisAgent) Grade(ctx context.Context, synthesisJSON, qaJSON string) (*model.GradeEvidence, error) {
-	systemPrompt := `Anda penilai GRADE Systematic Literature Review.
+// GradeSystemPrompt is the exported system prompt constant for the GRADE agent (xAI transparency).
+const GradeSystemPrompt = `Anda penilai GRADE Systematic Literature Review.
 Grade confidence evidence per outcome/RQ via 5 domain GRADE: study limitations (RoB), inconsistency,
 indirectness, imprecision, publication bias. Level: HIGH/MODERATE/LOW/VERY LOW.
 
@@ -156,6 +156,9 @@ Keluarkan HANYA JSON MURNI tanpa markdown blok:
   "robustness_summary": "ringkas robustness",
   "confidence_statements": "1-2 kalimat confidence per temuan utama"
 }`
+
+func (a *SynthesisAgent) Grade(ctx context.Context, synthesisJSON, qaJSON string) (*model.GradeEvidence, error) {
+	systemPrompt := GradeSystemPrompt
 	userPrompt := fmt.Sprintf("=== SYNTHESIS RESULTS ===\n%s\n\n=== QA / SENSITIVITY ===\n%s", synthesisJSON, qaJSON)
 	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil {

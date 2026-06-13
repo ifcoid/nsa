@@ -40,6 +40,8 @@ type GradeEvidence struct {
 	RobustnessVerdict    string `bson:"robustness_verdict" json:"robustness_verdict"` // ROBUST / CONDITIONALLY ROBUST / NOT ROBUST
 	RobustnessSummary    string `bson:"robustness_summary" json:"robustness_summary"`
 	ConfidenceStatements string `bson:"confidence_statements" json:"confidence_statements"`
+	ModelUsed            string `bson:"model_used,omitempty" json:"model_used,omitempty"`
+	SystemPrompt         string `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 }
 
 // InterpretationPackage = output L4 (untuk Modul 9).

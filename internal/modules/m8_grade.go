@@ -32,6 +32,22 @@ func (m *M8Synthesis) runGradeL3(ctx context.Context, session *model.SLRSession)
 	if err != nil {
 		return err
 	}
+
+	// Capture model name for xAI transparency.
+	brainPrimary, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
+	cfgBrain, _ := m.deps.MongoRepo.GetLLMConfig(ctx, brainPrimary)
+	var modelName string
+	if cfgBrain != nil {
+		modelName = cfgBrain.ProviderName
+		if cfgBrain.DefaultModel != "" {
+			modelName += " (" + cfgBrain.DefaultModel + ")"
+		}
+	} else {
+		modelName = brainPrimary
+	}
+	grade.ModelUsed = modelName
+	grade.SystemPrompt = agent.GradeSystemPrompt
+
 	session.GradeEvidence = grade
 	logger.Logf(session.ID, "   [System] GRADE selesai. Robustness: %s.\n", grade.RobustnessVerdict)
 	session.Status = "M8_STEP3_WAITING_APPROVAL"
