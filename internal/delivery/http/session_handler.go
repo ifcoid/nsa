@@ -20,6 +20,7 @@ import (
 	"nsa/internal/parser"
 	"nsa/internal/repository"
 
+	"github.com/ifcoid/refs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -1782,6 +1783,44 @@ func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// Scopus API keyword pre-fetch for papers with DOI but no keywords in extKeywordsMap
+	scopusKeywordsMap := make(map[string]string)
+	scopusCfg := h.mongoRepo.GetScopusConfig(ctx)
+	if scopusCfg != nil && scopusCfg.APIKey != "" {
+		scopusKey := scopusCfg.APIKey
+		scopusCount := 0
+		for _, p := range papers {
+			if scopusCount >= 50 {
+				break
+			}
+			doi := risGetStr(p, "DOI", "doi")
+			if doi == "" {
+				continue
+			}
+			doiLower := strings.ToLower(doi)
+			if _, ok := extKeywordsMap[doiLower]; ok {
+				continue
+			}
+			ftResp, err := refs.RetrieveFullText(doi, scopusKey)
+			if err == nil {
+				subjects := ftResp.FullTextRetrievalResponse.CoreData.Subjects
+				if len(subjects) > 0 {
+					var names []string
+					for _, s := range subjects {
+						if s.Name != "" {
+							names = append(names, s.Name)
+						}
+					}
+					if len(names) > 0 {
+						scopusKeywordsMap[doiLower] = strings.Join(names, "; ")
+					}
+				}
+			}
+			scopusCount++
+			time.Sleep(1 * time.Second)
+		}
+	}
+
 	// Generate RIS entries
 	var buf bytes.Buffer
 	for _, p := range papers {
@@ -1800,7 +1839,14 @@ func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
-		// Fallback: extract keywords from title if still empty
+		// Fallback 2: Scopus API subjects
+		if keywords == "" && doi != "" {
+			if subj, ok := scopusKeywordsMap[strings.ToLower(doi)]; ok {
+				keywords = subj
+			}
+		}
+
+		// Fallback 3: extract keywords from title if still empty
 		if keywords == "" && title != "" {
 			keywords = risExtractTitleKeywords(title)
 		}
