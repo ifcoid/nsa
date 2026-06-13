@@ -29,11 +29,20 @@ func (a *BibliometricAgent) BuildThesaurus(ctx context.Context, keywordSample st
 Aturan: lowercase; samakan "-" dan spasi (konsisten); merge sinonim (mis. "ai" & "artificial intelligence"),
 plural/singular; buang stop words ("study","analysis","research"); domain-specific synonyms.
 
-Format thesaurus VOSviewer per baris: "label<TAB>synonym1, synonym2" (gunakan tab nyata).
+Format output thesaurus: satu mapping per baris, format "term_variant[TAB]canonical_label" (dipisah karakter TAB).
+JANGAN sertakan baris header. Setiap baris memetakan SATU varian ke SATU label kanonik.
+Contoh isi thesaurus_keywords:
+brain-computer interfaces	brain-computer interface
+brain computer interface	brain-computer interface
+artificial intelligence	ai
+deep learning models	deep learning
+eeg signals	eeg
+electroencephalography	eeg
+state space models	state space model
 
 Keluarkan HANYA JSON MURNI tanpa markdown:
 {
-  "thesaurus_keywords": "artificial intelligence\tai, a.i.\nmachine learning\tml\n...",
+  "thesaurus_keywords": "brain-computer interfaces\tbrain-computer interface\nbrain computer interface\tbrain-computer interface\nartificial intelligence\tai\n...",
   "thesaurus_authors": "(opsional, kosong jika tak ada data author)",
   "approach": "VOSviewer direct / bibliometrix R + alasan singkat"
 }`
