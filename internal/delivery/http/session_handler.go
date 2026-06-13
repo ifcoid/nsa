@@ -395,16 +395,33 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 
 		for _, doc := range parsedDocs {
 			p := model.Paper{
-				SessionID:    session.ID,
-				Title:        doc.Title,
-				Abstract:     doc.Abstract,
-				DOI:          doc.DOI,
-				Year:         doc.Year,
-				Authors:      doc.Authors,
-				Database:     doc.Database,
-				Journal:      doc.Journal,
-				DocumentType: doc.DocumentType,
-				Status:       "PENDING", // Initial state
+				SessionID:      session.ID,
+				Title:          doc.Title,
+				Abstract:       doc.Abstract,
+				DOI:            doc.DOI,
+				Year:           doc.Year,
+				Authors:        doc.Authors,
+				Database:       doc.Database,
+				Journal:        doc.Journal,
+				DocumentType:   doc.DocumentType,
+				Keywords:       doc.Keywords,
+				IndexKeywords:  doc.IndexKeywords,
+				Affiliations:   doc.Affiliations,
+				Volume:         doc.Volume,
+				Issue:          doc.Issue,
+				PageStart:      doc.PageStart,
+				PageEnd:        doc.PageEnd,
+				ISSN:           doc.ISSN,
+				ISBN:           doc.ISBN,
+				Publisher:      doc.Publisher,
+				Language:       doc.Language,
+				FundingDetails: doc.FundingDetails,
+				CitedBy:        doc.CitedBy,
+				ConferenceName: doc.ConferenceName,
+				EID:            doc.EID,
+				PubMedID:       doc.PubMedID,
+				References:     doc.References,
+				Status:         "PENDING", // Initial state
 			}
 			allPapers = append(allPapers, p)
 		}

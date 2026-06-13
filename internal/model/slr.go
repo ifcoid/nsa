@@ -491,6 +491,23 @@ type Paper struct {
 	Database     string `bson:"database" json:"database"` // e.g. "Scopus", "IEEE", "PubMed"
 	Journal      string `bson:"journal" json:"journal"`
 	DocumentType string `bson:"document_type" json:"document_type"`
+	Keywords       string `bson:"keywords,omitempty" json:"keywords,omitempty"`
+	IndexKeywords  string `bson:"index_keywords,omitempty" json:"index_keywords,omitempty"`
+	Affiliations   string `bson:"affiliations,omitempty" json:"affiliations,omitempty"`
+	Volume         string `bson:"volume,omitempty" json:"volume,omitempty"`
+	Issue          string `bson:"issue,omitempty" json:"issue,omitempty"`
+	PageStart      string `bson:"page_start,omitempty" json:"page_start,omitempty"`
+	PageEnd        string `bson:"page_end,omitempty" json:"page_end,omitempty"`
+	ISSN           string `bson:"issn,omitempty" json:"issn,omitempty"`
+	ISBN           string `bson:"isbn,omitempty" json:"isbn,omitempty"`
+	Publisher      string `bson:"publisher,omitempty" json:"publisher,omitempty"`
+	Language       string `bson:"language,omitempty" json:"language,omitempty"`
+	FundingDetails string `bson:"funding_details,omitempty" json:"funding_details,omitempty"`
+	CitedBy        string `bson:"cited_by,omitempty" json:"cited_by,omitempty"`
+	ConferenceName string `bson:"conference_name,omitempty" json:"conference_name,omitempty"`
+	EID            string `bson:"eid,omitempty" json:"eid,omitempty"`
+	PubMedID       string `bson:"pubmed_id,omitempty" json:"pubmed_id,omitempty"`
+	References     string `bson:"references,omitempty" json:"references,omitempty"`
 	Status       string `bson:"status" json:"status"` // "PENDING", "ACCEPT", "REJECT"
 	Reason       string `bson:"reason" json:"reason"`
 
