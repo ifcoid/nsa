@@ -1979,10 +1979,16 @@ func (h *SessionHandler) EnrichScopusKeywords(w http.ResponseWriter, req *http.R
 				}
 			}
 
+			// Normalize DOI (strip URL prefix)
+			cleanDOI := t.DOI
+			cleanDOI = strings.TrimPrefix(cleanDOI, "https://doi.org/")
+			cleanDOI = strings.TrimPrefix(cleanDOI, "http://doi.org/")
+			cleanDOI = strings.TrimSpace(cleanDOI)
+
 			// Call Scopus Abstract API
-			absResp, err := refs.RetrieveScopusAbstract(t.DOI, apiKey)
+			absResp, err := refs.RetrieveScopusAbstract(cleanDOI, apiKey)
 			if err != nil {
-				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → error: %v", i+1, total, t.DOI, err)
+				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → error: %v", i+1, total, cleanDOI, err)
 				time.Sleep(2 * time.Second)
 				continue
 			}
@@ -2001,6 +2007,22 @@ func (h *SessionHandler) EnrichScopusKeywords(w http.ResponseWriter, req *http.R
 						names = append(names, term.Value)
 					}
 				}
+			}
+			// Subject areas (tertiary fallback)
+			if len(names) == 0 {
+				for _, sa := range absResp.AbstractsRetrievalResponse.SubjectAreas.SubjectArea {
+					if sa.Value != "" {
+						names = append(names, sa.Value)
+					}
+				}
+			}
+			// Debug: log first successful response structure
+			if i < 3 && len(names) == 0 {
+				logger.Logf(id, "[Scopus Enrich] [%d/%d] DEBUG raw struct: AuthKW=%d, IdxTerms=%d, SubjAreas=%d",
+					i+1, total,
+					len(absResp.AbstractsRetrievalResponse.AuthKeywords.AuthorKeyword),
+					len(absResp.AbstractsRetrievalResponse.IdxTerms.MainTerm),
+					len(absResp.AbstractsRetrievalResponse.SubjectAreas.SubjectArea))
 			}
 
 			keywords := strings.Join(names, "; ")
