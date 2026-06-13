@@ -1800,6 +1800,11 @@ func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
+		// Fallback: extract keywords from title if still empty
+		if keywords == "" && title != "" {
+			keywords = risExtractTitleKeywords(title)
+		}
+
 		// Determine TY value
 		tyValue := "JOUR"
 		if strings.Contains(strings.ToLower(journal), "conference") ||
@@ -1946,9 +1951,76 @@ func risParseKeywords(keywords string) []string {
 	var result []string
 	for _, p := range parts {
 		t := strings.TrimSpace(p)
-		if t != "" {
+		if t != "" && risIsValidKeyword(t) {
 			result = append(result, t)
 		}
 	}
 	return result
+}
+
+// risIsValidKeyword filters out garbage keywords that produce noise in VOSviewer.
+func risIsValidKeyword(kw string) bool {
+	// Skip short keywords (less than 3 chars)
+	if len(kw) < 3 {
+		return false
+	}
+	// Skip keywords that are only digits
+	allDigits := true
+	for _, c := range kw {
+		if c < '0' || c > '9' {
+			allDigits = false
+			break
+		}
+	}
+	if allDigits {
+		return false
+	}
+	// Skip [not reported] variants
+	lower := strings.ToLower(kw)
+	if strings.Contains(lower, "[not reported]") {
+		return false
+	}
+	// Skip extraction artifacts
+	if strings.Contains(lower, "subjects per dataset") {
+		return false
+	}
+	return true
+}
+
+// risExtractTitleKeywords extracts keywords from a paper title by splitting on spaces/punctuation,
+// lowercasing, and filtering stopwords and short words.
+func risExtractTitleKeywords(title string) string {
+	// Split by non-letter characters
+	splitter := regexp.MustCompile(`[^a-zA-Z]+`)
+	words := splitter.Split(title, -1)
+
+	stopwords := map[string]bool{
+		"the": true, "and": true, "for": true, "with": true, "from": true,
+		"that": true, "this": true, "are": true, "was": true, "were": true,
+		"has": true, "have": true, "will": true, "can": true, "not": true,
+		"but": true, "its": true, "their": true, "our": true, "than": true,
+		"into": true, "also": true, "each": true, "both": true, "more": true,
+		"most": true, "some": true, "all": true, "new": true, "first": true,
+		"two": true, "one": true, "very": true, "when": true, "only": true,
+		"how": true, "where": true, "what": true, "used": true, "using": true,
+		"based": true, "through": true, "under": true, "over": true, "about": true,
+		"after": true, "before": true, "during": true, "such": true, "which": true,
+		"these": true, "those": true, "other": true, "between": true, "novel": true,
+		"proposed": true, "method": true, "approach": true, "paper": true, "study": true,
+		"results": true, "show": true, "analysis": true, "via": true,
+	}
+
+	var kws []string
+	for _, w := range words {
+		lower := strings.ToLower(w)
+		if len(lower) < 3 {
+			continue
+		}
+		if stopwords[lower] {
+			continue
+		}
+		kws = append(kws, lower)
+	}
+
+	return strings.Join(kws, "; ")
 }
