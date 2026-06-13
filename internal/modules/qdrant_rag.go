@@ -579,3 +579,95 @@ func toFloat32(arr []interface{}) []float32 {
 	}
 	return out
 }
+
+// SemanticSearch embeds the query string and searches Qdrant for the top-K most
+// similar documents. Returns ranked results with DOI, Title, Score, and a text
+// Snippet. If the embedding endpoint or Qdrant is not configured, returns empty
+// results gracefully (no error).
+func SemanticSearch(ctx context.Context, query string, topK int) []SemanticResult {
+	if topK <= 0 {
+		topK = 10
+	}
+
+	// 1. Embed the query text.
+	vec, available, err := EmbedText(ctx, query)
+	if !available || err != nil || len(vec) == 0 {
+		return nil
+	}
+
+	// 2. Check Qdrant connectivity.
+	qdrantURL := os.Getenv("QDRANT_URL")
+	if qdrantURL == "" {
+		qdrantURL = os.Getenv("QDRANT_ENDPOINT")
+	}
+	if qdrantURL == "" {
+		return nil
+	}
+	qdrantKey := os.Getenv("QDRANT_API_KEY")
+
+	// 3. Build the query vector as []float64 for JSON marshaling.
+	vecF64 := make([]float64, len(vec))
+	for i, v := range vec {
+		vecF64[i] = float64(v)
+	}
+
+	reqPayload := map[string]interface{}{
+		"query":        vecF64,
+		"limit":        topK,
+		"with_payload": []string{"doi", "title", "content"},
+	}
+	body, _ := json.Marshal(reqPayload)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		fmt.Sprintf("%s/collections/scientific_articles/points/query", qdrantURL),
+		strings.NewReader(string(body)))
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if qdrantKey != "" {
+		req.Header.Set("api-key", qdrantKey)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil
+	}
+
+	var qResp struct {
+		Result struct {
+			Points []struct {
+				Score   float64                `json:"score"`
+				Payload map[string]interface{} `json:"payload"`
+			} `json:"points"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&qResp); err != nil {
+		return nil
+	}
+
+	var results []SemanticResult
+	for _, pt := range qResp.Result.Points {
+		doi, _ := pt.Payload["doi"].(string)
+		title, _ := pt.Payload["title"].(string)
+		content, _ := pt.Payload["content"].(string)
+
+		snippet := content
+		if len(snippet) > 500 {
+			snippet = snippet[:500]
+		}
+
+		results = append(results, SemanticResult{
+			DOI:     doi,
+			Title:   title,
+			Score:   pt.Score,
+			Snippet: snippet,
+		})
+	}
+	return results
+}

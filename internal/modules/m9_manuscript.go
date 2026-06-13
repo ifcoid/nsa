@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"nsa/internal/agent"
 	"nsa/internal/llm"
@@ -295,4 +299,175 @@ func (m *M9Manuscript) artifactBundle(session *model.SLRSession) string {
 		w("SLNA INTEGRATION", si.Markdown+"\nConvergent gaps: "+si.ConvergentGaps)
 	}
 	return b.String()
+}
+
+// fetchExtractionData queries the slr_extraction collection and returns per-paper
+// extraction data for the given session. This provides granular paper-level data
+// (not just aggregated summaries) for manuscript prompts.
+func (m *M9Manuscript) fetchExtractionData(ctx context.Context, sessionID string) []ExtractionPaperData {
+	coll := m.deps.MongoRepo.GetExtractionCollection()
+	cursor, err := coll.Find(ctx, bson.M{"session_id": sessionID})
+	if err != nil {
+		return nil
+	}
+	var docs []bson.M
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil
+	}
+
+	var results []ExtractionPaperData
+	for _, doc := range docs {
+		extracted, _ := doc["extracted"].(bool)
+		if !extracted {
+			continue
+		}
+
+		epd := ExtractionPaperData{
+			DOI:         getStr(doc, "doi", "DOI"),
+			Title:       getStr(doc, "title", "Title"),
+			Authors:     getStr(doc, "authors", "Authors"),
+			Year:        getStr(doc, "year", "Year"),
+			Journal:     getStr(doc, "journal", "Journal"),
+			KeyFindings: getStr(doc, "key_findings"),
+			QARedFlags:  getStr(doc, "qa_red_flags"),
+		}
+
+		// Parse fields array (may be primitive.A from bson decode)
+		if fields, ok := doc["fields"]; ok {
+			var arr []interface{}
+			switch v := fields.(type) {
+			case primitive.A:
+				arr = []interface{}(v)
+			case []interface{}:
+				arr = v
+			}
+			for _, f := range arr {
+				var fMap bson.M
+				switch fm := f.(type) {
+				case bson.M:
+					fMap = fm
+				}
+				if fMap != nil {
+					ef := ExtractedField{
+						Key:      getStr(fMap, "key"),
+						Value:    getStr(fMap, "value"),
+						Evidence: getStr(fMap, "evidence"),
+						Status:   getStr(fMap, "status"),
+					}
+					epd.Fields = append(epd.Fields, ef)
+				}
+			}
+		}
+
+		results = append(results, epd)
+	}
+	return results
+}
+
+// buildPaperCatalog collects all included papers from the screening collection and
+// generates a citation key for each (format: firstAuthorSurnameYear, e.g., zhang2025).
+// Duplicate keys are deduplicated with a/b/c suffixes.
+func (m *M9Manuscript) buildPaperCatalog(ctx context.Context, session *model.SLRSession) []PaperCitation {
+	papers, err := m.deps.MongoRepo.GetAllScreeningPapers(ctx, session.ID)
+	if err != nil {
+		return nil
+	}
+
+	var catalog []PaperCitation
+	for _, p := range papers {
+		// Only included papers that passed full-text screening
+		retrieved, _ := p["full_text_retrieved"].(bool)
+		incAbs := getStr(p, "Final_Decision") == "INCLUDE" ||
+			(getStr(p, "Final_Decision") == "" && getStr(p, "Screener_1_Decision") == "INCLUDE")
+		if !(retrieved && incAbs && finalFullDecision(p) == "INCLUDE") {
+			continue
+		}
+
+		authors := getStr(p, "Authors", "authors")
+		year := getStr(p, "Year", "year")
+
+		catalog = append(catalog, PaperCitation{
+			Key:     generateCitationKey(authors, year),
+			Authors: authors,
+			Title:   getStr(p, "Title", "title"),
+			Year:    year,
+			Journal: getStr(p, "Journal", "journal"),
+			DOI:     getStr(p, "DOI", "doi"),
+		})
+	}
+
+	// Deduplicate keys with a/b/c suffixes
+	deduplicateCitationKeys(catalog)
+
+	return catalog
+}
+
+// generateCitationKey creates a citation key from the first author surname and year.
+// E.g., "Zhang, L.; Wang, H." + "2025" => "zhang2025".
+func generateCitationKey(authors, year string) string {
+	surname := extractFirstSurname(authors)
+	if surname == "" {
+		surname = "unknown"
+	}
+	if year == "" {
+		year = "0000"
+	}
+	return surname + year
+}
+
+// extractFirstSurname extracts the first author's surname in lowercase.
+// Handles formats like "Zhang, L.; Wang, H." or "Zhang L, Wang H" or "L. Zhang".
+func extractFirstSurname(authors string) string {
+	if authors == "" {
+		return ""
+	}
+
+	// Split by common author separators
+	first := authors
+	for _, sep := range []string{";", " and ", " & "} {
+		if idx := strings.Index(first, sep); idx > 0 {
+			first = first[:idx]
+		}
+	}
+	first = strings.TrimSpace(first)
+
+	// If there's a comma, surname is before the comma (e.g., "Zhang, L.")
+	if idx := strings.Index(first, ","); idx > 0 {
+		first = strings.TrimSpace(first[:idx])
+	} else {
+		// Otherwise take the last word (e.g., "L. Zhang" or "John Zhang")
+		parts := strings.Fields(first)
+		if len(parts) > 0 {
+			first = parts[len(parts)-1]
+		}
+	}
+
+	// Clean: lowercase, only letters
+	var sb strings.Builder
+	for _, r := range strings.ToLower(first) {
+		if unicode.IsLetter(r) {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
+// deduplicateCitationKeys appends a/b/c/... suffixes to duplicate keys in-place.
+func deduplicateCitationKeys(catalog []PaperCitation) {
+	counts := make(map[string]int)
+	for _, c := range catalog {
+		counts[c.Key]++
+	}
+
+	// Only process keys that have duplicates
+	assigned := make(map[string]int)
+	for i := range catalog {
+		key := catalog[i].Key
+		if counts[key] > 1 {
+			idx := assigned[key]
+			suffix := string(rune('a' + idx))
+			catalog[i].Key = key + suffix
+			assigned[key] = idx + 1
+		}
+	}
 }
