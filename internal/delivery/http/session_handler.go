@@ -1783,41 +1783,22 @@ func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	// Scopus API keyword pre-fetch for papers with DOI but no keywords in extKeywordsMap
+	// Read pre-enriched Scopus keywords from extraction docs (field "scopus_keywords")
 	scopusKeywordsMap := make(map[string]string)
-	scopusCfg := h.mongoRepo.GetScopusConfig(ctx)
-	if scopusCfg != nil && scopusCfg.APIKey != "" {
-		scopusKey := scopusCfg.APIKey
-		scopusCount := 0
-		for _, p := range papers {
-			if scopusCount >= 50 {
-				break
-			}
-			doi := risGetStr(p, "DOI", "doi")
-			if doi == "" {
-				continue
-			}
-			doiLower := strings.ToLower(doi)
-			if _, ok := extKeywordsMap[doiLower]; ok {
-				continue
-			}
-			ftResp, err := refs.RetrieveFullText(doi, scopusKey)
-			if err == nil {
-				subjects := ftResp.FullTextRetrievalResponse.CoreData.Subjects
-				if len(subjects) > 0 {
-					var names []string
-					for _, s := range subjects {
-						if s.Name != "" {
-							names = append(names, s.Name)
-						}
-					}
-					if len(names) > 0 {
-						scopusKeywordsMap[doiLower] = strings.Join(names, "; ")
-					}
+	if extColl != nil {
+		curScopus, err := extColl.Find(ctx, bson.M{"session_id": id, "scopus_keywords": bson.M{"$exists": true, "$ne": ""}})
+		if err == nil {
+			var scopusDocs []bson.M
+			_ = curScopus.All(ctx, &scopusDocs)
+			for _, doc := range scopusDocs {
+				doi := risGetExtDOI(doc)
+				if doi == "" {
+					continue
+				}
+				if kw, ok := doc["scopus_keywords"].(string); ok && kw != "" {
+					scopusKeywordsMap[strings.ToLower(doi)] = kw
 				}
 			}
-			scopusCount++
-			time.Sleep(1 * time.Second)
 		}
 	}
 
@@ -1912,6 +1893,151 @@ func (h *SessionHandler) ExportRIS(w http.ResponseWriter, req *http.Request) {
 // GET /api/sessions/{id}/m8b/export-bibtex
 func (h *SessionHandler) ExportBibTeX(w http.ResponseWriter, req *http.Request) {
 	h.ExportRIS(w, req)
+}
+
+// EnrichScopusKeywords fetches keywords from Scopus API for each paper's DOI and stores
+// them in the extraction doc field "scopus_keywords". Runs asynchronously in a goroutine.
+// POST /api/sessions/{id}/m8b/enrich-scopus-keywords
+func (h *SessionHandler) EnrichScopusKeywords(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	_, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Check Scopus API key
+	scopusCfg := h.mongoRepo.GetScopusConfig(ctx)
+	if scopusCfg == nil || scopusCfg.APIKey == "" {
+		sendJSONError(w, http.StatusBadRequest, "Scopus API key belum di-set di Pengaturan")
+		return
+	}
+
+	// Spawn goroutine for async enrichment
+	go func() {
+		bgCtx := context.Background()
+		apiKey := scopusCfg.APIKey
+
+		// Get all screening papers with DOI
+		papers, err := h.mongoRepo.GetAllScreeningPapers(bgCtx, id)
+		if err != nil {
+			logger.Logf(id, "[Scopus Enrich] ERROR: gagal ambil papers: %v", err)
+			return
+		}
+
+		extColl := h.mongoRepo.GetExtractionCollection()
+		if extColl == nil {
+			logger.Logf(id, "[Scopus Enrich] ERROR: extraction collection nil")
+			return
+		}
+
+		// Build list of papers with DOI
+		type paperDOI struct {
+			DOI string
+		}
+		var targets []paperDOI
+		for _, p := range papers {
+			doi := risGetStr(p, "DOI", "doi")
+			if doi != "" {
+				targets = append(targets, paperDOI{DOI: doi})
+			}
+		}
+
+		total := len(targets)
+		if total == 0 {
+			logger.Logf(id, "[Scopus Enrich] Tidak ada paper dengan DOI.")
+			return
+		}
+
+		logger.Logf(id, "[Scopus Enrich] Mulai enrichment %d paper...", total)
+
+		enriched := 0
+		for i, t := range targets {
+			doiLower := strings.ToLower(t.DOI)
+
+			// Check if extraction doc already has scopus_keywords
+			var extDoc bson.M
+			err := extColl.FindOne(bgCtx, bson.M{
+				"session_id": id,
+				"$or": bson.A{
+					bson.M{"doi": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+					bson.M{"DOI": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+				},
+			}).Decode(&extDoc)
+
+			if err == nil {
+				// Check if already has scopus_keywords
+				if kw, ok := extDoc["scopus_keywords"].(string); ok && kw != "" {
+					logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → sudah ada keywords, skip", i+1, total, t.DOI)
+					continue
+				}
+			}
+
+			// Call Scopus API
+			ftResp, err := refs.RetrieveFullText(t.DOI, apiKey)
+			if err != nil {
+				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → error: %v", i+1, total, t.DOI, err)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+
+			subjects := ftResp.FullTextRetrievalResponse.CoreData.Subjects
+			var names []string
+			for _, s := range subjects {
+				if s.Name != "" {
+					names = append(names, s.Name)
+				}
+			}
+
+			keywords := strings.Join(names, "; ")
+
+			if keywords == "" {
+				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → tidak ada keywords", i+1, total, t.DOI)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+
+			// Save to extraction doc
+			filter := bson.M{
+				"session_id": id,
+				"$or": bson.A{
+					bson.M{"doi": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+					bson.M{"DOI": primitive.Regex{Pattern: "^" + regexp.QuoteMeta(doiLower) + "$", Options: "i"}},
+				},
+			}
+			update := bson.M{"$set": bson.M{"scopus_keywords": keywords}}
+
+			res, err := extColl.UpdateOne(bgCtx, filter, update)
+			if err != nil {
+				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → error save: %v", i+1, total, t.DOI, err)
+			} else if res.MatchedCount == 0 {
+				// No extraction doc exists for this DOI, create one
+				_, _ = extColl.InsertOne(bgCtx, bson.M{
+					"session_id":      id,
+					"doi":             t.DOI,
+					"scopus_keywords": keywords,
+				})
+				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → keywords: %s (new doc)", i+1, total, t.DOI, keywords)
+			} else {
+				logger.Logf(id, "[Scopus Enrich] [%d/%d] DOI: %s → keywords: %s", i+1, total, t.DOI, keywords)
+			}
+
+			enriched++
+			time.Sleep(2 * time.Second)
+		}
+
+		logger.Logf(id, "[Scopus Enrich] SELESAI: %d/%d paper berhasil diperkaya keywords.", enriched, total)
+	}()
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": "Enrichment sedang berjalan...",
+	})
 }
 
 // --- RIS helper functions ---
