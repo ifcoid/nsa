@@ -321,7 +321,9 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 			doi := getStringField(p, "DOI", "doi")
 			year := getStringField(p, "Year", "year")
 			authors := getStringField(p, "Authors", "authors", "Author")
-			keywords := getStringField(p, "Author Keywords", "Index Keywords", "keywords")
+			authorKeywords := getStringField(p, "Author Keywords", "keywords", "Keywords")
+			indexKeywords := getStringField(p, "Index Keywords", "IndexKeywords", "index_keywords", "IEEE Terms")
+			affiliations := getStringField(p, "Affiliations", "affiliations", "Author Affiliations")
 			journal := getStringField(p, "Source title", "journal", "Conference", "Publication Title")
 			articleType := getStringField(p, "Document Type", "Article Type", "Type", "Item Type")
 			db := getStringField(p, "Database", "source_db", "Source")
@@ -333,7 +335,9 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 				"Year": year,
 				"Title": title,
 				"Abstract": abs,
-				"Keywords": keywords,
+				"Keywords": authorKeywords,
+				"IndexKeywords": indexKeywords,
+				"Affiliations": affiliations,
 				"DOI": doi,
 				"Journal": journal,
 				"Article_Type": articleType,
