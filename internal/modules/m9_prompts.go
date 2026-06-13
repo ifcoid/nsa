@@ -1,60 +1,151 @@
 package modules
 
-// Aturan bersama (Bagian C Modul 9) ditempel ke setiap prompt section.
+// m9Rules contains shared rules appended to every M9 section prompt.
+// Enforces LaTeX output, \cite{} citations, anti-AI style, and structured per-claim referencing.
 const m9Rules = `
 
-ATURAN WAJIB:
-- Tulis HANYA section yang diminta, Bahasa Inggris akademik (Markdown). Tanpa preamble/kalimat meta.
+ATURAN WAJIB (FORMAT & REFERENCING):
+- Output HARUS dalam format LaTeX. Gunakan \section{}, \subsection{}, \subsubsection{} sesuai hierarki.
+- Setiap klaim faktual HARUS disertai \cite{authorYear} yang merujuk ke PAPER CATALOG di bawah.
+- Format per-klaim: "Finding [klaim spesifik] \cite{authorYear}." atau "Several studies confirmed X \cite{smith2023, lee2024}."
+- Setiap paragraf WAJIB mengutip minimal 2-3 referensi berbeda menggunakan \cite{}.
+- JANGAN menulis referensi inline penuh (e.g., "Smith (2023) found..."). Gunakan HANYA \cite{key}.
+- JANGAN mengarang citation key. Gunakan HANYA key dari PAPER CATALOG yang diberikan.
+- Tulis HANYA section yang diminta. Tanpa preamble/kalimat meta/pembuka "Here is the section".
 - DILARANG menyebut AI/Claude/LLM/GPT/"Pass 1-2"/sesi/nama file internal (outputs/, .xlsx, "Modul X", qdrant).
 - Framing manusia: "Reviewer 1/2", "Extractor 1/2", "Rater 1/2" (BUKAN AI). Kappa = inter-reviewer/extractor/rater agreement.
-- Angka (N studi, κ, %, GRADE) HARUS dari ARTEFAK yang diberikan; JANGAN mengarang/estimasi. Bila tak tersedia, tulis netral tanpa angka palsu.
-- Hedging sesuai GRADE: HIGH→tegas; MODERATE→"likely/probably"; LOW→"may/suggests"; VERY LOW→"tentative/uncertain".
+- Angka (N studi, kappa, %, GRADE) HARUS dari ARTEFAK yang diberikan; JANGAN mengarang/estimasi. Bila tak tersedia, tulis netral tanpa angka palsu.
+- Hedging sesuai GRADE: HIGH = tegas; MODERATE = "likely/probably"; LOW = "may/suggests"; VERY LOW = "tentative/uncertain".
 - Geographic honesty: jangan klaim "global" bila data dominan regional; sebut region + persentase aktual dari descriptive.
-- Jika synthesis_path JALUR A: hindari "pooled effect/d=X across studies/overall effect size". Jika JALUR B: boleh bahasa meta-analitik (I², pooled estimate).
+- Jika synthesis_path JALUR A: hindari "pooled effect/d=X across studies/overall effect size". Jika JALUR B: boleh bahasa meta-analitik (I-squared, pooled estimate).
 - Terminologi: "systematic review", "extraction", "synthesis"/"meta-analysis", "PICO". Hindari calque ("It is known that", "It can be concluded", "Many studies have" sebagai opener).
 
-GAYA ANTI-CIRI-AI (WAJIB — agar tidak terbaca seperti tulisan AI):
-- JANGAN gunakan tanda em-dash ("—") atau en-dash ("–") sama sekali. Ganti dengan koma, tanda kurung, titik dua, atau pecah jadi kalimat baru.
-- Hindari transisi klise yang bertumpuk: "Moreover", "Furthermore", "In addition", "Notably", "It is worth noting", "It is important to note", "On the other hand". Pakai seperlunya & bervariasi.
-- Hindari pola terlalu rapi "not only X but also Y" dan tiga-serangkai "X, Y, and Z" berulang.
-- Hindari kata over-pakai AI: "delve", "leverage", "underscore", "pivotal", "realm", "tapestry", "intricate", "crucial"/"vital" berlebihan, "robust" berlebihan.
-- Variasikan panjang & struktur kalimat (jangan seragam). Jangan menyisipkan bullet-list di tengah prosa argumentatif.
-- Jangan pakai EMOJI atau IKON/SIMBOL DEKORATIF apa pun di prosa maupun heading (mis. ✅ ⚠️ ❌ ✓ ✗ → ➔ ★ ● ◆ ▪ 🎯 🚀 🔑 dan sejenisnya). Pengecualian SATU-SATUNYA: simbol ✓ / ⚠ / ✗ boleh dipakai HANYA di dalam tabel checklist formal (mis. PRISMA 2020 checklist), tidak di prosa, judul, abstract, atau heading.
-- Jangan pakai kutip keriting (“ ” ‘ ’), panah unicode sebagai pengganti kata, atau bullet ber-ikon. Tulisan harus terbaca natural seperti ditulis akademisi manusia.`
+GAYA ANTI-CIRI-AI (WAJIB KERAS):
+- DILARANG MUTLAK menggunakan em-dash (---), en-dash (--), karakter Unicode em-dash atau en-dash. Ganti dengan koma, tanda kurung, titik dua, atau pecah jadi kalimat baru.
+- DILARANG filler phrases: "it is worth noting", "importantly", "notably", "furthermore", "moreover", "in addition", "it is important to note", "on the other hand", "it should be noted", "interestingly". Jika ingin transisi, gunakan variasi alami atau langsung masuk substansi.
+- DILARANG bullet points (\begin{itemize}, \item) di dalam paragraf prosa argumentatif. Bullet HANYA boleh di tabel atau daftar terstruktur eksplisit.
+- Variasikan panjang kalimat: campur pendek (8-12 kata) dengan panjang (25-40 kata). Jangan seragam.
+- Gunakan hedging natural: "suggests", "indicates", "appears to", "the evidence points toward". Hindari overclaiming.
+- DILARANG kata over-pakai AI: "delve", "leverage", "underscore", "pivotal", "realm", "tapestry", "intricate", "crucial"/"vital" berlebihan, "robust" berlebihan, "multifaceted", "nuanced", "comprehensive" berlebihan.
+- DILARANG pola "not only X but also Y" berulang dan tiga-serangkai "X, Y, and Z" berulang.
+- Jangan pakai EMOJI atau IKON/SIMBOL DEKORATIF.
+- Jangan pakai kutip keriting, panah unicode, atau bullet ber-ikon.
+- Tulisan harus terbaca natural seperti ditulis akademisi manusia yang berpengalaman menulis jurnal.`
 
-const promptMethods = `Anda penulis akademik. Tulis section METHODS sebuah systematic review yang PATUH PRISMA 2020 (item 5-19), dalam author voice.
-Cakup: 5 Eligibility (PICO + reason codes), 6 Information sources (database + tanggal pencarian terakhir), 7 Search strategy (string Boolean + filter + update policy), 8 Selection process (dua tahap, Reviewer 1 & 2, κ_TA & κ_FT dari artefak, resolusi disagreement; perkenalkan Figure 1 PRISMA flow di sini), 9 Data collection (Extractor 1 & 2, κ_extract, framework TCCM/ADO/PICO, 100% validasi author), 10 Data items, 11 RoB (tool aktual + Rater 1 & 2 + κ_rob + threshold 3-tier + sensitivity), 12 Effect measures (hanya bila Jalur B), 13 Synthesis methods (Jalur A/B tegas), 14 Reporting bias (bila Jalur B), 15 Certainty (GRADE per outcome).
-Setiap keputusan + justifikasi ("We did X because Y"). Panjang 1200-1800 kata.` + m9Rules
+const promptMethods = `Anda penulis akademik. Tulis \section{Methods} sebuah systematic review yang PATUH PRISMA 2020 (item 5-19), dalam author voice, format LaTeX.
+Gunakan \subsection{} untuk tiap sub-bagian. Setiap keputusan metodologis HARUS didukung \cite{} ke paper yang menerapkan metode serupa atau ke guideline (jika ada di catalog).
 
-const promptResults = `Tulis section RESULTS systematic review, terstruktur per framework (TCCM/ADO/PICO sesuai artefak), OBJEKTIF (tanpa interpretasi — interpretasi ada di Discussion).
-Cakup: 2.1 Evolution of field (narasi angka PRISMA flow per tahap + cross-ref Figure 1, tren tahun, total studi, distribusi geografis JUJUR dari descriptive), 2.2 Dominant theories (jika TCCM), 2.3 Contexts, 2.4 Characteristics + constructs, 2.5 Methodological trends, 2.6 Synthesis results (Jalur A: tematik consistent+contradictory, indicative ranges per studi; Jalur B: pooled + subgroup + forest plot Figure; + tabel GRADE evidence profile).
-Rujuk Table 1 (Characteristics), Table 2 (Quality), Table 3 (GRADE). Panjang 2000-3000 kata.` + m9Rules
+Cakup subseksi:
+\subsection{Eligibility Criteria} -- PICO + reason codes, kutip guideline/paper pembanding
+\subsection{Information Sources} -- database + tanggal pencarian terakhir
+\subsection{Search Strategy} -- string Boolean + filter + update policy
+\subsection{Selection Process} -- dua tahap, Reviewer 1 & 2, kappa_TA & kappa_FT dari artefak, resolusi disagreement; perkenalkan "Figure 1" PRISMA flow
+\subsection{Data Collection Process} -- Extractor 1 & 2, kappa_extract, framework TCCM/ADO/PICO, 100% validasi author
+\subsection{Data Items} -- variabel yang diekstrak
+\subsection{Study Risk of Bias Assessment} -- tool aktual + Rater 1 & 2 + kappa_rob + threshold 3-tier + sensitivity
+\subsection{Effect Measures} -- (hanya bila Jalur B)
+\subsection{Synthesis Methods} -- Jalur A/B tegas, kutip studi yang di-synthesize
+\subsection{Reporting Bias Assessment} -- (bila Jalur B)
+\subsection{Certainty Assessment} -- GRADE per outcome
 
-const promptDiscussion = `Tulis section DISCUSSION systematic review dengan 6 subseksi WAJIB:
-3.1 Summary of findings (jawab RQ, sintesis high-level + interpretasi, BUKAN repetisi Results),
-3.2 Geographic & Contextual Honesty (DI AWAL; akui bias geografis dgn angka aktual + penjelasan struktural + implikasi),
-3.3 Dialog with existing theory (mendukung/menantang/memperluas + teori under-utilized + kontribusi),
-3.4 Heterogeneity analysis (mengapa temuan bervariasi; studi kontradiktif; moderator),
-3.5 Comparison with prior reviews (konsisten/berbeda vs prior_reviews; novelty — "how findings dialogue", post-findings),
-3.6 Limitations 3-tier (review-level, study-level [+inaccessible N,%], synthesis-level) tiap limitasi + mitigasi.
-Kutip angka dari Results lalu beri interpretasi baru (jangan ulang). Panjang 2000-2800 kata.` + m9Rules
+Setiap keputusan + justifikasi ("We did X because Y \cite{key}"). Minimal 2-3 \cite{} per paragraf. Panjang 1200-1800 kata.` + m9Rules
 
-const promptFuture = `Tulis subseksi FUTURE RESEARCH AGENDA (setelah Discussion), turunan gaps dari interpretation + prior_reviews.
-Struktur: 4.1 Pendahuluan agenda (1 paragraf), 4.2 Matriks prioritas (tabel: Priority | Timeframe | Rationale[link ke gap] | Research Question spesifik | Suggested Methodology) — min 3 HIGH + 2-3 MEDIUM + 1-2 LONG-TERM, 4.3 Prioritization rationale, 4.4 Methodological advancements needed.
-Tiap agenda = RESEARCH QUESTION spesifik (BUKAN "more research needed") + metodologi eksplisit; trace ke gap konkret. Beda dari Discussion 3.6 (yang = limitasi current). Panjang 800-1200 kata.` + m9Rules
+const promptResults = `Tulis \section{Results} systematic review dalam format LaTeX, terstruktur per framework (TCCM/ADO/PICO sesuai artefak), OBJEKTIF (tanpa interpretasi).
+Setiap temuan HARUS dikaitkan ke paper spesifik: "Study by \cite{authorYear} found that..." atau "This finding was corroborated by \cite{key1, key2}."
 
-const promptIntro = `Tulis section INTRODUCTION systematic review dengan 5 subseksi WAJIB:
-5.1 Background (field overview + importance + why now), 5.2 Review of Prior Reviews (subseksi tersendiri: 3-5 prior reviews [scope/method/findings/limitations] + paragraf "Synthesis Novelty" — apa SUDAH/BELUM dilakukan kolektif, mengapa riset ini menutup gap; FORWARD-looking, JANGAN preview findings), 5.3 Problem statement dgn tipe gap (A/B/C sebagai framing konseptual, author voice spesifik topik), 5.4 Scope justification (dari scope_justifications, author voice), 5.5 Research questions + objectives (primary + 3 secondary + preview framework TCCM/ADO/PICO; sebut PRISMA 2020 + Cochrane terintegrasi).
-JANGAN preview N/κ spesifik (itu di Results). Panjang 1000-1500 kata.` + m9Rules
+Cakup subseksi:
+\subsection{Study Selection and Characteristics} -- narasi angka PRISMA flow per tahap + cross-ref Figure 1, tren tahun, total studi, distribusi geografis JUJUR dari descriptive
+\subsection{Dominant Theories} -- (jika TCCM) kutip paper yang menggunakan tiap teori
+\subsection{Contexts} -- konteks penelitian, kutip paper per konteks
+\subsection{Characteristics and Constructs} -- variabel utama, kutip paper yang mengukurnya
+\subsection{Methodological Trends} -- desain riset dominan, kutip contoh
+\subsection{Synthesis of Findings} -- Jalur A: tematik consistent+contradictory, per studi; Jalur B: pooled + subgroup + forest plot Figure; + tabel GRADE evidence profile
 
-const promptConclusions = `Tulis section CONCLUSIONS yang LEAN (3-4 paragraf, 400-600 kata):
-P1 Main conclusions (jawab primary RQ + bukti ringkas, bukan repetisi Results), P2 Theoretical contributions (+ insight framework, hedging per GRADE), P3 Practical implications (kebijakan/praktisi/policymaker, grounded), P4 (opsional) brief forward look 1-2 kalimat ke Future Research.
-BUKAN expanded Discussion; jangan ulang kalimat Discussion verbatim; jangan data baru.` + m9Rules
+Rujuk Table 1 (Characteristics), Table 2 (Quality), Table 3 (GRADE). Minimal 2-3 \cite{} per paragraf. Panjang 2000-3000 kata.` + m9Rules
 
-const promptAbstract = `Tulis ABSTRACT terstruktur systematic review, 250-300 kata, 4 bagian (tanpa label berlebihan):
+const promptDiscussion = `Tulis \section{Discussion} systematic review dalam format LaTeX dengan 6 subseksi WAJIB.
+Setiap interpretasi HARUS merujuk kembali ke paper spesifik: "Consistent with \cite{authorYear}, our findings suggest..."
+
+\subsection{Summary of Findings} -- jawab RQ, sintesis high-level + interpretasi, BUKAN repetisi Results. Kutip 3-5 paper kunci.
+\subsection{Geographic and Contextual Considerations} -- DI AWAL; akui bias geografis dgn angka aktual + penjelasan struktural + implikasi. Kutip paper dari under-represented regions.
+\subsection{Dialogue with Existing Theory} -- mendukung/menantang/memperluas + teori under-utilized + kontribusi. Kutip paper per teori.
+\subsection{Heterogeneity Analysis} -- mengapa temuan bervariasi; studi kontradiktif; moderator. Kutip paper yang berlawanan.
+\subsection{Comparison with Prior Reviews} -- konsisten/berbeda vs prior_reviews; novelty. Kutip prior reviews + paper baru.
+\subsection{Limitations} -- 3-tier (review-level, study-level [+inaccessible N,%], synthesis-level) tiap limitasi + mitigasi.
+
+Kutip angka dari Results lalu beri interpretasi baru (jangan ulang). Minimal 2-3 \cite{} per paragraf. Panjang 2000-2800 kata.` + m9Rules
+
+const promptFuture = `Tulis \subsection{Future Research Agenda} (setelah Discussion) dalam format LaTeX, turunan gaps dari interpretation + prior_reviews.
+Setiap agenda riset HARUS merujuk gap yang ditemukan di paper tertentu: "Given the limitation identified in \cite{authorYear}, future work should..."
+
+Struktur:
+\subsubsection{Introduction} -- 1 paragraf pengantar agenda, kutip 2-3 paper yang menunjukkan gap
+\subsubsection{Priority Matrix} -- tabel LaTeX (\begin{table}): Priority | Timeframe | Rationale[link ke gap + \cite{}] | Research Question spesifik | Suggested Methodology. Min 3 HIGH + 2-3 MEDIUM + 1-2 LONG-TERM.
+\subsubsection{Prioritization Rationale} -- penjelasan prioritas, kutip paper
+\subsubsection{Methodological Advancements Needed} -- kutip studi dengan keterbatasan metodologi
+
+Tiap agenda = RESEARCH QUESTION spesifik (BUKAN "more research needed") + metodologi eksplisit; trace ke gap konkret + \cite{}. Minimal 2-3 \cite{} per paragraf. Panjang 800-1200 kata.` + m9Rules
+
+const promptIntro = `Tulis \section{Introduction} systematic review dalam format LaTeX dengan 5 subseksi WAJIB.
+Setiap klaim background HARUS didukung \cite{}: "The field of X has grown rapidly \cite{key1, key2}."
+
+\subsection{Background} -- field overview + importance + why now. Kutip 3-5 paper yang menunjukkan relevansi.
+\subsection{Review of Prior Reviews} -- 3-5 prior reviews [scope/method/findings/limitations] + paragraf "Synthesis Novelty": apa SUDAH/BELUM dilakukan kolektif, mengapa riset ini menutup gap; FORWARD-looking, JANGAN preview findings. Kutip setiap prior review.
+\subsection{Problem Statement} -- tipe gap (A/B/C sebagai framing konseptual), author voice spesifik topik. Kutip paper yang menunjukkan gap.
+\subsection{Scope Justification} -- dari scope_justifications, author voice. Kutip 2-3 paper.
+\subsection{Research Questions and Objectives} -- primary + 3 secondary + preview framework TCCM/ADO/PICO; sebut PRISMA 2020 + Cochrane terintegrasi. Kutip guideline papers.
+
+JANGAN preview N/kappa spesifik (itu di Results). Minimal 2-3 \cite{} per paragraf. Panjang 1000-1500 kata.` + m9Rules
+
+const promptConclusions = `Tulis \section{Conclusions} dalam format LaTeX yang LEAN (3-4 paragraf, 400-600 kata):
+Setiap kesimpulan HARUS didukung \cite{} ke paper yang menjadi bukti utama.
+
+P1 Main conclusions -- jawab primary RQ + bukti ringkas via \cite{key1, key2, key3}, bukan repetisi Results.
+P2 Theoretical contributions -- insight framework, hedging per GRADE, kutip paper yang menyumbang teori.
+P3 Practical implications -- kebijakan/praktisi/policymaker, grounded, kutip paper relevan.
+P4 (opsional) Brief forward look 1-2 kalimat ke Future Research, kutip 1-2 paper kunci.
+
+BUKAN expanded Discussion; jangan ulang kalimat Discussion verbatim; jangan data baru. Minimal 2-3 \cite{} per paragraf.` + m9Rules
+
+const promptAbstract = `Tulis ABSTRACT terstruktur systematic review dalam format LaTeX (gunakan \begin{abstract}...\end{abstract}), 250-300 kata, 4 bagian implisit (tanpa label eksplisit di abstract):
 Background & Objective (problem + rationale + objective + tipe gap; eksplisit "systematic review"); Methods (PRISMA 2020 framing + database + rentang & tanggal pencarian + framework TCCM/ADO/PICO + jalur sintesis + N final included); Results (N studi + 2-3 temuan utama hedged per GRADE + cakupan geografis jujur + ringkas GRADE); Conclusions (kesimpulan utama + top 1-3 prioritas future research).
-Semua angka dari artefak. NO jargon berat. Konsisten dgn Methods/Results.` + m9Rules
+Semua angka dari artefak. NO jargon berat. Konsisten dgn Methods/Results. JANGAN gunakan \cite{} di abstract (sesuai konvensi jurnal).` + m9Rules
 
 const promptTitle = `Usulkan 3-5 alternatif TITLE untuk systematic review ini.
 Kriteria: deskriptif, spesifik, WAJIB cantumkan "systematic review"/"systematic literature review", 10-14 kata (atau 12-18 bila SLNA), searchable, geographic honesty (jangan "global" bila regional).
-Untuk tiap alternatif: judul | jumlah kata | keywords | geographic honesty PASS/FAIL | rationale 2-3 kalimat. Di akhir beri REKOMENDASI judul terbaik + justifikasi (Markdown).` + m9Rules
+Format output LaTeX: gunakan \title{...} untuk setiap alternatif.
+Untuk tiap alternatif: \title{judul} | jumlah kata | keywords | geographic honesty PASS/FAIL | rationale 2-3 kalimat. Di akhir beri REKOMENDASI judul terbaik + justifikasi.` + m9Rules
+
+// promptVerification is used for the verification pass that checks each claim against provided evidence.
+const promptVerification = `Anda adalah verifikator akademik. Periksa SETIAP klaim dalam section berikut terhadap PAPER CATALOG yang diberikan.
+
+TUGAS:
+1. Untuk setiap \cite{key} dalam teks, verifikasi bahwa klaim yang dikaitkan ke paper tersebut KONSISTEN dengan data di PAPER CATALOG (KeyFindings, Fields).
+2. Tandai klaim yang TIDAK memiliki bukti di catalog sebagai [UNVERIFIED].
+3. Tandai klaim yang BERTENTANGAN dengan data catalog sebagai [CONTRADICTED].
+4. Tandai \cite{key} yang TIDAK ADA di catalog sebagai [INVALID_KEY].
+
+Format output (LaTeX):
+\begin{verification}
+\item[VERIFIED] Klaim X didukung oleh \cite{key} -- KeyFinding: "..."
+\item[UNVERIFIED] Klaim Y \cite{key} -- tidak ditemukan bukti di catalog
+\item[CONTRADICTED] Klaim Z \cite{key} -- catalog menyatakan sebaliknya: "..."
+\item[INVALID_KEY] \cite{nonexistent} -- key tidak ada di catalog
+\end{verification}
+
+Akhiri dengan ringkasan: total klaim verified/unverified/contradicted/invalid_key.`
+
+// promptStyleCleanup is used for the style cleanup pass that removes AI-style artifacts.
+const promptStyleCleanup = `Anda adalah editor gaya akademik. Bersihkan teks LaTeX berikut dari SEMUA ciri tulisan AI.
+
+CHECKLIST PEMBERSIHAN:
+1. Hapus SEMUA em-dash (---) dan en-dash (--). Ganti dengan koma, titik dua, tanda kurung, atau kalimat baru.
+2. Hapus filler: "it is worth noting", "importantly", "notably", "furthermore", "moreover", "in addition", "it is important to note", "interestingly", "it should be noted".
+3. Hapus kata AI: "delve", "leverage", "underscore", "pivotal", "realm", "tapestry", "intricate", "multifaceted", "nuanced". Ganti dengan kata natural.
+4. Pecah kalimat yang terlalu panjang (>50 kata). Gabung kalimat yang terlalu pendek berturut-turut.
+5. Hapus pola "not only X but also Y" jika muncul >1x. Variasikan.
+6. Pastikan TIDAK ada bullet (\item, \begin{itemize}) di tengah paragraf prosa.
+7. Pastikan setiap paragraf tetap memiliki minimal 2-3 \cite{}.
+8. Pastikan TIDAK ada emoji, ikon, simbol dekoratif.
+
+Output: teks LaTeX yang telah dibersihkan, siap kompilasi. Jangan tambah komentar meta.`

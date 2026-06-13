@@ -99,22 +99,29 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 	bundle := m.artifactBundle(session)
 	lang := langDirective(session)
 
-	methods, err := ag.Write(ctx, promptMethods+lang, bundle)
+	// Fetch per-paper data and build citation catalog for structured referencing
+	papers := m.fetchExtractionData(ctx, session.ID)
+	citations := m.buildPaperCatalog(ctx, session)
+	paperBundle := buildPaperDataBundle(papers, citations)
+
+	userCtx := bundle + paperBundle
+
+	methods, err := ag.Write(ctx, promptMethods+lang, userCtx)
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Methods")
-	results, err := ag.Write(ctx, promptResults+lang, bundle+sectionCtx("METHODS (sudah ditulis)", methods))
+	results, err := ag.Write(ctx, promptResults+lang, userCtx+sectionCtx("METHODS (sudah ditulis)", methods))
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Results")
-	discussion, err := ag.Write(ctx, promptDiscussion+lang, bundle+sectionCtx("RESULTS (sudah ditulis — jangan diulang)", results))
+	discussion, err := ag.Write(ctx, promptDiscussion+lang, userCtx+sectionCtx("RESULTS (sudah ditulis -- jangan diulang)", results))
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Discussion")
-	future, err := ag.Write(ctx, promptFuture+lang, bundle+sectionCtx("DISCUSSION (limitations — agenda harus beda/actionable)", discussion))
+	future, err := ag.Write(ctx, promptFuture+lang, userCtx+sectionCtx("DISCUSSION (limitations -- agenda harus beda/actionable)", discussion))
 	if err != nil {
 		return err
 	}
@@ -139,17 +146,24 @@ func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSes
 	bundle := m.artifactBundle(session)
 	lang := langDirective(session)
 
-	intro, err := ag.Write(ctx, promptIntro+lang, bundle+sectionCtx("RESULTS (untuk tune preview, JANGAN bocorkan angka spesifik di Intro)", trim(ms.Results, 4000)))
+	// Fetch per-paper data and build citation catalog for structured referencing
+	papers := m.fetchExtractionData(ctx, session.ID)
+	citations := m.buildPaperCatalog(ctx, session)
+	paperBundle := buildPaperDataBundle(papers, citations)
+
+	userCtx := bundle + paperBundle
+
+	intro, err := ag.Write(ctx, promptIntro+lang, userCtx+sectionCtx("RESULTS (untuk tune preview, JANGAN bocorkan angka spesifik di Intro)", trim(ms.Results, 4000)))
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Introduction")
-	conclusions, err := ag.Write(ctx, promptConclusions+lang, bundle+sectionCtx("DISCUSSION", trim(ms.Discussion, 5000))+sectionCtx("FUTURE RESEARCH", trim(ms.FutureResearch, 2500)))
+	conclusions, err := ag.Write(ctx, promptConclusions+lang, userCtx+sectionCtx("DISCUSSION", trim(ms.Discussion, 5000))+sectionCtx("FUTURE RESEARCH", trim(ms.FutureResearch, 2500)))
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Conclusions")
-	abstract, err := ag.Write(ctx, promptAbstract+lang, bundle+sectionCtx("METHODS", trim(ms.Methods, 3000))+sectionCtx("RESULTS", trim(ms.Results, 4000))+sectionCtx("DISCUSSION", trim(ms.Discussion, 3000)))
+	abstract, err := ag.Write(ctx, promptAbstract+lang, userCtx+sectionCtx("METHODS", trim(ms.Methods, 3000))+sectionCtx("RESULTS", trim(ms.Results, 4000))+sectionCtx("DISCUSSION", trim(ms.Discussion, 3000)))
 	if err != nil {
 		return err
 	}
@@ -298,6 +312,85 @@ func (m *M9Manuscript) artifactBundle(session *model.SLRSession) string {
 	if si := session.SLNAIntegration; si != nil {
 		w("SLNA INTEGRATION", si.Markdown+"\nConvergent gaps: "+si.ConvergentGaps)
 	}
+	return b.String()
+}
+
+// buildPaperDataBundle formats per-paper extraction data and citation keys into a
+// structured catalog that is appended to the user prompt. This allows the LLM to
+// write per-claim citations using \cite{authorYear} keys from the catalog.
+func buildPaperDataBundle(papers []ExtractionPaperData, citations []PaperCitation) string {
+	if len(citations) == 0 && len(papers) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\n== PAPER CATALOG (use \\cite{key} to cite) ==\n")
+
+	// Build a map from DOI to extraction data for quick lookup
+	findingsMap := make(map[string]string)
+	fieldsMap := make(map[string]string)
+	for _, p := range papers {
+		if p.DOI != "" {
+			if p.KeyFindings != "" {
+				findingsMap[p.DOI] = p.KeyFindings
+			}
+			if len(p.Fields) > 0 {
+				var fs []string
+				for _, f := range p.Fields {
+					if f.Value != "" {
+						fs = append(fs, f.Key+": "+f.Value)
+					}
+				}
+				if len(fs) > 0 {
+					fieldsMap[p.DOI] = strings.Join(fs, "; ")
+				}
+			}
+		}
+	}
+
+	for _, c := range citations {
+		line := fmt.Sprintf("[%s]: %s (%s). %s.", c.Key, c.Authors, c.Year, c.Title)
+		if c.Journal != "" {
+			line += " " + c.Journal + "."
+		}
+		if c.DOI != "" {
+			line += " DOI: " + c.DOI
+		}
+		// Append findings from extraction data if available
+		if findings, ok := findingsMap[c.DOI]; ok {
+			line += " | Findings: " + findings
+		}
+		if fields, ok := fieldsMap[c.DOI]; ok {
+			line += " | Fields: " + fields
+		}
+		b.WriteString(line + "\n")
+	}
+
+	// Include papers from extraction that might not be in citation catalog yet
+	citedDOIs := make(map[string]bool)
+	for _, c := range citations {
+		if c.DOI != "" {
+			citedDOIs[c.DOI] = true
+		}
+	}
+	for _, p := range papers {
+		if p.DOI != "" && !citedDOIs[p.DOI] {
+			key := generateCitationKey(p.Authors, p.Year)
+			line := fmt.Sprintf("[%s]: %s (%s). %s.", key, p.Authors, p.Year, p.Title)
+			if p.Journal != "" {
+				line += " " + p.Journal + "."
+			}
+			if p.DOI != "" {
+				line += " DOI: " + p.DOI
+			}
+			if p.KeyFindings != "" {
+				line += " | Findings: " + p.KeyFindings
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+
+	b.WriteString("== END PAPER CATALOG ==\n")
 	return b.String()
 }
 
