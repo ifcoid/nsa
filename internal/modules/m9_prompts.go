@@ -11,6 +11,7 @@ ATURAN WAJIB (FORMAT & REFERENCING):
 - Setiap paragraf WAJIB mengutip minimal 2-3 referensi berbeda menggunakan \cite{}.
 - JANGAN menulis referensi inline penuh (e.g., "Smith (2023) found..."). Gunakan HANYA \cite{key}.
 - JANGAN mengarang citation key. Gunakan HANYA key dari PAPER CATALOG yang diberikan.
+- Untuk referensi guideline/metodologi yang TIDAK ADA di PAPER CATALOG (misalnya PRISMA 2020, Cochrane Handbook, GRADE working group), gunakan format inline text citation seperti "following PRISMA 2020 guidelines (Page et al., 2021)" atau "as recommended by the Cochrane Handbook (Higgins et al., 2023)". JANGAN gunakan \cite{} untuk referensi yang tidak ada di PAPER CATALOG.
 - Tulis HANYA section yang diminta. Tanpa preamble/kalimat meta/pembuka "Here is the section".
 - DILARANG menyebut AI/Claude/LLM/GPT/"Pass 1-2"/sesi/nama file internal (outputs/, .xlsx, "Modul X", qdrant).
 - Framing manusia: "Reviewer 1/2", "Extractor 1/2", "Rater 1/2" (BUKAN AI). Kappa = inter-reviewer/extractor/rater agreement.
@@ -123,17 +124,18 @@ TUGAS:
 1. Untuk setiap \cite{key} dalam teks, verifikasi bahwa klaim yang dikaitkan ke paper tersebut KONSISTEN dengan data di PAPER CATALOG (KeyFindings, Fields).
 2. Tandai klaim yang TIDAK memiliki bukti di catalog sebagai [UNVERIFIED].
 3. Tandai klaim yang BERTENTANGAN dengan data catalog sebagai [CONTRADICTED].
-4. Tandai \cite{key} yang TIDAK ADA di catalog sebagai [INVALID_KEY].
+4. Untuk [INVALID_KEY] yang merujuk ke methodology/guideline references (misalnya PRISMA 2020, Cochrane Handbook, GRADE), GANTI \cite{key} dengan inline text citation (contoh: "following PRISMA 2020 guidelines (Page et al., 2021)"). Untuk [INVALID_KEY] yang benar-benar salah dan bukan guideline, HAPUS \cite{key} beserta klaim terkait.
 
 Format output (LaTeX):
 \begin{verification}
 \item[VERIFIED] Klaim X didukung oleh \cite{key} -- KeyFinding: "..."
 \item[UNVERIFIED] Klaim Y \cite{key} -- tidak ditemukan bukti di catalog
 \item[CONTRADICTED] Klaim Z \cite{key} -- catalog menyatakan sebaliknya: "..."
-\item[INVALID_KEY] \cite{nonexistent} -- key tidak ada di catalog
+\item[INVALID_KEY_GUIDELINE] \cite{prisma2020} -- diganti menjadi inline: "following PRISMA 2020 guidelines (Page et al., 2021)"
+\item[INVALID_KEY_REMOVED] \cite{nonexistent} -- key dihapus, klaim tidak terverifikasi
 \end{verification}
 
-Akhiri dengan ringkasan: total klaim verified/unverified/contradicted/invalid_key.`
+Akhiri dengan ringkasan: total klaim verified/unverified/contradicted/invalid_key_guideline/invalid_key_removed.`
 
 // promptStyleCleanup is used for the style cleanup pass that removes AI-style artifacts.
 const promptStyleCleanup = `Anda adalah editor gaya akademik. Bersihkan teks LaTeX berikut dari SEMUA ciri tulisan AI.

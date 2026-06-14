@@ -136,7 +136,7 @@ func (m *M9Manuscript) verifyClaims(ctx context.Context, session *model.SLRSessi
 		vr.QdrantVerified = m.verifyViaQdrant(ctx, entry.Claim, paper.DOI)
 
 		// Source 2: Neo4j -- check if the paper has relevant relations in the knowledge graph
-		vr.Neo4jVerified = m.verifyViaNeo4j(ctx, session.ID, paper.DOI)
+		vr.Neo4jVerified = m.verifyViaNeo4j(ctx, session.ID, paper.DOI, entry.Claim)
 
 		// Source 3: MongoDB extraction docs -- check if key_findings contains claim-related terms
 		vr.MongoVerified = m.verifyViaMongo(ctx, session.ID, entry.Claim, paper.DOI)
@@ -185,16 +185,76 @@ func (m *M9Manuscript) verifyViaQdrant(ctx context.Context, claim, doi string) b
 	return false
 }
 
-// verifyViaNeo4j checks if the paper has any relations stored in the knowledge graph.
-func (m *M9Manuscript) verifyViaNeo4j(ctx context.Context, sessionID, doi string) bool {
+// verifyViaNeo4j checks if the paper has relations in the knowledge graph that are
+// relevant to the claim. It uses both QueryPaperRelations (for the specific paper)
+// and QueryClaimEvidence (for claim-related entities) to determine if the paper's
+// graph data supports the claim text.
+func (m *M9Manuscript) verifyViaNeo4j(ctx context.Context, sessionID, doi, claim string) bool {
 	if m.deps.Neo4jRepo == nil || doi == "" {
 		return false
 	}
+
+	// First, get the paper's relations in the knowledge graph
 	relations, err := m.deps.Neo4jRepo.QueryPaperRelations(ctx, sessionID, doi)
 	if err != nil || len(relations) == 0 {
 		return false
 	}
-	return true
+
+	// Check if any relation target names or types have word overlap with the claim
+	if claim != "" {
+		claimWords := extractMeaningfulWords(claim)
+		if len(claimWords) > 0 {
+			for _, rel := range relations {
+				targetWords := extractMeaningfulWords(rel.TargetName)
+				typeWords := extractMeaningfulWords(rel.RelationType)
+				allRelWords := append(targetWords, typeWords...)
+				claimSet := make(map[string]bool)
+				for _, w := range claimWords {
+					claimSet[w] = true
+				}
+				for _, w := range allRelWords {
+					if claimSet[w] {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	// Additionally, use QueryClaimEvidence to check if claim keywords match
+	// entity names in the graph that connect to this paper
+	if claim != "" {
+		// Extract key terms from the claim for graph search
+		claimWords := extractMeaningfulWords(claim)
+		if len(claimWords) > 0 {
+			// Use the first few meaningful words as search terms
+			searchTerm := ""
+			limit := 3
+			if len(claimWords) < limit {
+				limit = len(claimWords)
+			}
+			for i := 0; i < limit; i++ {
+				if i > 0 {
+					searchTerm += " "
+				}
+				searchTerm += claimWords[i]
+			}
+
+			evidence, err := m.deps.Neo4jRepo.QueryClaimEvidence(ctx, searchTerm)
+			if err == nil && len(evidence) > 0 {
+				normalizedDOI := normalizeDOIForRAG(doi)
+				for _, ev := range evidence {
+					if normalizeDOIForRAG(ev.DOI) == normalizedDOI {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	// Fall back: if the paper has relations but none overlap with the claim,
+	// still return false to avoid false positives
+	return false
 }
 
 // verifyViaMongo checks if the extraction doc for the cited paper contains key_findings

@@ -79,7 +79,7 @@ func (r *Neo4jRepository) QueryPaperRelations(ctx context.Context, sessionID, do
 	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
 		cypher := `
 			MATCH (p:Paper)-[r]->(t)
-			WHERE p.doi = $doi OR p.session_id = $sessionID AND p.doi = $doi
+			WHERE p.session_id = $sessionID AND p.doi = $doi
 			RETURN type(r) AS relType, labels(t)[0] AS targetLabel,
 			       coalesce(t.name, t.id, '') AS targetName, properties(r) AS props
 		`

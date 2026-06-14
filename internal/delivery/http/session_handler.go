@@ -2697,7 +2697,7 @@ func (h *SessionHandler) DownloadTex(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/x-tex")
 	w.Header().Set("Content-Disposition", `attachment; filename="manuscript.tex"`)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(session.Manuscript.Latex))
+	_, _ = w.Write([]byte(session.Manuscript.Latex))
 }
 
 // DownloadBib returns the manuscript .bib file as a download.
@@ -2722,5 +2722,5 @@ func (h *SessionHandler) DownloadBib(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/x-bibtex")
 	w.Header().Set("Content-Disposition", `attachment; filename="references.bib"`)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(session.Manuscript.Bibtex))
+	_, _ = w.Write([]byte(session.Manuscript.Bibtex))
 }
