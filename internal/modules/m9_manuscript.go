@@ -36,6 +36,14 @@ func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) e
 		session.Status = "M9_GROUPA"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
+	// Generic revision fallback: reset to Group A (start of M9)
+	case "M9_NEEDS_REVISION":
+		logger.Logf(session.ID, "   [Revisi M9] Reset ke Group A. Feedback: '%s'\n", session.Feedback)
+		session.Manuscript = &model.Manuscript{}
+		session.Feedback = ""
+		session.Status = "M9_GROUPA"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+
 	// ---- GROUP A: Methods + Results + Discussion + Future Research ----
 	case "M9_GROUPA":
 		return m.generateGroupA(ctx, session)
