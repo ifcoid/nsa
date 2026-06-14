@@ -132,6 +132,10 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/upload-scopus-csv", r.sessionHndlr.UploadScopusCSV)
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/upload-ieee-csv", r.sessionHndlr.UploadIEEECSV)
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/upload-pubmed-txt", r.sessionHndlr.UploadPubMedTXT)
+
+	// Modul 9 Manuscript downloads
+	protected.HandleFunc("GET /api/sessions/{id}/manuscript/download-tex", r.sessionHndlr.DownloadTex)
+	protected.HandleFunc("GET /api/sessions/{id}/manuscript/download-bib", r.sessionHndlr.DownloadBib)
 	
 	// LLM config endpoints
 	protected.HandleFunc("GET /api/llm/health", r.llmHndlr.CheckHealth)

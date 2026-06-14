@@ -10,7 +10,6 @@ import (
 	"nsa/internal/latex"
 	"nsa/internal/logger"
 	"nsa/internal/model"
-	"nsa/internal/refs"
 )
 
 const promptCoherence = `Anda editor manuskrip. Lakukan COHERENCE AUDIT lintas-section sebuah systematic review.
@@ -45,24 +44,32 @@ func aiDeclFor(session *model.SLRSession) string {
 }
 
 func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession) error {
-	logger.Log(session.ID, "   [L10] Compile: references (Crossref) + coherence audit + PRISMA checklist + final + .tex...")
+	logger.Log(session.ID, "   [L10] Compile: .bib (paper catalog) + coherence audit + PRISMA checklist + final + .tex...")
 	ms := session.Manuscript
 	if ms == nil {
 		return fmt.Errorf("manuscript kosong; jalankan group A/B dulu")
 	}
 
-	// 1. References via Crossref (anti-halusinasi) dari DOI studi included.
-	dois, metaRefs := m.includedReferences(ctx, session)
-	logger.Logf(session.ID, "      -> Mengambil BibTeX Crossref untuk %d DOI...\n", len(dois))
-	bib := refs.FetchBibtexBatch(ctx, dois)
-	ms.Bibtex = bib.Bibtex
-	refsMd := fmt.Sprintf("## References\n\n_%d/%d referensi terverifikasi via Crossref; %d perlu cek manual._\n\n%s\n",
-		bib.Verified, bib.Total, len(bib.NotFound), metaRefs)
-	if len(bib.NotFound) > 0 {
-		refsMd += fmt.Sprintf("\n> ⚠️ Tidak ditemukan di Crossref (cek manual): %s\n", strings.Join(bib.NotFound, ", "))
+	// 1. Build .bib from paper catalog (local entries from metadata).
+	citations := m.buildPaperCatalog(ctx, session)
+	latexCitations := make([]latex.PaperCitation, len(citations))
+	for i, c := range citations {
+		latexCitations[i] = latex.PaperCitation{
+			Key:     c.Key,
+			Authors: c.Authors,
+			Title:   c.Title,
+			Year:    c.Year,
+			Journal: c.Journal,
+			DOI:     c.DOI,
+		}
 	}
+	ms.Bibtex = latex.GenerateBibFile(latexCitations)
+	logger.Logf(session.ID, "      ✓ .bib generated (%d entries from paper catalog)\n", len(citations))
+
+	// Build references markdown for backward compatibility
+	_, metaRefs := m.includedReferences(ctx, session)
+	refsMd := fmt.Sprintf("## References\n\n_%d referensi dari paper catalog._\n\n%s\n", len(citations), metaRefs)
 	ms.References = refsMd
-	logger.Logf(session.ID, "      ✓ References (%d terverifikasi, %d not found)\n", bib.Verified, len(bib.NotFound))
 
 	// 2. Coherence audit + PRISMA checklist (brain).
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
@@ -87,14 +94,29 @@ func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession
 		ms.PrismaChecklist = "PRISMA checklist gagal: " + e.Error()
 	}
 
-	// 3. Compile master Markdown (16-section order).
+	// 3. Compile master Markdown (16-section order) for backward compatibility.
 	ms.Final = m.compileFinal(session)
 
-	// 4. LaTeX scaffold.
-	ms.Latex = latex.PandocHint() + latex.MarkdownToLatex(session.Topic, ms.Final)
+	// 4. Academic LaTeX document (assembles LaTeX sections directly).
+	sections := map[string]string{
+		"Introduction":    ms.Introduction,
+		"Methods":         ms.Methods,
+		"Results":         ms.Results,
+		"Discussion":      ms.Discussion,
+		"Future Research": ms.FutureResearch,
+		"Conclusions":     ms.Conclusions,
+	}
+	ms.Latex = latex.BuildAcademicLatex(
+		session.Topic,
+		"",               // author left empty for user to fill
+		ms.Abstract,
+		m.keywords(session),
+		sections,
+		"references",
+	)
 
 	// 5. modul9_summary.
-	ms.Summary = m.compileSummary(session, bib)
+	ms.Summary = m.compileSummaryFromCatalog(session, len(citations))
 
 	logger.Log(session.ID, "   [System] manuscript_final + .tex + .bib + checklist + audit tersimpan. DIJEDA untuk persetujuan akhir.")
 	session.Status = "M9_COMPILE_WAITING_APPROVAL"
@@ -214,20 +236,22 @@ func (m *M9Manuscript) figureCaptions(session *model.SLRSession) string {
 	return b.String()
 }
 
-func (m *M9Manuscript) compileSummary(session *model.SLRSession, bib refs.BibtexResult) string {
+func (m *M9Manuscript) compileSummaryFromCatalog(session *model.SLRSession, totalCitations int) string {
 	path := "-"
 	if session.SynthesisPathDecision != nil {
 		path = session.SynthesisPathDecision.Verdict
 	}
 	return fmt.Sprintf("=== MANUSCRIPT WRITING COMPLETE (SLR) ===\n\n"+
 		"FINAL DELIVERABLES (di session.manuscript):\n"+
-		"- final (manuscript_final.md, 16 section)\n- latex (manuscript_final.tex, scaffold)\n- bibtex (reference.bib — %d/%d via Crossref)\n"+
+		"- final (manuscript_final.md, 16 section)\n- latex (manuscript_final.tex, academic article with natbib)\n- bibtex (references.bib, %d entries from paper catalog)\n"+
 		"- prisma_checklist (27-item)\n- coherence_audit\n- references\n\n"+
 		"SECTIONS: Title, Abstract, Introduction, Methods, Results, Discussion, Future Research, Conclusions.\n"+
 		"SYNTHESIS PATH: %s | Framework: %s\n"+
-		"REFERENCES: %d terverifikasi Crossref, %d perlu cek manual.\n\n"+
+		"REFERENCES: %d entries in .bib (from included paper metadata).\n\n"+
 		"PRE-SUBMISSION (diisi penulis): Funding, Conflict of Interest, Author/ORCID, Cover letter, PROSPERO URL, Ethical statement.\n"+
 		"AI Assistance Declaration: ada (terbatas language/readability).\n\n"+
-		"Pipeline SLR SELESAI. 🎉",
-		bib.Verified, bib.Total, path, frameworkName(session), bib.Verified, len(bib.NotFound))
+		"Pipeline SLR SELESAI.",
+		totalCitations, path, frameworkName(session), totalCitations)
 }
+
+

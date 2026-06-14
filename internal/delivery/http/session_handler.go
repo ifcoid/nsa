@@ -2674,3 +2674,53 @@ func risExtractTitleKeywords(title string) string {
 
 	return strings.Join(kws, "; ")
 }
+
+// DownloadTex returns the manuscript .tex file as a download.
+func (h *SessionHandler) DownloadTex(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	session, err := h.mongoRepo.GetSession(context.Background(), id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	if session.Manuscript == nil || session.Manuscript.Latex == "" {
+		sendJSONError(w, http.StatusNotFound, "LaTeX manuscript not yet generated")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/x-tex")
+	w.Header().Set("Content-Disposition", `attachment; filename="manuscript.tex"`)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(session.Manuscript.Latex))
+}
+
+// DownloadBib returns the manuscript .bib file as a download.
+func (h *SessionHandler) DownloadBib(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+
+	session, err := h.mongoRepo.GetSession(context.Background(), id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	if session.Manuscript == nil || session.Manuscript.Bibtex == "" {
+		sendJSONError(w, http.StatusNotFound, "BibTeX file not yet generated")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-bibtex")
+	w.Header().Set("Content-Disposition", `attachment; filename="references.bib"`)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(session.Manuscript.Bibtex))
+}
