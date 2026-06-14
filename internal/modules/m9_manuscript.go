@@ -563,6 +563,7 @@ func (m *M9Manuscript) fetchExtractionData(ctx context.Context, sessionID string
 // buildPaperCatalog collects all included papers from the screening collection and
 // generates a citation key for each (format: firstAuthorSurnameYear, e.g., zhang2025).
 // Duplicate keys are deduplicated with a/b/c suffixes.
+// Falls back to extraction collection if screening filter is too restrictive.
 func (m *M9Manuscript) buildPaperCatalog(ctx context.Context, session *model.SLRSession) []PaperCitation {
 	papers, err := m.deps.MongoRepo.GetAllScreeningPapers(ctx, session.ID)
 	if err != nil {
@@ -571,7 +572,7 @@ func (m *M9Manuscript) buildPaperCatalog(ctx context.Context, session *model.SLR
 
 	var catalog []PaperCitation
 	for _, p := range papers {
-		// Only included papers that passed full-text screening
+		// Try strict filter first: full_text_retrieved + INCLUDE
 		retrieved, _ := p["full_text_retrieved"].(bool)
 		incAbs := getStr(p, "Final_Decision") == "INCLUDE" ||
 			(getStr(p, "Final_Decision") == "" && getStr(p, "Screener_1_Decision") == "INCLUDE")
@@ -590,6 +591,32 @@ func (m *M9Manuscript) buildPaperCatalog(ctx context.Context, session *model.SLR
 			Journal: getStr(p, "Journal", "journal"),
 			DOI:     getStr(p, "DOI", "doi"),
 		})
+	}
+
+	// Fallback: if strict filter yields too few papers, also try extraction docs
+	if len(catalog) < 5 {
+		logger.Logf(session.ID, "      [Catalog] Strict filter: %d papers. Trying extraction fallback...", len(catalog))
+		extPapers := m.fetchExtractionData(ctx, session.ID)
+		existingDOIs := make(map[string]bool)
+		for _, c := range catalog {
+			if c.DOI != "" {
+				existingDOIs[strings.ToLower(c.DOI)] = true
+			}
+		}
+		for _, ep := range extPapers {
+			if ep.DOI != "" && !existingDOIs[strings.ToLower(ep.DOI)] {
+				catalog = append(catalog, PaperCitation{
+					Key:     generateCitationKey(ep.Authors, ep.Year),
+					Authors: ep.Authors,
+					Title:   ep.Title,
+					Year:    ep.Year,
+					Journal: ep.Journal,
+					DOI:     ep.DOI,
+				})
+				existingDOIs[strings.ToLower(ep.DOI)] = true
+			}
+		}
+		logger.Logf(session.ID, "      [Catalog] After extraction fallback: %d papers total.", len(catalog))
 	}
 
 	// Deduplicate keys with a/b/c suffixes
@@ -612,40 +639,75 @@ func generateCitationKey(authors, year string) string {
 }
 
 // extractFirstSurname extracts the first author's surname in lowercase.
-// Handles formats like "Zhang, L.; Wang, H." or "Zhang L, Wang H" or "L. Zhang".
+// Handles many formats:
+//   - "Zhang, L.; Wang, H."        → zhang
+//   - "Y. Gao; X. Wu"              → gao
+//   - "L. Zhang"                    → zhang
+//   - "Y. Gao, X. Wu, J. Lu"       → gao
+//   - "Gao Y., Wu X."              → gao
+//   - "Gao, Y."                    → gao
 func extractFirstSurname(authors string) string {
 	if authors == "" {
 		return ""
 	}
 
-	// Split by common author separators
+	// Split by common multi-author separators to get FIRST author only
 	first := authors
-	for _, sep := range []string{";", " and ", " & "} {
+	for _, sep := range []string{";", " and ", " & ", "., "} {
 		if idx := strings.Index(first, sep); idx > 0 {
 			first = first[:idx]
 		}
 	}
 	first = strings.TrimSpace(first)
 
-	// If there's a comma, surname is before the comma (e.g., "Zhang, L.")
+	// If there's a comma, check if it's "Surname, Init" or "Init1, Init2, Surname"
 	if idx := strings.Index(first, ","); idx > 0 {
-		first = strings.TrimSpace(first[:idx])
-	} else {
-		// Otherwise take the last word (e.g., "L. Zhang" or "John Zhang")
-		parts := strings.Fields(first)
-		if len(parts) > 0 {
-			first = parts[len(parts)-1]
+		beforeComma := strings.TrimSpace(first[:idx])
+		// If before comma is short (1-3 chars like "Y" or "Y."), it's probably initial
+		// and surname is after comma — but this is rare. Usually "Zhang, L." format.
+		if len(beforeComma) <= 3 {
+			// Format: "Y., Zhang" or similar — take after comma
+			afterComma := strings.TrimSpace(first[idx+1:])
+			parts := strings.Fields(afterComma)
+			if len(parts) > 0 {
+				first = parts[len(parts)-1]
+			}
+		} else {
+			// Format: "Zhang, L." — surname is before comma
+			first = beforeComma
 		}
+	} else {
+		// No comma: could be "Y. Gao" or "Gao Y." or just "Gao"
+		parts := strings.Fields(first)
+		if len(parts) > 1 {
+			// Check if first part looks like initial (short, has dot)
+			if len(parts[0]) <= 3 || strings.Contains(parts[0], ".") {
+				// "Y. Gao" or "Y Gao" — surname is last
+				first = parts[len(parts)-1]
+			} else if len(parts[len(parts)-1]) <= 3 || strings.Contains(parts[len(parts)-1], ".") {
+				// "Gao Y." — surname is first
+				first = parts[0]
+			} else {
+				// Ambiguous, take last word as surname (Western convention)
+				first = parts[len(parts)-1]
+			}
+		}
+		// If single word, use it as-is
 	}
 
 	// Clean: lowercase, only letters
+	first = strings.TrimRight(first, ".,;: ")
 	var sb strings.Builder
 	for _, r := range strings.ToLower(first) {
 		if unicode.IsLetter(r) {
 			sb.WriteRune(r)
 		}
 	}
-	return sb.String()
+	result := sb.String()
+	if result == "" {
+		return ""
+	}
+	return result
 }
 
 // deduplicateCitationKeys appends a/b/c/... suffixes to duplicate keys in-place.

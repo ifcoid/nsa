@@ -117,26 +117,18 @@ Kriteria: deskriptif, spesifik, WAJIB cantumkan "systematic review"/"systematic 
 Format output LaTeX: gunakan \title{...} untuk setiap alternatif.
 Untuk tiap alternatif: \title{judul} | jumlah kata | keywords | geographic honesty PASS/FAIL | rationale 2-3 kalimat. Di akhir beri REKOMENDASI judul terbaik + justifikasi.` + m9Rules
 
-// promptVerification is used for the verification pass that checks each claim against provided evidence.
-const promptVerification = `Anda adalah verifikator akademik. Periksa SETIAP klaim dalam section berikut terhadap PAPER CATALOG yang diberikan.
+// promptVerification is used for the verification pass that outputs CORRECTED LaTeX text.
+const promptVerification = `Anda adalah verifikator akademik. Periksa teks LaTeX berikut dan PERBAIKI langsung:
 
 TUGAS:
-1. Untuk setiap \cite{key} dalam teks, verifikasi bahwa klaim yang dikaitkan ke paper tersebut KONSISTEN dengan data di PAPER CATALOG (KeyFindings, Fields).
-2. Tandai klaim yang TIDAK memiliki bukti di catalog sebagai [UNVERIFIED].
-3. Tandai klaim yang BERTENTANGAN dengan data catalog sebagai [CONTRADICTED].
-4. Untuk [INVALID_KEY] yang merujuk ke methodology/guideline references (misalnya PRISMA 2020, Cochrane Handbook, GRADE), GANTI \cite{key} dengan inline text citation (contoh: "following PRISMA 2020 guidelines (Page et al., 2021)"). Untuk [INVALID_KEY] yang benar-benar salah dan bukan guideline, HAPUS \cite{key} beserta klaim terkait.
+1. Untuk setiap \cite{key} dalam teks: jika key ada di PAPER CATALOG dan klaim konsisten, PERTAHANKAN.
+2. Jika \cite{key} merujuk key yang TIDAK ADA di PAPER CATALOG:
+   - Jika merujuk guideline (PRISMA, GRADE, Cochrane), ganti menjadi inline citation (contoh: "following PRISMA 2020 guidelines (Page et al., 2021)")
+   - Jika key benar-benar invalid, HAPUS \cite{key} dan rewrite klaim tanpa referensi atau hapus klaim
+3. Jika klaim BERTENTANGAN dengan data di catalog, perbaiki klaim agar sesuai data.
+4. Jika klaim tidak punya bukti di catalog, tambahkan hedging ("may", "appears to") atau hapus.
 
-Format output (LaTeX):
-\begin{verification}
-\item[VERIFIED] Klaim X didukung oleh \cite{key} -- KeyFinding: "..."
-\item[UNVERIFIED] Klaim Y \cite{key} -- tidak ditemukan bukti di catalog
-\item[CONTRADICTED] Klaim Z \cite{key} -- catalog menyatakan sebaliknya: "..."
-\item[INVALID_KEY_GUIDELINE] \cite{prisma2020} -- diganti menjadi inline: "following PRISMA 2020 guidelines (Page et al., 2021)"
-\item[INVALID_KEY_REMOVED] \cite{nonexistent} -- key dihapus, klaim tidak terverifikasi
-\end{verification}
-
-Akhiri dengan ringkasan: total klaim verified/unverified/contradicted/invalid_key_guideline/invalid_key_removed.`
-
+OUTPUT: Keluarkan HANYA teks LaTeX yang sudah diperbaiki (section yang sama, sudah terkoreksi). JANGAN keluarkan laporan/daftar/checklist. JANGAN tambah komentar meta. Teks harus siap digunakan langsung sebagai section manuscript.`
 // promptStyleCleanup is used for the style cleanup pass that removes AI-style artifacts.
 const promptStyleCleanup = `Anda adalah editor gaya akademik. Bersihkan teks LaTeX berikut dari SEMUA ciri tulisan AI.
 
