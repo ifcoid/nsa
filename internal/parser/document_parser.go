@@ -168,59 +168,235 @@ func parseCSV(content []byte) ([]ParsedDocument, error) {
 
 func parseBibTeX(content []byte) ([]ParsedDocument, error) {
 	var docs []ParsedDocument
-	
-	// A very basic regex-based BibTeX parser
-	// Matches entries like @article{id, title={...}, abstract={...}}
-	entryRegex := regexp.MustCompile(`(?i)@([a-zA-Z]+)\s*\{([^,]+),`)
-	
-	// Split by entries
-	entries := entryRegex.Split(string(content), -1)
-	matches := entryRegex.FindAllStringSubmatch(string(content), -1)
-	
-	if len(matches) == 0 || len(entries) < 2 {
-		return docs, nil // no valid bibtex found
-	}
-	
-	for i, match := range matches {
-		if i+1 >= len(entries) {
-			break
+
+	// Split content into individual BibTeX entries using a state machine
+	entries := splitBibEntriesRaw(string(content))
+
+	for _, entry := range entries {
+		// Extract entry type and cite key from the header
+		entryRegex := regexp.MustCompile(`(?i)@([a-zA-Z]+)\s*\{([^,]*),`)
+		headerMatch := entryRegex.FindStringSubmatch(entry)
+		if headerMatch == nil {
+			continue
 		}
-		
-		docType := match[1]
-		entryContent := entries[i+1]
-		
+
+		docType := headerMatch[1]
+
+		// Parse all fields using brace-counting
+		fields := extractAllBibFields(entry)
+
 		doc := ParsedDocument{
 			DocumentType: docType,
-			Database:     "BibTeX Import",
 		}
-		
-		doc.Title = extractBibField(entryContent, "title")
-		doc.Abstract = extractBibField(entryContent, "abstract")
-		doc.DOI = extractBibField(entryContent, "doi")
-		doc.Year = extractBibField(entryContent, "year")
-		doc.Authors = extractBibField(entryContent, "author")
-		
+
+		doc.Title = fields["title"]
+		doc.Abstract = fields["abstract"]
+		doc.DOI = fields["doi"]
+		doc.Year = fields["year"]
+		doc.Authors = fields["author"]
+		doc.Journal = fields["journal"]
+		if doc.Journal == "" {
+			doc.Journal = fields["booktitle"]
+		}
+		doc.Volume = fields["volume"]
+		doc.Issue = fields["number"]
+		if doc.Issue == "" {
+			doc.Issue = fields["issue"]
+		}
+		doc.ISSN = fields["issn"]
+		doc.ISBN = fields["isbn"]
+		doc.Publisher = fields["publisher"]
+		doc.Keywords = fields["keywords"]
+		doc.Language = fields["language"]
+		doc.EID = fields["eid"]
+		doc.PubMedID = fields["pmid"]
+
+		// Handle pages field (may be range like "1--10" or "1-10")
+		if pages := fields["pages"]; pages != "" {
+			pages = strings.ReplaceAll(pages, "--", "-")
+			parts := strings.SplitN(pages, "-", 2)
+			doc.PageStart = strings.TrimSpace(parts[0])
+			if len(parts) > 1 {
+				doc.PageEnd = strings.TrimSpace(parts[1])
+			}
+		}
+
+		// Detect Database from content heuristics
+		doc.Database = detectBibDatabase(doc, fields)
+
 		if doc.Title != "" {
 			docs = append(docs, doc)
 		}
 	}
-	
+
 	return docs, nil
 }
 
-func extractBibField(entry string, field string) string {
-	// Matches field={value} or field="value"
-	re := regexp.MustCompile(`(?i)` + field + `\s*=\s*(?:\{([^{}]*)\}|"([^"]*)")`)
-	match := re.FindStringSubmatch(entry)
-	if len(match) > 1 {
-		if match[1] != "" {
-			return strings.TrimSpace(match[1])
+// splitBibEntriesRaw splits BibTeX content into individual entry strings using brace counting.
+// Returns raw string entries for the ParsedDocument parser (separate from splitBibEntries used by ParseBibTeX).
+func splitBibEntriesRaw(content string) []string {
+	var entries []string
+	i := 0
+	for i < len(content) {
+		// Find next @ that starts an entry
+		atIdx := strings.Index(content[i:], "@")
+		if atIdx == -1 {
+			break
 		}
-		if len(match) > 2 {
-			return strings.TrimSpace(match[2])
+		start := i + atIdx
+
+		// Find the opening brace of the entry
+		braceStart := strings.Index(content[start:], "{")
+		if braceStart == -1 {
+			break
+		}
+		braceStart += start
+
+		// Count braces to find the matching close
+		depth := 0
+		end := braceStart
+		for end < len(content) {
+			if content[end] == '{' {
+				depth++
+			} else if content[end] == '}' {
+				depth--
+				if depth == 0 {
+					entries = append(entries, content[start:end+1])
+					break
+				}
+			}
+			end++
+		}
+		if depth != 0 {
+			// Unmatched braces, take rest of content as entry
+			entries = append(entries, content[start:])
+			break
+		}
+		i = end + 1
+	}
+	return entries
+}
+
+// extractAllBibFields parses all field=value pairs from a BibTeX entry using brace counting.
+// Handles nested braces and multi-line values correctly.
+func extractAllBibFields(entry string) map[string]string {
+	fields := make(map[string]string)
+
+	// Find the first { after @type to skip the header (entry type + cite key)
+	firstBrace := strings.Index(entry, "{")
+	if firstBrace == -1 {
+		return fields
+	}
+
+	// Find the first comma after the cite key
+	body := entry[firstBrace+1:]
+	firstComma := strings.Index(body, ",")
+	if firstComma == -1 {
+		return fields
+	}
+	body = body[firstComma+1:]
+
+	// Now parse field = value pairs
+	// field names are alphanumeric, followed by =, then value in {} or ""
+	fieldRegex := regexp.MustCompile(`(?i)([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*`)
+
+	for {
+		body = strings.TrimSpace(body)
+		if body == "" || body == "}" {
+			break
+		}
+
+		loc := fieldRegex.FindStringSubmatchIndex(body)
+		if loc == nil {
+			break
+		}
+
+		fieldName := strings.ToLower(body[loc[2]:loc[3]])
+		rest := body[loc[1]:]
+
+		var value string
+		var consumed int
+
+		rest = strings.TrimSpace(rest)
+		if len(rest) == 0 {
+			break
+		}
+
+		if rest[0] == '{' {
+			// Extract value using brace counting
+			value, consumed = extractBracedValue(rest)
+		} else if rest[0] == '"' {
+			// Extract value between quotes (no nested brace handling needed)
+			endQuote := strings.Index(rest[1:], "\"")
+			if endQuote == -1 {
+				break
+			}
+			value = rest[1 : endQuote+1]
+			consumed = endQuote + 2
+		} else {
+			// Bare value (number or macro), read until comma or closing brace
+			endIdx := strings.IndexAny(rest, ",}")
+			if endIdx == -1 {
+				value = strings.TrimSpace(rest)
+				consumed = len(rest)
+			} else {
+				value = strings.TrimSpace(rest[:endIdx])
+				consumed = endIdx
+			}
+		}
+
+		// Clean up the value: collapse whitespace from multi-line values
+		value = strings.Join(strings.Fields(value), " ")
+		fields[fieldName] = value
+
+		// Move past the consumed value and optional comma
+		remaining := rest[consumed:]
+		remaining = strings.TrimSpace(remaining)
+		if len(remaining) > 0 && remaining[0] == ',' {
+			remaining = remaining[1:]
+		}
+		body = remaining
+	}
+
+	return fields
+}
+
+// extractBracedValue extracts a value enclosed in braces, handling nested braces correctly.
+// Returns the inner content and the total number of characters consumed (including outer braces).
+func extractBracedValue(s string) (string, int) {
+	if len(s) == 0 || s[0] != '{' {
+		return "", 0
+	}
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '{' {
+			depth++
+		} else if s[i] == '}' {
+			depth--
+			if depth == 0 {
+				return s[1:i], i + 1
+			}
 		}
 	}
-	return ""
+	// Unmatched, return what we have
+	return s[1:], len(s)
+}
+
+// detectBibDatabase determines the source database from BibTeX entry content.
+func detectBibDatabase(doc ParsedDocument, fields map[string]string) string {
+	// Check DOI prefix for IEEE
+	if strings.Contains(doc.DOI, "10.1109") {
+		return "IEEE"
+	}
+	// Check for Scopus signature (eid field present)
+	if doc.EID != "" || fields["eid"] != "" {
+		return "Scopus"
+	}
+	// Check for PubMed signature (pmid field present)
+	if doc.PubMedID != "" || fields["pmid"] != "" {
+		return "PubMed"
+	}
+	return "BibTeX Import"
 }
 
 func parseNBIB(content []byte) ([]ParsedDocument, error) {

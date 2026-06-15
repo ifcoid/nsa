@@ -157,7 +157,13 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 			DocTypes: make(map[string]int),
 			MissingAbstractSources: make(map[string]int),
 		}
-		dedup := model.DedupBreakdown{TotalUnique: 0, TotalDuplicates: 0}
+		dedup := model.DedupBreakdown{
+			TotalUnique:       0,
+			TotalDuplicates:   0,
+			PerDatabaseTotal:  make(map[string]int),
+			PerDatabaseUnique: make(map[string]int),
+			PerDatabaseDups:   make(map[string]int),
+		}
 
 		seenDOIs := make(map[string]bool)
 		seenTitles := make(map[string]bool)
@@ -174,6 +180,9 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 			dtype := getStringField(p, "Document Type", "document_type", "Document type")
 			dbSource := getStringField(p, "Database", "database", "Source", "source")
 			if dbSource == "" { dbSource = "Unknown" }
+
+			// Count per-database total
+			dedup.PerDatabaseTotal[dbSource]++
 
 			if abs == "" || abs == "[No abstract available]" { 
 				audit.MissingAbstract++
@@ -213,8 +222,10 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 
 			if isDup {
 				dedup.TotalDuplicates++
+				dedup.PerDatabaseDups[dbSource]++
 			} else {
 				dedup.TotalUnique++
+				dedup.PerDatabaseUnique[dbSource]++
 				uniquePapers = append(uniquePapers, p)
 				// Kumpulkan 20 sample untuk PICO Preview
 				if len(sampleToPreview) < 20 && title != "" && abs != "" {
@@ -225,6 +236,29 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 				}
 			}
 		}
+
+		// Log per-database breakdown
+		var sumberParts []string
+		for db, count := range dedup.PerDatabaseTotal {
+			sumberParts = append(sumberParts, fmt.Sprintf("%s=%d", db, count))
+		}
+		logger.Logf(session.ID, "   [Info] Sumber: %s\n", strings.Join(sumberParts, ", "))
+
+		var dupParts []string
+		for db, count := range dedup.PerDatabaseDups {
+			if count > 0 {
+				dupParts = append(dupParts, fmt.Sprintf("%s=%d", db, count))
+			}
+		}
+		if len(dupParts) > 0 {
+			logger.Logf(session.ID, "   [Info] Duplikat per sumber: %s\n", strings.Join(dupParts, ", "))
+		}
+
+		var uniqueParts []string
+		for db, count := range dedup.PerDatabaseUnique {
+			uniqueParts = append(uniqueParts, fmt.Sprintf("%s=%d", db, count))
+		}
+		logger.Logf(session.ID, "   [Info] Total post-dedup: %d unik (%s)\n", dedup.TotalUnique, strings.Join(uniqueParts, ", "))
 
 		// 3. PICO Consistency Preview
 		var picoVerdict *model.PICOPreviewCheck

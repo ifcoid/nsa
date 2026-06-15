@@ -317,10 +317,13 @@ type BasicQualityAudit struct {
 }
 
 type DedupBreakdown struct {
-	PrimaryMatch    int `bson:"primary_match" json:"primary_match"`
-	SecondaryMatch  int `bson:"secondary_match" json:"secondary_match"`
-	TotalDuplicates int `bson:"total_duplicates" json:"total_duplicates"`
-	TotalUnique     int `bson:"total_unique" json:"total_unique"`
+	PrimaryMatch       int            `bson:"primary_match" json:"primary_match"`
+	SecondaryMatch     int            `bson:"secondary_match" json:"secondary_match"`
+	TotalDuplicates    int            `bson:"total_duplicates" json:"total_duplicates"`
+	TotalUnique        int            `bson:"total_unique" json:"total_unique"`
+	PerDatabaseTotal   map[string]int `bson:"per_database_total" json:"per_database_total"`
+	PerDatabaseUnique  map[string]int `bson:"per_database_unique" json:"per_database_unique"`
+	PerDatabaseDups    map[string]int `bson:"per_database_dups" json:"per_database_dups"`
 }
 
 type PICOPreviewItem struct {
