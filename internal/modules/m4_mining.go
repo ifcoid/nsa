@@ -206,11 +206,12 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 
 			// Dedup Logic
 			isDup := false
-			if doi != "" && seenDOIs[doi] {
+			normDOI := NormalizeDOIForRAG(doi)
+			if normDOI != "" && seenDOIs[normDOI] {
 				dedup.PrimaryMatch++
 				isDup = true
-			} else if doi != "" {
-				seenDOIs[doi] = true
+			} else if normDOI != "" {
+				seenDOIs[normDOI] = true
 			}
 
 			normTitle := strings.ToLower(strings.ReplaceAll(title, " ", ""))

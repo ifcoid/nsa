@@ -489,10 +489,50 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Log total summary
-	logger.Logf(id, "[Import] Total: %d papers imported dari %d file", len(allPapers), len(perFileBreakdown))
+	// Dedup across files by normalized DOI and title+year fallback
+	beforeDedup := len(allPapers)
+	seenDOIs := make(map[string]bool)
+	seenTitleYear := make(map[string]bool)
+	var dedupedPapers []interface{}
 
-	err = h.mongoRepo.ClearAndInsertPapers(ctx, session.ID, allPapers)
+	for _, pi := range allPapers {
+		p := pi.(model.Paper)
+		isDup := false
+
+		// Primary: dedup by normalized DOI
+		normDOI := normalizeDOI(p.DOI)
+		if normDOI != "" {
+			if seenDOIs[normDOI] {
+				isDup = true
+			} else {
+				seenDOIs[normDOI] = true
+			}
+		}
+
+		// Secondary fallback: dedup by title+year
+		if !isDup {
+			normTitle := strings.ToLower(strings.ReplaceAll(p.Title, " ", ""))
+			titleYearKey := normTitle + "_" + p.Year
+			if normTitle != "" && seenTitleYear[titleYearKey] {
+				isDup = true
+			} else if normTitle != "" {
+				seenTitleYear[titleYearKey] = true
+			}
+		}
+
+		if !isDup {
+			dedupedPapers = append(dedupedPapers, p)
+		}
+	}
+
+	afterDedup := len(dedupedPapers)
+	removedDups := beforeDedup - afterDedup
+	logger.Logf(id, "[Import] Dedup saat import: %d → %d papers (removed %d duplicates antar file)", beforeDedup, afterDedup, removedDups)
+
+	// Log total summary
+	logger.Logf(id, "[Import] Total: %d papers imported dari %d file", afterDedup, len(perFileBreakdown))
+
+	err = h.mongoRepo.ClearAndInsertPapers(ctx, session.ID, dedupedPapers)
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to insert papers into database: "+err.Error())
 		return
@@ -510,7 +550,9 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"message": "Files imported successfully",
-		"total":   len(allPapers),
+		"total":   afterDedup,
+		"total_before_dedup": beforeDedup,
+		"duplicates_removed": removedDups,
 		"status":  session.Status,
 		"breakdown": map[string]interface{}{
 			"per_file":         perFileBreakdown,
@@ -2789,4 +2831,11 @@ func (h *SessionHandler) DownloadBib(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="references.bib"`)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(session.Manuscript.Bibtex))
+}
+
+// normalizeDOI normalizes a DOI for dedup comparison: strips doi.org prefix, lowercases, trims whitespace.
+func normalizeDOI(doi string) string {
+	doi = strings.TrimPrefix(doi, "https://doi.org/")
+	doi = strings.TrimPrefix(doi, "http://doi.org/")
+	return strings.ToLower(strings.TrimSpace(doi))
 }
