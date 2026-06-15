@@ -681,3 +681,128 @@ func (r *MongoRepository) ResetQAErrors(ctx context.Context, sessionID string) e
 	_, err := r.GetExtractionCollection().UpdateMany(ctx, filter, update)
 	return err
 }
+
+// =========================================================================
+// 6. MANAJEMEN PROPOSAL SESSIONS & REFS
+// =========================================================================
+
+// CreateProposalSession menyimpan sesi proposal baru ke koleksi "proposal_sessions"
+func (r *MongoRepository) CreateProposalSession(ctx context.Context, session *model.ProposalSession) error {
+	collection := r.client.Database(r.dbName).Collection("proposal_sessions")
+	_, err := collection.InsertOne(ctx, session)
+	return err
+}
+
+// GetProposalSession mengambil sesi proposal berdasarkan ID
+func (r *MongoRepository) GetProposalSession(ctx context.Context, sessionID string) (*model.ProposalSession, error) {
+	collection := r.client.Database(r.dbName).Collection("proposal_sessions")
+
+	var session model.ProposalSession
+	filter := bson.M{"_id": sessionID}
+
+	err := collection.FindOne(ctx, filter).Decode(&session)
+	if err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
+// UpdateProposalSession memperbarui sesi proposal (upsert) dengan updated_at otomatis
+func (r *MongoRepository) UpdateProposalSession(ctx context.Context, session *model.ProposalSession) error {
+	collection := r.client.Database(r.dbName).Collection("proposal_sessions")
+
+	filter := bson.M{"_id": session.ID}
+	session.UpdatedAt = time.Now()
+
+	update := bson.M{"$set": session}
+	opts := options.Update().SetUpsert(true)
+
+	_, err := collection.UpdateOne(ctx, filter, update, opts)
+	return err
+}
+
+// UpsertProposalRefs melakukan batch upsert referensi proposal ke koleksi "proposal_refs"
+// menggunakan cite_key + session_id sebagai compound key
+func (r *MongoRepository) UpsertProposalRefs(ctx context.Context, sessionID string, refs []model.ProposalRef) error {
+	collection := r.client.Database(r.dbName).Collection("proposal_refs")
+
+	for i := range refs {
+		refs[i].SessionID = sessionID
+		filter := bson.M{"cite_key": refs[i].CiteKey, "session_id": sessionID}
+		update := bson.M{"$set": refs[i]}
+		opts := options.Update().SetUpsert(true)
+
+		_, err := collection.UpdateOne(ctx, filter, update, opts)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetProposalRefs mengambil semua referensi proposal untuk sesi tertentu
+func (r *MongoRepository) GetProposalRefs(ctx context.Context, sessionID string) ([]model.ProposalRef, error) {
+	collection := r.client.Database(r.dbName).Collection("proposal_refs")
+
+	filter := bson.M{"session_id": sessionID}
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var refs []model.ProposalRef
+	if err := cursor.All(ctx, &refs); err != nil {
+		return nil, err
+	}
+	return refs, nil
+}
+
+// GetMissingPDFRefs mengambil referensi yang belum di-embed (is_embedded=false)
+func (r *MongoRepository) GetMissingPDFRefs(ctx context.Context, sessionID string) ([]model.ProposalRef, error) {
+	collection := r.client.Database(r.dbName).Collection("proposal_refs")
+
+	filter := bson.M{"session_id": sessionID, "is_embedded": false}
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var refs []model.ProposalRef
+	if err := cursor.All(ctx, &refs); err != nil {
+		return nil, err
+	}
+	return refs, nil
+}
+
+// ValidateCiteKeys memeriksa cite key mana yang ada di koleksi proposal_refs untuk sesi tertentu
+func (r *MongoRepository) ValidateCiteKeys(ctx context.Context, sessionID string, keys []string) (valid []string, invalid []string, err error) {
+	collection := r.client.Database(r.dbName).Collection("proposal_refs")
+
+	filter := bson.M{"session_id": sessionID, "cite_key": bson.M{"$in": keys}}
+	cursor, err := collection.Find(ctx, filter, options.Find().SetProjection(bson.M{"cite_key": 1}))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer cursor.Close(ctx)
+
+	existingKeys := make(map[string]bool)
+	for cursor.Next(ctx) {
+		var doc struct {
+			CiteKey string `bson:"cite_key"`
+		}
+		if cursor.Decode(&doc) == nil {
+			existingKeys[doc.CiteKey] = true
+		}
+	}
+
+	for _, key := range keys {
+		if existingKeys[key] {
+			valid = append(valid, key)
+		} else {
+			invalid = append(invalid, key)
+		}
+	}
+	return valid, invalid, nil
+}

@@ -13,6 +13,12 @@ type Module interface {
 	Name() string
 }
 
+// ProposalModule adalah kontrak untuk setiap tahap pipeline proposal (P0, P1, dst)
+type ProposalModule interface {
+	Execute(ctx context.Context, session *model.ProposalSession) error
+	Name() string
+}
+
 // ModuleDeps berisi dependency injection yang dibutuhkan oleh setiap modul
 type ModuleDeps struct {
 	MongoRepo    *repository.MongoRepository

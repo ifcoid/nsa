@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Add MongoDB repository methods for proposal sessions and refs, create the Citation Gate module, and create the P0 Ingest pipeline module.",
+  "status": "in_progress",
+  "steps": [
+    "Add proposal repository methods to internal/repository/mongo.go (append to existing file): CreateProposalSession(ctx, *model.ProposalSession) error - insert into 'proposal_sessions' collection; GetProposalSession(ctx, sessionID string) (*model.ProposalSession, error) - find by _id from 'proposal_sessions'; UpdateProposalSession(ctx, *model.ProposalSession) error - upsert to 'proposal_sessions' with updated_at; UpsertProposalRefs(ctx, sessionID string, refs []model.ProposalRef) error - batch upsert to 'proposal_refs' (use cite_key+session_id as compound key); GetProposalRefs(ctx, sessionID string) ([]model.ProposalRef, error) - find all from 'proposal_refs' where session_id matches; GetMissingPDFRefs(ctx, sessionID string) ([]model.ProposalRef, error) - find from 'proposal_refs' where session_id matches AND is_embedded=false; ValidateCiteKeys(ctx, sessionID string, keys []string) (valid []string, invalid []string, err error) - check which keys exist in 'proposal_refs' for the session.",
+    "Create internal/modules/citation_gate.go with: type CitationGate struct with deps *ModuleDeps. Function ValidateCitations(ctx context.Context, sessionID string, text string) (*model.CitationValidationResult, error) that: 1) Extracts all \\cite{key}, \\citep{key}, \\citet{key} patterns from text using regex, 2) Cross-checks each key exists in MongoDB proposal_refs for the session using deps.MongoRepo.ValidateCiteKeys, 3) For each valid citation, performs semantic search in Qdrant using modules.SemanticSearch - query is the surrounding claim text, checks if returned results include the cited paper with similarity >= 0.75, 4) Returns CitationValidationResult with ValidatedText (text with invalid citations removed), InvalidCitations (keys not found in DB), MisattributedClaims (citations where semantic similarity < 0.75).",
+    "Create internal/modules/p0_ingest.go implementing the Module interface for proposal ingest. Status flow: P0_INIT -> P0_BIB_PARSED -> P0_WAITING_PDFS -> P0_PDFS_UPLOADED -> P0_WAITING_EMBED_SERVER -> P0_EMBED_SERVER_READY -> P0_WAITING_INGEST -> P0_VECTORS_READY -> P0_KG_BUILD -> P0_DONE. The module struct P0Ingest has deps *ModuleDeps. Name() returns 'P0_INGEST'. Execute method switches on session status (but takes *model.ProposalSession instead of *model.SLRSession - see step below). Key logic per state: P0_BIB_PARSED validates min 10 refs and >=70% from last 5 years; P0_WAITING_PDFS blocks (returns nil, logs instructions); P0_WAITING_EMBED_SERVER logs Colab URL instructions; P0_WAITING_INGEST polls Qdrant for vectors; P0_KG_BUILD extracts triplets and pushes to Neo4j using deps.Neo4jRepo.SaveKnowledgeGraph with node labels Paper/Author/Method/Dataset/Finding/Gap and edge types CITES/USES_METHOD/FINDS/CONTRADICTS/EXTENDS/HAS_GAP.",
+    "Since the existing Module interface uses *model.SLRSession, create a parallel ProposalModule interface in internal/modules/module.go: type ProposalModule interface { Execute(ctx context.Context, session *model.ProposalSession) error; Name() string }. This keeps proposal pipeline cleanly separated from SLR pipeline.",
+    "Ensure all files compile with `go build ./...`."
+  ],
+  "acceptance_criteria": [
+    "internal/repository/mongo.go has all 7 new proposal methods (CreateProposalSession, GetProposalSession, UpdateProposalSession, UpsertProposalRefs, GetProposalRefs, GetMissingPDFRefs, ValidateCiteKeys)",
+    "internal/modules/citation_gate.go exists with ValidateCitations function that extracts cite/citep/citet patterns and cross-checks with DB + Qdrant",
+    "internal/modules/p0_ingest.go exists implementing ProposalModule interface with full status flow",
+    "internal/modules/module.go has new ProposalModule interface",
+    "`go build ./...` succeeds"
+  ],
+  "verification": [
+    "Run `cd /projects/sandbox/nsa && go build ./...` and confirm exit code 0"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
