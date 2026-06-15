@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"nsa/internal/llm"
 	"nsa/internal/model"
@@ -36,6 +35,7 @@ type ExecutionResult struct {
 }
 
 // Fase 3: Evaluasi & Summarize
+// Menggunakan GenerateJSON helper dengan retry otomatis jika LLM mengembalikan output non-JSON.
 func (a *ExecutionAgent) EvaluateAndSummarize(ctx context.Context, ss, kw, db, userHits string) (*ExecutionResult, error) {
 	currentDate := time.Now().Format("2006-01-02")
 	systemPrompt := fmt.Sprintf(`Anda adalah eksekutor akhir Modul 3. Tugas Anda melakukan Fase 3 (Evaluasi) dan membuat 2 Dokumen Output.
@@ -66,15 +66,10 @@ PENTING: JANGAN memecah baris (line continuation) menggunakan backslash (\) untu
 
 	userPrompt := fmt.Sprintf("=== SEARCH STRING ===\n%s\n\n=== KEYWORDS ===\n%s\n\n=== DB SELECTION ===\n%s\n\n=== USER HITS INPUT ===\n%s", ss, kw, db, userHits)
 
-	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("execution_agent gagal memanggil LLM: %w", err)
-	}
-
-	cleanJSON := CleanJSONResponse(rawResponse)
 	var result ExecutionResult
-	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON ExecutionResult (%w). Raw: %s", err, rawResponse)
+	_, err := GenerateJSON(ctx, a.llmProvider, systemPrompt, userPrompt, &result, 2)
+	if err != nil {
+		return nil, fmt.Errorf("execution_agent: %w", err)
 	}
 
 	return &result, nil

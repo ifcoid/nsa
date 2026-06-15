@@ -1,11 +1,30 @@
 package agent
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
+
+	"nsa/internal/llm"
+	"nsa/internal/logger"
 )
 
 var thinkRegex = regexp.MustCompile(`(?s)<(?:think|thought)>.*?(?:</(?:think|thought)>|$)`)
+
+// jsonNoisePatterns berisi prefix/kalimat umum yang sering dihasilkan LLM sebelum JSON.
+var jsonNoisePatterns = []string{
+	"Here is the JSON",
+	"Here's the JSON",
+	"Sure, here",
+	"Berikut adalah JSON",
+	"Berikut JSON",
+	"Certainly",
+	"Of course",
+	"Baik, berikut",
+	"Tentu, berikut",
+}
 
 // Info: File ini menampung utilitas bersama yang digunakan oleh seluruh agen cerdas (Pico, Criteria, Screener, dll)
 
@@ -17,7 +36,7 @@ func CleanJSONResponse(rawResponse string) string {
 
 	// Hapus tag <think>...</think> secara utuh (mendukung unclosed tag akibat token limit)
 	rawResponse = thinkRegex.ReplaceAllString(rawResponse, "")
-	
+
 	// Hapus halusinasi line continuation pada string JSON (misal: "string" \ \n "lanjutan")
 	// Regex ini mencocokkan: tanda kutip penutup, spasi opsional, backslash, spasi/newline, tanda kutip pembuka
 	lineContinuationRegex := regexp.MustCompile(`"\s*\\\s*\n\s*"`)
@@ -30,10 +49,27 @@ func CleanJSONResponse(rawResponse string) string {
 		rawResponse = strings.TrimSpace(rawResponse[:refIdx])
 	}
 
+	// 0b. Hapus kalimat naratif preamble sebelum JSON (LLM kadang nulis "Here is the JSON:" di awal)
+	for _, prefix := range jsonNoisePatterns {
+		lowerResp := strings.ToLower(rawResponse)
+		lowerPrefix := strings.ToLower(prefix)
+		if strings.HasPrefix(lowerResp, lowerPrefix) {
+			// Potong sampai habis kalimat (akhir baris atau titik dua)
+			idx := strings.IndexAny(rawResponse[len(prefix):], ":\n")
+			if idx != -1 {
+				rawResponse = strings.TrimSpace(rawResponse[len(prefix)+idx+1:])
+			}
+		}
+	}
+
+	// 0c. Hapus trailing text setelah JSON valid (misal "Note: ..." atau "Catatan: ...")
+	// Ini hanya dilakukan jika ada brace/bracket penutup diikuti teks non-JSON
+	rawResponse = strings.TrimSpace(rawResponse)
+
 	// 1. Jika rawResponse sudah berbentuk JSON murni, langsung gunakan fallback extraction
 	// untuk memastikan kita memotong string yang diapit {} atau [] (berjaga-jaga jika ada teks ekstra di akhir)
-	if (strings.HasPrefix(rawResponse, "{") || strings.HasPrefix(rawResponse, "[")) && 
-	   (strings.HasSuffix(rawResponse, "}") || strings.HasSuffix(rawResponse, "]")) {
+	if (strings.HasPrefix(rawResponse, "{") || strings.HasPrefix(rawResponse, "[")) &&
+		(strings.HasSuffix(rawResponse, "}") || strings.HasSuffix(rawResponse, "]")) {
 		// Do nothing, proceed to fallback extractor below
 	} else {
 		// 2. Cari blok markdown ```json ... ``` TERAKHIR
@@ -44,6 +80,11 @@ func CleanJSONResponse(rawResponse string) string {
 			endIdx := strings.Index(rawResponse[startIdx:], "```")
 			if endIdx != -1 {
 				return strings.TrimSpace(rawResponse[startIdx : startIdx+endIdx])
+			}
+			// Jika tidak ada penutup ```, ambil sisa teks (truncated output)
+			candidate := strings.TrimSpace(rawResponse[startIdx:])
+			if strings.HasPrefix(candidate, "{") || strings.HasPrefix(candidate, "[") {
+				return candidate
 			}
 		}
 
@@ -66,7 +107,7 @@ func CleanJSONResponse(rawResponse string) string {
 			}
 			temp = temp[s+3+e+3:]
 		}
-		
+
 		if lastBlock != "" {
 			return strings.TrimSpace(lastBlock)
 		}
@@ -112,4 +153,68 @@ func CleanJSONResponse(rawResponse string) string {
 	}
 
 	return strings.TrimSpace(rawResponse[startIdx : endIdx+1])
+}
+
+// GenerateJSON adalah helper retry yang memanggil LLM, membersihkan output,
+// dan melakukan unmarshal ke target. Jika parsing gagal, ia akan re-call LLM
+// dengan instruksi koreksi (maks maxRetries kali).
+// Parameter target harus berupa pointer ke struct yang ingin diisi.
+func GenerateJSON(ctx context.Context, client llm.LLMClient, systemPrompt, userPrompt string, target interface{}, maxRetries int) (string, error) {
+	if maxRetries <= 0 {
+		maxRetries = 2
+	}
+
+	rawResponse, err := client.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return "", fmt.Errorf("LLM generate gagal: %w", err)
+	}
+
+	cleanJSON := CleanJSONResponse(rawResponse)
+	if err := json.Unmarshal([]byte(cleanJSON), target); err == nil {
+		return rawResponse, nil
+	}
+
+	// Retry loop: re-call LLM with correction prompt
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		logger.Logf("", "   [GenerateJSON] Retry %d/%d - JSON parsing gagal, meminta koreksi ke LLM...", attempt, maxRetries)
+
+		correctionSystem := `Anda HARUS mengembalikan HANYA objek JSON yang valid tanpa teks tambahan apapun.
+JANGAN gunakan blok markdown (jangan awali dengan ` + "```" + `).
+JANGAN tambahkan penjelasan, komentar, atau narasi.
+JANGAN gunakan backslash line continuation.
+Output Anda harus dimulai dengan { dan diakhiri dengan } (atau [ dan ]).
+Pastikan semua string di-escape dengan benar sesuai standar JSON.`
+
+		correctionUser := fmt.Sprintf(`Respons Anda sebelumnya BUKAN JSON yang valid. Berikut instruksi awal yang harus Anda jawab dalam format JSON murni:
+
+=== SYSTEM PROMPT AWAL ===
+%s
+
+=== USER PROMPT AWAL ===
+%s
+
+Sekarang berikan HANYA output JSON yang valid, tanpa teks lain.`, systemPrompt, userPrompt)
+
+		rawResponse, err = client.Generate(ctx, correctionSystem, correctionUser)
+		if err != nil {
+			return "", fmt.Errorf("LLM retry %d gagal: %w", attempt, err)
+		}
+
+		cleanJSON = CleanJSONResponse(rawResponse)
+		if err := json.Unmarshal([]byte(cleanJSON), target); err == nil {
+			logger.Logf("", "   [GenerateJSON] Retry %d berhasil - JSON valid.", attempt)
+			return rawResponse, nil
+		}
+	}
+
+	// Semua retry gagal
+	return rawResponse, fmt.Errorf("gagal parsing JSON setelah %d retry. Raw terakhir: %s", maxRetries, truncateForLog(rawResponse, 500))
+}
+
+// truncateForLog memotong string untuk keperluan log agar tidak terlalu panjang.
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "...[truncated]"
 }
