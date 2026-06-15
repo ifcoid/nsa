@@ -752,9 +752,27 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		kappaReport := fmt.Sprintf("- Kalibrasi iterasi 1: %.3f\n- Jumlah iterasi kalibrasi: %d\n- Kalibrasi final: %.3f\n- Batch massal final: %.3f\n- Klasifikasi: %s\n- Disagreements resolved: %d\n- Deferred ke full-text: %d",
 			iter1Kappa, len(session.KalibrasiLog), finalKappa, batchKappa, kappaClass, resolvedDiscussCount, deferredCount)
 
-		// Initialize Agent
-		llm, _ := m.deps.LLMFactory.CreateClient(ctx, "xiaomi")
-		scAgent := agent.NewScreeningAgent(llm)
+		// Initialize Agent - gunakan roles config dengan fallback chain
+		roles := m.deps.LLMFactory.Roles(ctx)
+		providers := []string{roles.Supervisor, roles.SupervisorFallback, "zhipu", "groq", roles.Brain, roles.BrainFallback}
+
+		var llmClient llm.LLMClient
+		for _, provider := range providers {
+			if provider == "" {
+				continue
+			}
+			client, err := m.deps.LLMFactory.CreateClient(ctx, provider)
+			if err == nil && client != nil {
+				llmClient = client
+				logger.Logf(session.ID, "      -> LLM client untuk review: %s", provider)
+				break
+			}
+			logger.Logf(session.ID, "      [!] Gagal membuat LLM client '%s': %v", provider, err)
+		}
+		if llmClient == nil {
+			return fmt.Errorf("[M5_STEP4] gagal membuat LLM client: semua provider gagal (supervisor=%s, fallback=%s, zhipu, groq, brain=%s)", roles.Supervisor, roles.SupervisorFallback, roles.Brain)
+		}
+		scAgent := agent.NewScreeningAgent(llmClient)
 
 		// 4. PICO AUDIT (10% Random INCLUDE)
 		picoAuditText := "Audit dilewati (Tidak ada paper INCLUDE)"

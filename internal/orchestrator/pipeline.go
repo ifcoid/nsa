@@ -119,6 +119,17 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 		p.mu.Unlock()
 
 		defer func() {
+			if r := recover(); r != nil {
+				logger.Logf(sessionID, "❌ [PANIC RECOVERED] %v", r)
+				session, getErr := p.mongoRepo.GetSession(context.Background(), sessionID)
+				if getErr == nil {
+					session.SystemError = fmt.Sprintf("PANIC: %v", r)
+					if !strings.Contains(session.Status, "_ERROR") {
+						session.Status = session.Status + "_ERROR"
+					}
+					_ = p.mongoRepo.UpdateSession(context.Background(), session)
+				}
+			}
 			cancel()
 			p.mu.Lock()
 			delete(p.activeWorkers, sessionID)
