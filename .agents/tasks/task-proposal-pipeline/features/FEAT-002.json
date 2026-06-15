@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Add MongoDB repository methods for proposal sessions and refs, create the Citation Gate module, and create the P0 Ingest pipeline module.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Add proposal repository methods to internal/repository/mongo.go (append to existing file): CreateProposalSession(ctx, *model.ProposalSession) error - insert into 'proposal_sessions' collection; GetProposalSession(ctx, sessionID string) (*model.ProposalSession, error) - find by _id from 'proposal_sessions'; UpdateProposalSession(ctx, *model.ProposalSession) error - upsert to 'proposal_sessions' with updated_at; UpsertProposalRefs(ctx, sessionID string, refs []model.ProposalRef) error - batch upsert to 'proposal_refs' (use cite_key+session_id as compound key); GetProposalRefs(ctx, sessionID string) ([]model.ProposalRef, error) - find all from 'proposal_refs' where session_id matches; GetMissingPDFRefs(ctx, sessionID string) ([]model.ProposalRef, error) - find from 'proposal_refs' where session_id matches AND is_embedded=false; ValidateCiteKeys(ctx, sessionID string, keys []string) (valid []string, invalid []string, err error) - check which keys exist in 'proposal_refs' for the session.",
     "Create internal/modules/citation_gate.go with: type CitationGate struct with deps *ModuleDeps. Function ValidateCitations(ctx context.Context, sessionID string, text string) (*model.CitationValidationResult, error) that: 1) Extracts all \\cite{key}, \\citep{key}, \\citet{key} patterns from text using regex, 2) Cross-checks each key exists in MongoDB proposal_refs for the session using deps.MongoRepo.ValidateCiteKeys, 3) For each valid citation, performs semantic search in Qdrant using modules.SemanticSearch - query is the surrounding claim text, checks if returned results include the cited paper with similarity >= 0.75, 4) Returns CitationValidationResult with ValidatedText (text with invalid citations removed), InvalidCitations (keys not found in DB), MisattributedClaims (citations where semantic similarity < 0.75).",
@@ -21,5 +21,5 @@
     "Run `cd /projects/sandbox/nsa && go build ./...` and confirm exit code 0"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Renamed citePattern to proposalCitePattern to avoid redeclaration conflict with m9_verify.go in the same package. All builds and tests pass cleanly."
 }
