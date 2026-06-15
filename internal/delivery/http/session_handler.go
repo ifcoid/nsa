@@ -371,6 +371,19 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 
 	var allPapers []interface{}
 
+	// Breakdown tracking
+	type fileBreakdown struct {
+		Filename string `json:"filename"`
+		Count    int    `json:"count"`
+		Database string `json:"database"`
+		MissingAbstract int `json:"missing_abstract"`
+		MissingDOI      int `json:"missing_doi"`
+	}
+	var perFileBreakdown []fileBreakdown
+	perDatabase := make(map[string]int)
+	totalMissingAbstract := 0
+	totalMissingDOI := 0
+
 	for _, fileHeader := range files {
 		file, err := fileHeader.Open()
 		if err != nil {
@@ -392,6 +405,11 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 			// fallback silently or log
 			continue
 		}
+
+		fileCount := 0
+		fileMissingAbstract := 0
+		fileMissingDOI := 0
+		dbCount := make(map[string]int)
 
 		for _, doc := range parsedDocs {
 			p := model.Paper{
@@ -424,13 +442,55 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 				Status:         "PENDING", // Initial state
 			}
 			allPapers = append(allPapers, p)
+			fileCount++
+			dbCount[doc.Database]++
+
+			if strings.TrimSpace(doc.Abstract) == "" {
+				fileMissingAbstract++
+			}
+			if strings.TrimSpace(doc.DOI) == "" {
+				fileMissingDOI++
+			}
 		}
+
+		// Determine most common database for this file
+		fileDatabase := ""
+		maxCount := 0
+		for db, cnt := range dbCount {
+			if cnt > maxCount {
+				maxCount = cnt
+				fileDatabase = db
+			}
+		}
+
+		// Aggregate per-database totals
+		for db, cnt := range dbCount {
+			perDatabase[db] += cnt
+		}
+
+		totalMissingAbstract += fileMissingAbstract
+		totalMissingDOI += fileMissingDOI
+
+		perFileBreakdown = append(perFileBreakdown, fileBreakdown{
+			Filename:        fileHeader.Filename,
+			Count:           fileCount,
+			Database:        fileDatabase,
+			MissingAbstract: fileMissingAbstract,
+			MissingDOI:      fileMissingDOI,
+		})
+
+		// Log per-file details
+		logger.Logf(id, "[Import] File '%s': %d papers (Database: %s, Missing abstract: %d, Missing DOI: %d)",
+			fileHeader.Filename, fileCount, fileDatabase, fileMissingAbstract, fileMissingDOI)
 	}
 
 	if len(allPapers) == 0 {
 		sendJSONError(w, http.StatusBadRequest, "No valid papers extracted from files")
 		return
 	}
+
+	// Log total summary
+	logger.Logf(id, "[Import] Total: %d papers imported dari %d file", len(allPapers), len(perFileBreakdown))
 
 	err = h.mongoRepo.ClearAndInsertPapers(ctx, session.ID, allPapers)
 	if err != nil {
@@ -452,6 +512,12 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 		"message": "Files imported successfully",
 		"total":   len(allPapers),
 		"status":  session.Status,
+		"breakdown": map[string]interface{}{
+			"per_file":         perFileBreakdown,
+			"per_database":     perDatabase,
+			"missing_abstract": totalMissingAbstract,
+			"missing_doi":      totalMissingDOI,
+		},
 	})
 }
 
