@@ -168,7 +168,7 @@ func (m *P0Ingest) buildKnowledgeGraph(ctx context.Context, session *model.Propo
 		}
 		nodes = append(nodes, paperNode)
 
-		// Create Author nodes and CITES edges (author -> paper)
+		// Create Author nodes and AUTHORED edges (author -> paper)
 		authors := parseAuthors(ref.Authors)
 		for _, author := range authors {
 			authorNode := repository.GraphNode{
@@ -181,7 +181,7 @@ func (m *P0Ingest) buildKnowledgeGraph(ctx context.Context, session *model.Propo
 			nodes = append(nodes, authorNode)
 
 			edges = append(edges, repository.GraphEdge{
-				Type:       "CITES",
+				Type:       "AUTHORED",
 				SourceNode: authorNode,
 				TargetNode: paperNode,
 				Properties: map[string]interface{}{
@@ -190,23 +190,34 @@ func (m *P0Ingest) buildKnowledgeGraph(ctx context.Context, session *model.Propo
 			})
 		}
 
-		// Extract keywords as potential Method/Dataset/Finding nodes
+		// Extract keywords as concept nodes with heuristic classification
 		if ref.Keywords != "" {
 			keywords := splitKeywords(ref.Keywords)
 			for _, kw := range keywords {
-				methodNode := repository.GraphNode{
-					Label: "Method",
+				nodeLabel := classifyKeyword(kw)
+				conceptNode := repository.GraphNode{
+					Label: nodeLabel,
 					Properties: map[string]interface{}{
 						"id":   kw,
 						"name": kw,
 					},
 				}
-				nodes = append(nodes, methodNode)
+				nodes = append(nodes, conceptNode)
+
+				edgeType := "RELATES_TO"
+				switch nodeLabel {
+				case "Method":
+					edgeType = "USES_METHOD"
+				case "Dataset":
+					edgeType = "USES_DATASET"
+				default:
+					edgeType = "RELATES_TO"
+				}
 
 				edges = append(edges, repository.GraphEdge{
-					Type:       "USES_METHOD",
+					Type:       edgeType,
 					SourceNode: paperNode,
-					TargetNode: methodNode,
+					TargetNode: conceptNode,
 					Properties: map[string]interface{}{
 						"session_id": session.ID,
 					},
@@ -215,8 +226,7 @@ func (m *P0Ingest) buildKnowledgeGraph(ctx context.Context, session *model.Propo
 		}
 	}
 
-	// Build citation network edges (CITES between papers)
-	// Create edges between papers that share authors (EXTENDS relationship)
+	// Build edges between papers that share authors (SAME_AUTHOR relationship)
 	papersByAuthor := make(map[string][]string)
 	for _, ref := range refs {
 		authors := parseAuthors(ref.Authors)
@@ -233,7 +243,7 @@ func (m *P0Ingest) buildKnowledgeGraph(ctx context.Context, session *model.Propo
 		if len(papers) > 1 {
 			for i := 1; i < len(papers); i++ {
 				edges = append(edges, repository.GraphEdge{
-					Type: "EXTENDS",
+					Type: "SAME_AUTHOR",
 					SourceNode: repository.GraphNode{
 						Label:      "Paper",
 						Properties: map[string]interface{}{"id": papers[0]},
@@ -306,6 +316,31 @@ func splitKeywords(keywords string) []string {
 		}
 	}
 	return result
+}
+
+// classifyKeyword uses simple heuristics to classify a keyword into a node label.
+// Returns "Dataset" if the keyword suggests a dataset, "Method" if it suggests
+// a method or algorithm, otherwise "Concept" as a generic fallback.
+func classifyKeyword(kw string) string {
+	lower := toLower(kw)
+
+	// Dataset indicators
+	datasetTerms := []string{"dataset", "corpus", "benchmark", "database", "data set", "collection"}
+	for _, term := range datasetTerms {
+		if indexSubstring(lower, term) >= 0 {
+			return "Dataset"
+		}
+	}
+
+	// Method/algorithm indicators
+	methodTerms := []string{"method", "algorithm", "model", "framework", "approach", "technique", "network", "architecture", "classifier", "regression", "clustering"}
+	for _, term := range methodTerms {
+		if indexSubstring(lower, term) >= 0 {
+			return "Method"
+		}
+	}
+
+	return "Concept"
 }
 
 // Helper functions to avoid importing strings in a way that creates confusion

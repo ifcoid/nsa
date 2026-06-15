@@ -45,7 +45,19 @@ func (cg *CitationGate) ValidateCitations(ctx context.Context, sessionID string,
 		return nil, fmt.Errorf("citation gate: failed to validate cite keys: %w", err)
 	}
 
-	// 3. For each valid citation, perform semantic verification
+	// 3. For each valid citation, perform semantic verification.
+	// Fetch all refs for the session so we can match results against specific papers.
+	allRefs, err := cg.deps.MongoRepo.GetProposalRefs(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("citation gate: failed to fetch proposal refs: %w", err)
+	}
+
+	// Build a lookup map from cite_key to ref for matching
+	refByCiteKey := make(map[string]model.ProposalRef)
+	for _, ref := range allRefs {
+		refByCiteKey[ref.CiteKey] = ref
+	}
+
 	var misattributed []string
 	validSet := make(map[string]bool)
 	for _, k := range valid {
@@ -75,18 +87,41 @@ func (cg *CitationGate) ValidateCitations(ctx context.Context, sessionID string,
 				continue // skip invalid keys (already reported)
 			}
 
-			// Semantic search: does the claim match the cited paper?
-			results := SemanticSearch(ctx, claimText, 5)
+			// Get the specific ref we expect to find
+			expectedRef, exists := refByCiteKey[key]
+			if !exists {
+				continue
+			}
+
+			// Semantic search: does the claim match the SPECIFIC cited paper?
+			results := SemanticSearch(ctx, claimText, 10)
 			if len(results) == 0 {
 				continue // Qdrant not available or no results
 			}
 
-			// Check if any result matches the cited paper with score >= 0.75
+			// Check if the SPECIFIC cited paper appears in results with score >= 0.75
 			found := false
 			for _, r := range results {
-				if r.Score >= 0.75 {
-					// Match by DOI or title similarity
-					if r.DOI != "" || r.Title != "" {
+				if r.Score < 0.75 {
+					continue
+				}
+				// Match by DOI if both have it
+				if expectedRef.DOI != "" && r.DOI != "" && strings.EqualFold(expectedRef.DOI, r.DOI) {
+					found = true
+					break
+				}
+				// Match by title similarity (case-insensitive exact match or containment)
+				if expectedRef.Title != "" && r.Title != "" {
+					if strings.EqualFold(expectedRef.Title, r.Title) ||
+						strings.Contains(strings.ToLower(r.Title), strings.ToLower(expectedRef.Title)) ||
+						strings.Contains(strings.ToLower(expectedRef.Title), strings.ToLower(r.Title)) {
+						found = true
+						break
+					}
+				}
+				// Match by cite_key appearing in snippet or title
+				if expectedRef.CiteKey != "" && r.Snippet != "" {
+					if strings.Contains(strings.ToLower(r.Snippet), strings.ToLower(expectedRef.CiteKey)) {
 						found = true
 						break
 					}

@@ -731,18 +731,26 @@ func (r *MongoRepository) UpdateProposalSession(ctx context.Context, session *mo
 func (r *MongoRepository) UpsertProposalRefs(ctx context.Context, sessionID string, refs []model.ProposalRef) error {
 	collection := r.client.Database(r.dbName).Collection("proposal_refs")
 
+	if len(refs) == 0 {
+		return nil
+	}
+
+	models := make([]mongo.WriteModel, 0, len(refs))
 	for i := range refs {
 		refs[i].SessionID = sessionID
 		filter := bson.M{"cite_key": refs[i].CiteKey, "session_id": sessionID}
 		update := bson.M{"$set": refs[i]}
-		opts := options.Update().SetUpsert(true)
 
-		_, err := collection.UpdateOne(ctx, filter, update, opts)
-		if err != nil {
-			return err
-		}
+		model := mongo.NewUpdateOneModel().
+			SetFilter(filter).
+			SetUpdate(update).
+			SetUpsert(true)
+		models = append(models, model)
 	}
-	return nil
+
+	opts := options.BulkWrite().SetOrdered(false)
+	_, err := collection.BulkWrite(ctx, models, opts)
+	return err
 }
 
 // GetProposalRefs mengambil semua referensi proposal untuk sesi tertentu

@@ -84,6 +84,31 @@ func (h *ProposalHandler) CreateProposalSession(w http.ResponseWriter, req *http
 	})
 }
 
+// getAuthUserID extracts the authenticated user ID from the request context.
+func getAuthUserID(req *http.Request) string {
+	if v := req.Context().Value("user_id"); v != nil {
+		if uid, ok := v.(string); ok {
+			return uid
+		}
+	}
+	return ""
+}
+
+// checkSessionOwnership verifies that the authenticated user owns the session.
+// Returns false and writes a 403 response if ownership check fails.
+func (h *ProposalHandler) checkSessionOwnership(w http.ResponseWriter, req *http.Request, session *model.ProposalSession) bool {
+	authUserID := getAuthUserID(req)
+	if authUserID == "" {
+		sendJSONError(w, http.StatusUnauthorized, "Unable to identify authenticated user")
+		return false
+	}
+	if session.UserID != authUserID {
+		sendJSONError(w, http.StatusForbidden, "You do not have permission to access this session")
+		return false
+	}
+	return true
+}
+
 // GetProposalSession handles GET /api/proposal/sessions/{id}
 func (h *ProposalHandler) GetProposalSession(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
@@ -95,6 +120,10 @@ func (h *ProposalHandler) GetProposalSession(w http.ResponseWriter, req *http.Re
 	session, err := h.mongoRepo.GetProposalSession(context.Background(), id)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Proposal session not found")
+		return
+	}
+
+	if !h.checkSessionOwnership(w, req, session) {
 		return
 	}
 
@@ -113,6 +142,10 @@ func (h *ProposalHandler) UpdateProposalSession(w http.ResponseWriter, req *http
 	session, err := h.mongoRepo.GetProposalSession(ctx, id)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Proposal session not found")
+		return
+	}
+
+	if !h.checkSessionOwnership(w, req, session) {
 		return
 	}
 
@@ -155,6 +188,10 @@ func (h *ProposalHandler) UploadBib(w http.ResponseWriter, req *http.Request) {
 	session, err := h.mongoRepo.GetProposalSession(ctx, id)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Proposal session not found")
+		return
+	}
+
+	if !h.checkSessionOwnership(w, req, session) {
 		return
 	}
 
@@ -219,7 +256,18 @@ func (h *ProposalHandler) UploadPDF(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err := req.ParseMultipartForm(50 << 20)
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetProposalSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Proposal session not found")
+		return
+	}
+
+	if !h.checkSessionOwnership(w, req, session) {
+		return
+	}
+
+	err = req.ParseMultipartForm(50 << 20)
 	if err != nil {
 		sendJSONError(w, http.StatusBadRequest, "Failed to parse multipart form")
 		return
@@ -230,8 +278,6 @@ func (h *ProposalHandler) UploadPDF(w http.ResponseWriter, req *http.Request) {
 		sendJSONError(w, http.StatusBadRequest, "cite_key is required")
 		return
 	}
-
-	ctx := context.Background()
 
 	// Mark the ref as is_embedded=true in MongoDB
 	collection := h.mongoRepo.GetDB().Collection("proposal_refs")
@@ -285,6 +331,10 @@ func (h *ProposalHandler) SetEmbedEndpoint(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
+	if !h.checkSessionOwnership(w, req, session) {
+		return
+	}
+
 	session.EmbedEndpoint = payload.Endpoint
 	session.Status = "P0_EMBED_SERVER_READY"
 
@@ -312,9 +362,13 @@ func (h *ProposalHandler) ResumeProposal(w http.ResponseWriter, req *http.Reques
 	}
 
 	ctx := context.Background()
-	_, err := h.mongoRepo.GetProposalSession(ctx, id)
+	session, err := h.mongoRepo.GetProposalSession(ctx, id)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Proposal session not found")
+		return
+	}
+
+	if !h.checkSessionOwnership(w, req, session) {
 		return
 	}
 
@@ -335,7 +389,18 @@ func (h *ProposalHandler) GetProposalRefs(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	refs, err := h.mongoRepo.GetProposalRefs(context.Background(), id)
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetProposalSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Proposal session not found")
+		return
+	}
+
+	if !h.checkSessionOwnership(w, req, session) {
+		return
+	}
+
+	refs, err := h.mongoRepo.GetProposalRefs(ctx, id)
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to get proposal refs: "+err.Error())
 		return
@@ -354,7 +419,18 @@ func (h *ProposalHandler) GetMissingPDFRefs(w http.ResponseWriter, req *http.Req
 		return
 	}
 
-	refs, err := h.mongoRepo.GetMissingPDFRefs(context.Background(), id)
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetProposalSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Proposal session not found")
+		return
+	}
+
+	if !h.checkSessionOwnership(w, req, session) {
+		return
+	}
+
+	refs, err := h.mongoRepo.GetMissingPDFRefs(ctx, id)
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to get missing PDF refs: "+err.Error())
 		return

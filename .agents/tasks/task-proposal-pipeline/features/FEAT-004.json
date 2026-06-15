@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-004",
+  "type": "fix",
+  "description": "Address critical review issues: session ownership check, BulkWrite for UpsertProposalRefs, KG edge labels, and semantic search scoping in CitationGate.",
+  "status": "in_progress",
+  "steps": [
+    "Add session ownership check in proposal_handler.go - compare session.UserID against authenticated user from request context for all relevant endpoints",
+    "Replace sequential UpdateOne loop with BulkWrite in UpsertProposalRefs (mongo.go)",
+    "Fix KG edge labels in p0_ingest.go: AUTHORED for author-paper, SAME_AUTHOR for same-author paper links, classify keywords with heuristics",
+    "Fix semantic search scoping in citation_gate.go to verify specific cited paper appears in results by matching cite_key against DOI/title"
+  ],
+  "acceptance_criteria": [
+    "All proposal session endpoints verify session.UserID matches authenticated user, return 403 on mismatch",
+    "UpsertProposalRefs uses BulkWrite with UpdateOneModel",
+    "Author-to-paper edges use AUTHORED label, same-author paper links use SAME_AUTHOR",
+    "Keywords classified with heuristics: dataset -> Dataset, method/algorithm -> Method, else -> Concept",
+    "CitationGate semantic check verifies specific cited paper by matching cite_key/DOI/title in results",
+    "`go build ./...` succeeds"
+  ],
+  "verification": [
+    "Run `cd /projects/sandbox/nsa && go build ./...` and confirm exit code 0"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}
