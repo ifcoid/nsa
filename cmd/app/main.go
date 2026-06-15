@@ -110,8 +110,11 @@ func main() {
 	// Kita perbarui pipeline agar menerima factory dinamis dan neo4j
 	pipeline := orchestrator.NewSLRPipeline(mongoRepo, llmFactory, neo4jRepo, neo4jConnErr)
 
+	// 5b. Inisialisasi Proposal Pipeline
+	proposalPipeline := orchestrator.NewProposalPipeline(mongoRepo, llmFactory, neo4jRepo, neo4jConnErr)
+
 	// 6. Inisialisasi HTTP Router
-	router := httpapi.NewRouter(mongoRepo, pipeline)
+	router := httpapi.NewRouter(mongoRepo, pipeline, proposalPipeline)
 
 	// Auto-resume: lanjutkan sesi yang berstatus "sedang jalan" (mis. worker terputus
 	// karena deploy/restart mesin fly) tanpa perlu klik Resume manual di web.

@@ -109,6 +109,11 @@ func (r *MongoRepository) UpdateSession(ctx context.Context, session *model.SLRS
 	return err
 }
 
+// GetDB returns the underlying mongo.Database for direct collection access.
+func (r *MongoRepository) GetDB() *mongo.Database {
+	return r.client.Database(r.dbName)
+}
+
 func (r *MongoRepository) GetPapersCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_papers")
 }

@@ -12,20 +12,23 @@ import (
 )
 
 type Router struct {
-	mux          *http.ServeMux
-	sessionHndlr *SessionHandler
-	llmHndlr     *LLMHandler
-	authHndlr    *AuthHandler
-	sseServer    *mcpserver.SSEServer
+	mux            *http.ServeMux
+	sessionHndlr   *SessionHandler
+	llmHndlr       *LLMHandler
+	authHndlr      *AuthHandler
+	proposalHndlr  *ProposalHandler
+	sseServer      *mcpserver.SSEServer
 }
 
-func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLRPipeline) *Router {
+func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLRPipeline, proposalPipeline *orchestrator.ProposalPipeline) *Router {
 	mux := http.NewServeMux()
 
 	sessionHandler := NewSessionHandler(mongoRepo, pipeline)
 	llmHandler := NewLLMHandler(mongoRepo)
 
 	authHandler := NewAuthHandler(mongoRepo)
+
+	proposalHandler := NewProposalHandler(mongoRepo, proposalPipeline)
 
 	mcpSrv := nsamcp.NewMCPServer(mongoRepo)
 	sseServer := mcpserver.NewSSEServer(mcpSrv.MCPServer,
@@ -34,11 +37,12 @@ func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLR
 	)
 
 	r := &Router{
-		mux:          mux,
-		sessionHndlr: sessionHandler,
-		llmHndlr:     llmHandler,
-		authHndlr:    authHandler,
-		sseServer:    sseServer,
+		mux:           mux,
+		sessionHndlr:  sessionHandler,
+		llmHndlr:      llmHandler,
+		authHndlr:     authHandler,
+		proposalHndlr: proposalHandler,
+		sseServer:     sseServer,
 	}
 
 	r.registerRoutes()
@@ -153,6 +157,17 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("PUT /api/embed/config", r.llmHndlr.UpdateEmbedConfig)
 	protected.HandleFunc("GET /api/scopus/config", r.llmHndlr.GetScopusConfig)
 	protected.HandleFunc("PUT /api/scopus/config", r.llmHndlr.UpdateScopusConfig)
+
+	// Proposal endpoints
+	protected.HandleFunc("POST /api/proposal/sessions", r.proposalHndlr.CreateProposalSession)
+	protected.HandleFunc("GET /api/proposal/sessions/{id}", r.proposalHndlr.GetProposalSession)
+	protected.HandleFunc("PUT /api/proposal/sessions/{id}", r.proposalHndlr.UpdateProposalSession)
+	protected.HandleFunc("POST /api/proposal/sessions/{id}/upload-bib", r.proposalHndlr.UploadBib)
+	protected.HandleFunc("POST /api/proposal/sessions/{id}/upload-pdf", r.proposalHndlr.UploadPDF)
+	protected.HandleFunc("PUT /api/proposal/sessions/{id}/embed-endpoint", r.proposalHndlr.SetEmbedEndpoint)
+	protected.HandleFunc("POST /api/proposal/sessions/{id}/resume", r.proposalHndlr.ResumeProposal)
+	protected.HandleFunc("GET /api/proposal/sessions/{id}/refs", r.proposalHndlr.GetProposalRefs)
+	protected.HandleFunc("GET /api/proposal/sessions/{id}/refs/missing-pdfs", r.proposalHndlr.GetMissingPDFRefs)
 	
 	// Apply Auth Middleware to all protected routes
 	r.mux.Handle("/api/sessions", middleware.AuthMiddleware(protected))
@@ -161,6 +176,8 @@ func (r *Router) registerRoutes() {
 	r.mux.Handle("/api/github/", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/embed/", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/scopus/", middleware.AuthMiddleware(protected))
+	r.mux.Handle("/api/proposal/sessions", middleware.AuthMiddleware(protected))
+	r.mux.Handle("/api/proposal/", middleware.AuthMiddleware(protected))
 	
 	// WebSocket endpoint untuk logs (Tidak diproteksi ketat karena via URL /ws/, jika butuh auth bisa pasang token di query)
 	r.mux.HandleFunc("GET /api/ws/logs/{id}", LogStreamHandler)
