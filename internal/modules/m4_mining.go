@@ -10,6 +10,8 @@ import (
 	"nsa/internal/model"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type M4Mining struct {
@@ -132,7 +134,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		
 		// 1. Fetch Papers
 		papersColl := m.deps.MongoRepo.GetPapersCollection()
-		cursor, err := papersColl.Find(ctx, map[string]interface{}{})
+		cursor, err := papersColl.Find(ctx, bson.M{"session_id": session.ID})
 		if err != nil {
 			logger.Log(session.ID, "   [ERROR] Gagal membaca collection 'slr_papers'. Pastikan sudah dibuat.")
 			session.Status = "M4_STEP2_WAITING_IMPORT"
@@ -287,7 +289,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		if len(uniquePapers) > 0 {
 			logger.Log(session.ID, "   [Info] Menyimpan hasil post-dedup ke collection 'slr_papers_post_dedup'...")
 			postDedupColl := m.deps.MongoRepo.GetPostDedupCollection()
-			postDedupColl.Drop(ctx) // reset jika re-run
+			postDedupColl.DeleteMany(ctx, bson.M{"session_id": session.ID}) // reset jika re-run
 			_, errIns := postDedupColl.InsertMany(ctx, uniquePapers)
 			if errIns != nil {
 				logger.Logf(session.ID, "   [ERROR] Gagal menyimpan ke slr_papers_post_dedup: %v\n", errIns)
@@ -332,7 +334,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		logger.Log(session.ID, "   [Langkah 4.3] Men-setup Database Screening & Modul 4 Summary...")
 		
 		postDedupColl := m.deps.MongoRepo.GetPostDedupCollection()
-		cursor, err := postDedupColl.Find(ctx, map[string]interface{}{})
+		cursor, err := postDedupColl.Find(ctx, bson.M{"session_id": session.ID})
 		if err != nil { return err }
 
 		var uniquePapers []map[string]interface{}
@@ -345,7 +347,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		}
 
 		screeningColl := m.deps.MongoRepo.GetScreeningCollection()
-		screeningColl.Drop(ctx)
+		screeningColl.DeleteMany(ctx, bson.M{"session_id": session.ID})
 
 		var screeningDocs []interface{}
 		for _, p := range uniquePapers {
