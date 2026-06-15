@@ -2,7 +2,7 @@
   "id": "FEAT-004",
   "type": "fix",
   "description": "Address critical review issues: session ownership check, BulkWrite for UpsertProposalRefs, KG edge labels, and semantic search scoping in CitationGate.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Add session ownership check in proposal_handler.go - compare session.UserID against authenticated user from request context for all relevant endpoints",
     "Replace sequential UpdateOne loop with BulkWrite in UpsertProposalRefs (mongo.go)",
@@ -21,5 +21,5 @@
     "Run `cd /projects/sandbox/nsa && go build ./...` and confirm exit code 0"
   ],
   "blocked_reason": null,
-  "findings": null
+  "findings": "All 4 critical fixes implemented and verified. go build ./... passes. go test ./... passes. go vet shows 2 pre-existing warnings (unkeyed struct fields in mongo.go lines 171-172) that predate our changes. The ownership check uses string context key 'user_id' matching the auth middleware pattern. BulkWrite uses SetOrdered(false) for maximum parallelism. Keyword classification uses simple substring heuristics. Citation gate now fetches all refs for the session to do proper cite_key/DOI/title matching against search results."
 }
