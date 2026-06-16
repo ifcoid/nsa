@@ -409,16 +409,25 @@ type ExclusionTable struct {
 	FullTextPrep     string `bson:"full_text_prep" json:"full_text_prep"`
 }
 
+// SlippedFlag is one explainable (xAI) signal that flagged a paper as a probable
+// false-include. Multiple flags can accumulate on one paper (neuro-symbolic union).
+type SlippedFlag struct {
+	Source string `bson:"source" json:"source"` // "rule:reviewer-exclude" | "rule:strict-exclude" | "rule:keyword" | "llm-audit"
+	Detail string `bson:"detail" json:"detail"` // human-readable evidence/justification
+}
+
 // SlippedPaper is one INCLUDE paper flagged by the PICO-consistency audit as a probable
-// false-include, plus the human resolution (EXCLUDE accept / KEEP override).
+// false-include, with the provenance of every signal that flagged it (xAI trail) and the
+// human resolution (EXCLUDE accept / KEEP override).
 type SlippedPaper struct {
-	PaperID    string `bson:"paper_id" json:"paper_id"` // screening _id hex
-	DOI        string `bson:"doi" json:"doi"`
-	Title      string `bson:"title" json:"title"`
-	ReasonCode string `bson:"reason_code" json:"reason_code"`
-	Reason     string `bson:"reason" json:"reason"`
-	Actioned   bool   `bson:"actioned" json:"actioned"`     // human has decided
-	Resolution string `bson:"resolution" json:"resolution"` // "EXCLUDE" | "KEEP"
+	PaperID    string        `bson:"paper_id" json:"paper_id"` // screening _id hex
+	DOI        string        `bson:"doi" json:"doi"`
+	Title      string        `bson:"title" json:"title"`
+	ReasonCode string        `bson:"reason_code" json:"reason_code"`
+	Reason     string        `bson:"reason" json:"reason"`
+	Flags      []SlippedFlag `bson:"flags,omitempty" json:"flags,omitempty"` // xAI: all signals that flagged this paper
+	Actioned   bool          `bson:"actioned" json:"actioned"`               // human has decided
+	Resolution string        `bson:"resolution" json:"resolution"`           // "EXCLUDE" | "KEEP"
 }
 
 // PICOAuditLog records the full-coverage PICO-consistency audit over the INCLUDE set

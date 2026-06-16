@@ -307,11 +307,11 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 }
 
 // AuditSlipped identifies one paper that was labelled INCLUDE but violates PICO and
-// should have been EXCLUDE. doi/title are echoed verbatim from the input so the caller
-// can match the paper back to its screening record.
+// should have been EXCLUDE. The caller assigns each paper a stable "index"; the model
+// returns that index so identity matching is deterministic (no fragile DOI/title echo).
 type AuditSlipped struct {
-	DOI        string `json:"doi"`
-	Title      string `json:"title"`
+	Index      int    `json:"index"`       // index from the input list (PRIMARY identity)
+	Title      string `json:"title"`       // optional, for human-readable cross-check
 	ReasonCode string `json:"reason_code"` // P-NOMATCH / I-NOMATCH / C-NOMATCH / O-NOMATCH / S-NOMATCH / DATE-NOMATCH / OTHER
 	Reason     string `json:"reason"`
 }
@@ -327,7 +327,7 @@ func (a *ScreeningAgent) AuditPICO(ctx context.Context, pico, includedPapersJSON
 	systemPrompt := `Anda adalah Auditor Systematic Literature Review.
 Periksa SETIAP paper berlabel "INCLUDE" di bawah terhadap PICO DEFINITIONS, dan temukan yang "lolos" padahal seharusnya EXCLUDE (slipped-through). Audit ketat: utamakan definisi operasional what_counts/what_doesnt_count.
 
-Untuk SETIAP paper yang salah-INCLUDE, salin "doi" dan "title" PERSIS seperti pada input (jangan ubah/terjemahkan), beri reason_code (P-NOMATCH/I-NOMATCH/C-NOMATCH/O-NOMATCH/S-NOMATCH/DATE-NOMATCH/OTHER) dan reason ringkas berbasis kriteria.
+Setiap paper diberi field "index" (angka). Untuk SETIAP paper yang salah-INCLUDE, kembalikan "index"-nya PERSIS (jangan dikarang), title (untuk verifikasi), reason_code (P-NOMATCH/I-NOMATCH/C-NOMATCH/O-NOMATCH/S-NOMATCH/DATE-NOMATCH/OTHER) dan reason ringkas berbasis kriteria.
 
 Keluarkan HANYA JSON MURNI tanpa markdown:
 {
@@ -335,11 +335,11 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
   "action": "none" (bila tidak ada) atau "re-screening" (bila ada >=1),
   "analysis": "Ringkasan audit batch ini...",
   "slipped": [
-    { "doi": "...", "title": "...", "reason_code": "I-NOMATCH", "reason": "..." }
+    { "index": 3, "title": "...", "reason_code": "I-NOMATCH", "reason": "..." }
   ]
 }
 Bila tidak ada yang slipped, kembalikan slipped: [] dan slipped_through_count: 0.`
-	userPrompt := fmt.Sprintf("=== PICO ===\n%s\n\n=== INCLUDED PAPERS (audit SEMUA di batch ini) ===\n%s", pico, includedPapersJSON)
+	userPrompt := fmt.Sprintf("=== PICO ===\n%s\n\n=== INCLUDED PAPERS (audit SEMUA; pakai field index sbg identitas) ===\n%s", pico, includedPapersJSON)
 	rawResp, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil { return nil, err }
 

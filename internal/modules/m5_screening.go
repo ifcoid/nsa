@@ -794,7 +794,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			picoDef = string(picoBytes)
 		}
 		if len(included) > 0 && firstAuditPass {
-			session.PICOAuditLog = m.runFullPICOAudit(ctx, session, included, scAgent, picoDef)
+			session.PICOAuditLog = m.runFullPICOAudit(ctx, session, included, scAgent, picoDef, session.PICODefinitions)
 		} else if session.PICOAuditLog != nil {
 			refreshPICOAuditLog(session.PICOAuditLog, included)
 		}
