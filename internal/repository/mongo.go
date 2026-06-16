@@ -119,6 +119,15 @@ func (r *MongoRepository) ClearPICOAudit(ctx context.Context, sessionID string) 
 	return err
 }
 
+// ClearManuscript removes the stored manuscript from a session. Same omitempty caveat as
+// ClearPICOAudit: setting session.Manuscript = nil and calling UpdateSession does NOT
+// clear it, because the nil pointer is dropped from the $set document.
+func (r *MongoRepository) ClearManuscript(ctx context.Context, sessionID string) error {
+	collection := r.client.Database(r.dbName).Collection("slr_sessions")
+	_, err := collection.UpdateOne(ctx, bson.M{"_id": sessionID}, bson.M{"$unset": bson.M{"manuscript": ""}})
+	return err
+}
+
 // GetDB returns the underlying mongo.Database for direct collection access.
 func (r *MongoRepository) GetDB() *mongo.Database {
 	return r.client.Database(r.dbName)

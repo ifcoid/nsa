@@ -315,12 +315,14 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 	session.Feedback = payload.Feedback
 
 	// Determine NEEDS_REVISION status
+	backToM5 := false
 	if payload.TargetStatus != "" {
 		// Backward jump to Module 5 from a later module (M6-M9) invalidates everything
 		// downstream of screening: the included-study set may change, so any acquisition,
 		// extraction, synthesis, and manuscript built on the old set is stale.
 		if isBackwardToM5(session.Status, payload.TargetStatus) {
 			invalidateDownstreamForRescreen(session)
+			backToM5 = true
 		}
 		session.Status = payload.TargetStatus
 		// Special handling for retrying a failed batch
@@ -350,6 +352,14 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to set revision status")
 		return
+	}
+	// UpdateSession cannot clear the omitempty Manuscript pointer (dropped from $set), so
+	// $unset it explicitly when going back to M5; otherwise the stale manuscript lingers.
+	if backToM5 {
+		if err := h.mongoRepo.ClearManuscript(ctx, id); err != nil {
+			sendJSONError(w, http.StatusInternalServerError, "Failed to clear stale manuscript: "+err.Error())
+			return
+		}
 	}
 
 	// Trigger pipeline again
