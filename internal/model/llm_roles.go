@@ -12,6 +12,8 @@ type LLMRoles struct {
 	SupervisorFallback string `bson:"supervisor_fallback" json:"supervisor_fallback"`
 	Brain              string `bson:"brain" json:"brain"`
 	BrainFallback      string `bson:"brain_fallback" json:"brain_fallback"`
+	Auditor            string `bson:"auditor" json:"auditor"`
+	AuditorFallback    string `bson:"auditor_fallback" json:"auditor_fallback"`
 }
 
 // DefaultLLMRoles = pemetaan default (sesuai perilaku kode saat ini).
@@ -25,6 +27,8 @@ func DefaultLLMRoles() LLMRoles {
 		SupervisorFallback: "openrouter",
 		Brain:              "gemini",
 		BrainFallback:      "rprompt1",
+		Auditor:            "xiaomi",
+		AuditorFallback:    "zhipu",
 	}
 }
 
@@ -54,5 +58,11 @@ func (r *LLMRoles) FillDefaults() {
 	}
 	if r.BrainFallback == "" {
 		r.BrainFallback = d.BrainFallback
+	}
+	if r.Auditor == "" {
+		r.Auditor = d.Auditor
+	}
+	if r.AuditorFallback == "" {
+		r.AuditorFallback = d.AuditorFallback
 	}
 }

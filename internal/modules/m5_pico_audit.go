@@ -428,13 +428,19 @@ func (m *M5Screening) reconcileFlagged(ctx context.Context, primary *agent.Scree
 }
 
 // auditPICOWithFallback runs one audit batch through the primary screening agent and
-// falls back to zhipu then groq, matching the resilience of the screening passes.
+// falls back to the configurable Auditor role (then its fallback), matching the
+// resilience of the screening passes without hardcoding providers.
 func (m *M5Screening) auditPICOWithFallback(ctx context.Context, primary *agent.ScreeningAgent, picoDef, batchJSON string) (*agent.PICOAuditResult, error) {
 	res, err := primary.AuditPICO(ctx, picoDef, batchJSON)
 	if err == nil && res != nil {
 		return res, nil
 	}
-	for _, prov := range []string{"zhipu", "groq"} {
+	// Fallback ke provider AUDITOR yang configurable (role), bukan hardcode.
+	roles := m.deps.MongoRepo.GetLLMRoles(ctx)
+	for _, prov := range []string{roles.Auditor, roles.AuditorFallback} {
+		if strings.TrimSpace(prov) == "" {
+			continue
+		}
 		c, e := m.deps.LLMFactory.CreateClient(ctx, prov)
 		if e != nil {
 			continue

@@ -648,15 +648,31 @@ func (m *M6Acquisition) runFinalPicoAudit(ctx context.Context, session *model.SL
 		picoDef = string(b)
 	}
 
-	var sc *agent.ScreeningAgent
-	if c, e := m.deps.LLMFactory.CreateClient(ctx, "xiaomi"); e == nil {
-		sc = agent.NewScreeningAgent(c)
-	} else if c, e := m.deps.LLMFactory.CreateClient(ctx, "zhipu"); e == nil {
-		sc = agent.NewScreeningAgent(c)
-	} else {
-		return "Audit dilewati (tidak ada LLM tersedia).", false
+	// Provider auditor dari ROLE configurable (bukan hardcode) — bisa diubah user di
+	// Konfigurasi LLM. Fallback GIGIH pada kegagalan runtime (mis. 429 quota), bukan
+	// hanya saat pembuatan client gagal.
+	roles := m.deps.MongoRepo.GetLLMRoles(ctx)
+	var res *agent.PICOAuditResult
+	var err error
+	tried := false
+	for _, prov := range []string{roles.Auditor, roles.AuditorFallback} {
+		if strings.TrimSpace(prov) == "" {
+			continue
+		}
+		c, e := m.deps.LLMFactory.CreateClient(ctx, prov)
+		if e != nil {
+			continue
+		}
+		tried = true
+		res, err = agent.NewScreeningAgent(c).AuditPICO(ctx, picoDef, string(sampleData))
+		if err == nil && res != nil {
+			break
+		}
+		logger.Logf(session.ID, "   [Audit PICO] provider '%s' gagal: %v — coba fallback.", prov, err)
 	}
-	res, err := sc.AuditPICO(ctx, picoDef, string(sampleData))
+	if !tried {
+		return "Audit dilewati (tidak ada LLM auditor tersedia — set role Auditor di Konfigurasi LLM).", false
+	}
 	if err != nil || res == nil {
 		return "Audit gagal: " + fmt.Sprint(err), false
 	}
