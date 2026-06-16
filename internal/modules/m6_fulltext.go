@@ -352,6 +352,12 @@ func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, titl
 			return res, nil
 		}
 		cause := reviewErrCause(err, took)
+		// Auth invalid (401/403/"Invalid API Key") itu PERMANEN — retry sia-sia.
+		// Hentikan segera & serahkan ke caller agar fallback provider langsung dipakai.
+		if isFatalAuthErr(err) {
+			logger.Logf(sessionID, "         [%s=%s gagal, %s] %s — TIDAK di-retry (auth permanen), beralih ke fallback.", tag, provider, took.Round(time.Second), cause)
+			return nil, err
+		}
 		if i < len(delays) {
 			base := delays[i]
 			jitter := time.Duration((rand.Float64()*0.4 - 0.2) * float64(base))
@@ -365,6 +371,18 @@ func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, titl
 	return nil, err
 }
 
+// isFatalAuthErr melaporkan apakah error berupa kegagalan autentikasi provider yang
+// PERMANEN (kunci API salah/dicabut) — tak ada gunanya di-retry; caller harus fallback.
+func isFatalAuthErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "401") || strings.Contains(s, "403") ||
+		strings.Contains(s, "invalid api key") || strings.Contains(s, "invalid_api_key") ||
+		strings.Contains(s, "unauthorized") || strings.Contains(s, "authentication")
+}
+
 // reviewErrCause mengklasifikasi error LLM menjadi sebab yang mudah dibaca manusia.
 func reviewErrCause(err error, took time.Duration) string {
 	if err == nil {
@@ -374,6 +392,8 @@ func reviewErrCause(err error, took time.Duration) string {
 	switch {
 	case strings.Contains(s, "context deadline exceeded"), strings.Contains(s, "context canceled"):
 		return fmt.Sprintf("TIMEOUT — provider tak merespons dalam %s (tunnel/proxy hang? Claude/Gemini tak sempat menjawab; bukan error model)", took.Round(time.Second))
+	case isFatalAuthErr(err):
+		return "API KEY INVALID/UNAUTHORIZED (401/403) — perbaiki kunci provider di Konfigurasi LLM: " + clipErr(s)
 	case strings.Contains(s, "429"), strings.Contains(s, "rate limit"), strings.Contains(s, "quota"), strings.Contains(s, "速率"):
 		return "RATE-LIMIT/QUOTA (429): " + clipErr(s)
 	case strings.Contains(s, "parsing JSON"), strings.Contains(s, "empty response"), strings.Contains(s, "malformed"):
