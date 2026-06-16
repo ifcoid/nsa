@@ -1316,6 +1316,17 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	}
 
 	coll := h.mongoRepo.GetScreeningCollection()
+
+	// Self-heal: a paper that is BOTH retrieved (vectorized in Qdrant) AND inaccessible is
+	// contradictory. Being in Qdrant means it IS accessible, so clear the inaccessible
+	// flag. Runs on every sync, so legacy both-true records fix themselves via this normal
+	// UI action (no manual DB editing needed).
+	_, _ = coll.UpdateMany(ctx, bson.M{
+		"session_id":          id,
+		"full_text_retrieved": true,
+		"inaccessible":        true,
+	}, bson.M{"$set": bson.M{"inaccessible": false}})
+
 	filter := bson.M{
 		"session_id": id,
 		"$or": []bson.M{
