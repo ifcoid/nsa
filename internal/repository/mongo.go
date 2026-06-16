@@ -109,22 +109,26 @@ func (r *MongoRepository) UpdateSession(ctx context.Context, session *model.SLRS
 	return err
 }
 
-// ClearPICOAudit removes the stored PICO audit log from a session. UpdateSession cannot
-// do this by setting the field to nil: the field is `omitempty`, so a nil value is
-// dropped from the $set document and the old value persists in Mongo. An explicit
-// $unset is required so the next M5_STEP4_REVIEW_HASIL re-runs a fresh full audit.
-func (r *MongoRepository) ClearPICOAudit(ctx context.Context, sessionID string) error {
+// SaveSessionUnsetting saves the full session AND $unsets the named Mongo fields in a
+// single atomic update. Use this (instead of UpdateSession) whenever you need to CLEAR a
+// field: setting an `omitempty` pointer/zero value to nil and relying on UpdateSession's
+// $set silently fails, because omitempty drops the field from the $set document, so the
+// old value persists in Mongo. $set (full struct) and $unset (cleared fields) do not
+// collide, because an omitempty nil field is already absent from $set.
+func (r *MongoRepository) SaveSessionUnsetting(ctx context.Context, session *model.SLRSession, unsetFields ...string) error {
 	collection := r.client.Database(r.dbName).Collection("slr_sessions")
-	_, err := collection.UpdateOne(ctx, bson.M{"_id": sessionID}, bson.M{"$unset": bson.M{"pico_audit_log": ""}})
-	return err
-}
+	session.UpdatedAt = time.Now()
 
-// ClearManuscript removes the stored manuscript from a session. Same omitempty caveat as
-// ClearPICOAudit: setting session.Manuscript = nil and calling UpdateSession does NOT
-// clear it, because the nil pointer is dropped from the $set document.
-func (r *MongoRepository) ClearManuscript(ctx context.Context, sessionID string) error {
-	collection := r.client.Database(r.dbName).Collection("slr_sessions")
-	_, err := collection.UpdateOne(ctx, bson.M{"_id": sessionID}, bson.M{"$unset": bson.M{"manuscript": ""}})
+	update := bson.M{"$set": session}
+	if len(unsetFields) > 0 {
+		unset := bson.M{}
+		for _, f := range unsetFields {
+			unset[f] = ""
+		}
+		update["$unset"] = unset
+	}
+	opts := options.Update().SetUpsert(true)
+	_, err := collection.UpdateOne(ctx, bson.M{"_id": session.ID}, update, opts)
 	return err
 }
 

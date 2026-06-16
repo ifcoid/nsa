@@ -349,17 +349,17 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+	// Going back to M5 must clear the stale manuscript; UpdateSession cannot ($set drops
+	// the omitempty nil pointer), so $unset it atomically via SaveSessionUnsetting.
+	var saveErr error
+	if backToM5 {
+		saveErr = h.mongoRepo.SaveSessionUnsetting(ctx, session, "manuscript")
+	} else {
+		saveErr = h.mongoRepo.UpdateSession(ctx, session)
+	}
+	if saveErr != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to set revision status")
 		return
-	}
-	// UpdateSession cannot clear the omitempty Manuscript pointer (dropped from $set), so
-	// $unset it explicitly when going back to M5; otherwise the stale manuscript lingers.
-	if backToM5 {
-		if err := h.mongoRepo.ClearManuscript(ctx, id); err != nil {
-			sendJSONError(w, http.StatusInternalServerError, "Failed to clear stale manuscript: "+err.Error())
-			return
-		}
 	}
 
 	// Trigger pipeline again
@@ -812,14 +812,9 @@ func (h *SessionHandler) RerunPICOAudit(w http.ResponseWriter, req *http.Request
 	}
 	session.PICOAuditLog = nil // force a fresh full-coverage audit on recompute
 	session.Status = "M5_STEP4_REVIEW_HASIL"
-	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
-		sendJSONError(w, http.StatusInternalServerError, "Gagal mengupdate sesi: "+err.Error())
-		return
-	}
-	// UpdateSession cannot clear an omitempty nil pointer (it is dropped from $set), so
-	// explicitly unset the stored audit. Without this the rerun silently reuses the old
-	// audit and the fresh full-coverage run is skipped.
-	if err := h.mongoRepo.ClearPICOAudit(ctx, id); err != nil {
+	// $unset pico_audit_log explicitly: UpdateSession cannot clear an omitempty nil
+	// pointer (it is dropped from $set), so the rerun would silently reuse the old audit.
+	if err := h.mongoRepo.SaveSessionUnsetting(ctx, session, "pico_audit_log"); err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Gagal mereset audit PICO: "+err.Error())
 		return
 	}
