@@ -1,35 +1,26 @@
-## Interaksi via Telegram (cocote)
+## Notifikasi Telegram (langsung via Bot API)
 
-Project ini terhubung ke Telegram lewat MCP server **cocote**. Pertanyaan keputusan
-harus bisa dijawab dari Telegram MAUPUN dari Claude Code.
+TIDAK memakai MCP server (cocote) lagi. Notifikasi progres dikirim **langsung ke
+Telegram Bot API** memakai kredensial dari file `.env` di folder `awangga`:
+`TELEGRAM_BOT_TOKEN` dan `CHAT_ID`.
 
-### Aturan keputusan & approval
-- Setiap kali butuh **keputusan / approval / pilihan** dari user, **WAJIB panggil
-  `ask_approval`** (jangan bertanya sebagai teks akhir giliran).
-  - Sediakan `options` sebagai tombol (mis. `["Lanjut Modul 9", "M8b dulu"]`).
-  - Set `allow_freetext: true` agar user bisa mengetik instruksi bebas (field `reply`).
-  - `columns: 1` kalau label panjang. `timeout_seconds` wajar (mis. 600).
-- Untuk pertanyaan terbuka, panggil **`wait_for_reply`**.
-- Tulis pertanyaannya **jelas dan lengkap di dalam `question`/`prompt`** supaya
-  tetap terbaca di Claude Code (bukan cuma di Telegram).
+### Cara kirim notif
+```bash
+set +x
+export $(grep -E '^(TELEGRAM_BOT_TOKEN|CHAT_ID)=' /home/adb/awangga/.env | xargs)
+curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  --data-urlencode "chat_id=${CHAT_ID}" \
+  --data-urlencode "text=<pesan progres ringkas dalam Bahasa Indonesia>"
+```
 
-### Dua kanal jawaban (penting)
-- Pertanyaan via `ask_approval`/`wait_for_reply` otomatis muncul di Telegram DAN
-  sebagai tool call di Claude Code. User boleh menjawab dari mana saja:
-  - Telegram: tap tombol / balas teks.
-  - Claude Code: user menekan Esc lalu mengetik jawaban → perlakukan teks itu
-    sebagai jawabannya dan lanjutkan (jangan ulang pertanyaan).
-- Kalau hasil tool `timed_out: true` ATAU tool dibatalkan (user menjawab langsung
-  di Claude Code), gunakan jawaban yang user berikan dan lanjutkan; jangan ngambek
-  atau mengulang.
-
-### Progres & status
-- Update progres/selesai/error → `notify`. Clone tampilan → `mirror_screen`.
-
-### Catatan
-- Tool interaktif hanya jalan jika sesi ini memegang **booking** cocote (mode
-  `active`). Jika tool mengembalikan "not booked / send-only", tanyakan langsung
-  di Claude Code seperti biasa.
+### Aturan
+- Kirim notif saat: **milestone selesai**, **error/blocker**, atau **butuh keputusan**.
+- Pesan ringkas, jelas, Bahasa Indonesia. **Jangan bocorkan token** (redact `***` di log;
+  jalankan `set +x` sebelum meng-export kredensial).
+- Notif Telegram hanya **satu arah** (pemberitahuan). Untuk **pertanyaan/keputusan**,
+  tetap tanyakan **jelas dan lengkap di Claude Code** sebagai teks; jangan mengandalkan
+  balasan dari Telegram.
+- Kalau `.env` / kredensial tidak ada, lewati notif dan lanjutkan; jangan gagal karenanya.
 
 ## Debugging: CEK STATE DATABASE DULU sebelum menyalahkan deploy/server
 
