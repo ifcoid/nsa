@@ -6,6 +6,10 @@ on:
       - main
       - master
 
+concurrency:
+  group: fly-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Deploy app
