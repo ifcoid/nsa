@@ -11,10 +11,22 @@ Sistem ini tersebar di **tiga repo** yang di-clone bersebelahan di `/home/adb/aw
   embedding **BGE-M3 hybrid (dense+sparse)**, tulis ke **Qdrant** (collection
   `scientific_articles`, payload key lowercase `title`/`doi`/`article_id`). Repo: `ifcoid/pede`.
   - `ingest.py` = CLI batch (jalur yang sama dipakai notebook Colab `pede_colab.ipynb`).
+  - **Dijalankan via Google Colab** (tidak semua user punya GPU; bge-m3 hybrid butuh GPU).
+    Notebook `notebooks/pede_colab.ipynb` melakukan `git clone`/`git pull` dari `ifcoid/pede`
+    lalu `subprocess` `python ingest.py` — jadi **semua perbaikan logika HARUS di-push ke
+    `main` `pede`** (notebook auto-pull saat re-run cell setup). JANGAN menaruh logika
+    inti inline di sel notebook (akan basi); notebook hanya orkestrasi (mount Drive, pull,
+    secrets, pip, loop-retry, notif Telegram). Embedding ingestion **lokal** di Colab.
   - `embed_server_colab.ipynb` = server embedding runtime terpisah yang di-query RAG `nsa`
-    (BUKAN bagian ingestion). Ingestion meng-embed **lokal** dengan bge-m3.
+    (BUKAN bagian ingestion).
   - Kontrak: `nsa` SyncQdrant mencocokkan rekod screening ↔ Qdrant via **DOI exact ∪
     title-similarity >0.8**. Field payload `pede` HARUS cocok dengan yang dibaca `nsa`.
+  - **Qdrant `scientific_articles` itu GLOBAL/shared lintas-sesi & lintas-tenant.** Maka
+    self-heal data sampah/duplikat HARUS dilakukan **by-DOI di dalam ingest PEDE** (DOI sama
+    = paper sama untuk semua user → aman menyatukan), **BUKAN** session-scoped delete di
+    `nsa` Sync (akan menghapus paper milik peneliti/sesi lain → kehilangan data lintas-tenant).
+    Penyebab umum duplikat: paper sama dapat `article_id` beda antar-run (hash-file saat
+    DOI belum ke-resolve → DOI-based setelah CrossRef). Sudah ditangani self-heal by-DOI.
 
 Kredensial untuk verifikasi langsung (read-only, JANGAN bocorkan) ada di `/home/adb/awangga/.env`:
 `MONGO_URI`, `DB_NAME` (default `slr_agentic_db`), `QDRANT_ENDPOINT`+`QDRANT_API_KEY`
