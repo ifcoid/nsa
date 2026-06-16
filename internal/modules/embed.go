@@ -28,10 +28,28 @@ func EmbedText(ctx context.Context, text string) (vec []float32, available bool,
 	return EmbedWith(ctx, text, os.Getenv("EMBED_ENDPOINT"), os.Getenv("EMBED_API_KEY"), os.Getenv("EMBED_MODEL"))
 }
 
+// normalizeEmbedBase menormalkan beragam bentuk URL tunnel PEDE menjadi base `/v1`
+// yang benar untuk endpoint OpenAI-compatible `/v1/embeddings`. Toleran terhadap user
+// yang menempel URL `/search` (untuk M9) atau URL telanjang (tanpa `/v1`) ke field
+// EMBED_ENDPOINT — semuanya dipetakan ke base `/v1` agar tidak gagal diam-diam.
+func normalizeEmbedBase(endpoint string) string {
+	b := strings.TrimRight(strings.TrimSpace(endpoint), "/ ")
+	if b == "" {
+		return ""
+	}
+	if strings.HasSuffix(b, "/v1") {
+		return b
+	}
+	if strings.HasSuffix(b, "/search") {
+		return strings.TrimSuffix(b, "/search") + "/v1"
+	}
+	return b + "/v1"
+}
+
 // EmbedWith sama seperti EmbedText namun memakai konfigurasi endpoint eksplisit
 // (dari embed_config DB yang bisa diubah runtime via web), bukan env.
 func EmbedWith(ctx context.Context, text, endpoint, apiKey, model string) (vec []float32, available bool, err error) {
-	base := strings.TrimRight(strings.TrimSpace(endpoint), "/ ")
+	base := normalizeEmbedBase(endpoint)
 	if base == "" {
 		return nil, false, nil
 	}

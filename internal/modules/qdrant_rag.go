@@ -597,6 +597,10 @@ func deriveSearchURL() string {
 	if base == "" {
 		return ""
 	}
+	// Toleran: user mungkin menempel URL yang sudah `/search` ke EMBED_ENDPOINT.
+	if strings.HasSuffix(base, "/search") {
+		return base
+	}
 	base = strings.TrimRight(strings.TrimSuffix(base, "/v1"), "/ ")
 	return base + "/search"
 }

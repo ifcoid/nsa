@@ -13,6 +13,7 @@ func TestDeriveSearchURL(t *testing.T) {
 		{"turunkan dari embed /v1", "", "https://abc.trycloudflare.com/v1", "https://abc.trycloudflare.com/search"},
 		{"turunkan + trim trailing slash", "", "https://abc.trycloudflare.com/v1/", "https://abc.trycloudflare.com/search"},
 		{"embed tanpa /v1", "", "https://abc.trycloudflare.com", "https://abc.trycloudflare.com/search"},
+		{"embed sudah /search (user salah tempel)", "", "https://abc.trycloudflare.com/search", "https://abc.trycloudflare.com/search"},
 		{"keduanya kosong", "", "", ""},
 	}
 	for _, c := range cases {
@@ -23,5 +24,25 @@ func TestDeriveSearchURL(t *testing.T) {
 				t.Fatalf("deriveSearchURL() = %q, want %q", got, c.want)
 			}
 		})
+	}
+}
+
+// TestNormalizeEmbedBase mengunci toleransi field EMBED_ENDPOINT: apa pun bentuk URL
+// tunnel yang ditempel user (base, /v1, atau /search), selalu dipetakan ke base /v1
+// agar EmbedWith menembak /v1/embeddings dengan benar.
+func TestNormalizeEmbedBase(t *testing.T) {
+	cases := map[string]string{
+		"https://abc.trycloudflare.com/v1":      "https://abc.trycloudflare.com/v1",
+		"https://abc.trycloudflare.com/v1/":     "https://abc.trycloudflare.com/v1",
+		"https://abc.trycloudflare.com":         "https://abc.trycloudflare.com/v1",
+		"https://abc.trycloudflare.com/search":  "https://abc.trycloudflare.com/v1",
+		"https://abc.trycloudflare.com/search/": "https://abc.trycloudflare.com/v1",
+		"  ":                                    "",
+		"":                                      "",
+	}
+	for in, want := range cases {
+		if got := normalizeEmbedBase(in); got != want {
+			t.Errorf("normalizeEmbedBase(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
