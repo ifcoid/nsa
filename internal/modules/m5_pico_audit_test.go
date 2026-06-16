@@ -94,7 +94,8 @@ func TestExtractAndMatchExclusionTerms_RuleB(t *testing.T) {
 	pico := &model.PICODefinitions{}
 	pico.P.OperationalDef.WhatDoesntCount = "Mengecualikan sinyal periferal non-otak (seperti hanya EMG, ECG, atau EOG)."
 	pico.I.OperationalDef.WhatDoesntCount = "Bukan 'RNN/LSTM' atau 'Attention GRU'; hanya Modern SSM."
-	terms := extractExclusionTerms(pico)
+	pico.CanonicalTerm.RejectedAlts = "Kalman Filter klasik ('KALMAN')"
+	terms := extractExclusionTerms(pico, "tugas 'DENOISING' dan harmonisasi dikecualikan")
 
 	has := func(term string) bool {
 		for _, x := range terms {
@@ -104,7 +105,7 @@ func TestExtractAndMatchExclusionTerms_RuleB(t *testing.T) {
 		}
 		return false
 	}
-	for _, want := range []string{"ECG", "EMG", "EOG", "GRU", "RNN/LSTM"} {
+	for _, want := range []string{"ECG", "EMG", "EOG", "GRU", "RNN/LSTM", "KALMAN", "DENOISING"} {
 		if !has(want) {
 			t.Errorf("expected exclusion term %q extracted, got %+v", want, terms)
 		}

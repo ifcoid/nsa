@@ -477,6 +477,7 @@ type SLRSession struct {
 	ScreeningResultsLog   []ScreeningResultsLog  `bson:"screening_results_log,omitempty" json:"screening_results_log,omitempty"`
 	ExclusionTable        *ExclusionTable        `bson:"exclusion_table,omitempty" json:"exclusion_table,omitempty"`
 	PICOAuditLog          *PICOAuditLog          `bson:"pico_audit_log,omitempty" json:"pico_audit_log,omitempty"`
+	AuditScopeRules       string                 `bson:"audit_scope_rules,omitempty" json:"audit_scope_rules,omitempty"` // klarifikasi batas/scope PICO yang diedit peneliti (HITL) untuk audit konsistensi; diterapkan seragam ke seluruh INCLUDE
 	Modul5Summary         *Modul5Summary         `bson:"modul5_summary,omitempty" json:"modul5_summary,omitempty"`
 	AcquisitionLog        *AcquisitionLog        `bson:"acquisition_log,omitempty" json:"acquisition_log,omitempty"`
 	FulltextScreeningLog  []ScreeningResultsLog  `bson:"fulltext_screening_log,omitempty" json:"fulltext_screening_log,omitempty"`

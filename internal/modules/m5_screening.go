@@ -793,6 +793,12 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			picoBytes, _ := json.Marshal(session.PICODefinitions)
 			picoDef = string(picoBytes)
 		}
+		// HITL scope clarifications (editable per session) appended so every audit batch
+		// applies the SAME, researcher-defined rules uniformly (multi-tenant: no hardcoded
+		// review-specific rulings).
+		if strings.TrimSpace(session.AuditScopeRules) != "" {
+			picoDef += "\n\n=== SCOPE NOTES (klarifikasi batas dari peneliti; terapkan SERAGAM) ===\n" + strings.TrimSpace(session.AuditScopeRules)
+		}
 		if len(included) > 0 && firstAuditPass {
 			session.PICOAuditLog = m.runFullPICOAudit(ctx, session, included, scAgent, picoDef, session.PICODefinitions)
 		} else if session.PICOAuditLog != nil {

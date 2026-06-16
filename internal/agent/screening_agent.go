@@ -325,9 +325,14 @@ type PICOAuditResult struct {
 
 func (a *ScreeningAgent) AuditPICO(ctx context.Context, pico, includedPapersJSON string) (*PICOAuditResult, error) {
 	systemPrompt := `Anda adalah Auditor Systematic Literature Review.
-Periksa SETIAP paper berlabel "INCLUDE" di bawah terhadap PICO DEFINITIONS, dan temukan yang "lolos" padahal seharusnya EXCLUDE (slipped-through). Audit ketat: utamakan definisi operasional what_counts/what_doesnt_count.
+Periksa SETIAP paper berlabel "INCLUDE" di bawah terhadap PICO DEFINITIONS, dan temukan yang "lolos" padahal seharusnya EXCLUDE (slipped-through).
 
-Setiap paper diberi field "index" (angka). Untuk SETIAP paper yang salah-INCLUDE, kembalikan "index"-nya PERSIS (jangan dikarang), title (untuk verifikasi), reason_code (P-NOMATCH/I-NOMATCH/C-NOMATCH/O-NOMATCH/S-NOMATCH/DATE-NOMATCH/OTHER) dan reason ringkas berbasis kriteria.
+ATURAN KONSISTENSI (WAJIB):
+- Terapkan HANYA definisi PICO + bagian "SCOPE NOTES" di bawah (bila ada), secara SERAGAM untuk SEMUA paper. JANGAN memakai pengetahuan/preferensi di luar definisi yang diberikan.
+- Bila sebuah jenis tugas/kategori tidak disebut sebagai eksklusi di what_doesnt_count/SCOPE NOTES, JANGAN mengeksklusinya atas dasar selera.
+- Pada "reason", SEBUTKAN klausa spesifik yang dilanggar (mis. "what_doesnt_count P: ...", "rejected_alternatives: ...", atau "SCOPE NOTE: ...") agar dapat diaudit (xAI).
+
+Setiap paper diberi field "index" (angka). Untuk SETIAP paper yang salah-INCLUDE, kembalikan "index"-nya PERSIS (jangan dikarang), title (untuk verifikasi), reason_code (P-NOMATCH/I-NOMATCH/C-NOMATCH/O-NOMATCH/S-NOMATCH/DATE-NOMATCH/OTHER) dan reason ringkas yang MENGUTIP klausa.
 
 Keluarkan HANYA JSON MURNI tanpa markdown:
 {
@@ -353,6 +358,40 @@ Bila tidak ada yang slipped, kembalikan slipped: [] dan slipped_through_count: 0
 		res.Action = "none"
 	}
 	return &res, nil
+}
+
+// AuditKeep names a flagged paper that the consistency pass rules should actually stay
+// INCLUDE (the reviewer objection is not supported by the operational criteria).
+type AuditKeep struct {
+	Index  int    `json:"index"`
+	Reason string `json:"reason"`
+}
+
+// ReconcilePICOAudit (consistency pass) re-checks papers flagged ONLY by non-LLM signals
+// (reviewer/strict objections) against the SAME PICO + scope notes, and returns those that
+// are actually consistent to keep INCLUDE. This enforces uniform application of the rules
+// and removes objection-only false-excludes. LLM-confirmed violations are never sent here.
+func (a *ScreeningAgent) ReconcilePICOAudit(ctx context.Context, pico, flaggedJSON string) ([]AuditKeep, error) {
+	systemPrompt := `Anda adalah Auditor KONSISTENSI Systematic Literature Review.
+Paper di bawah ditandai "mungkin salah-INCLUDE" HANYA oleh objection reviewer (bukan oleh analisis kriteria). Periksa ulang setiap paper HANYA terhadap PICO DEFINITIONS + SCOPE NOTES yang diberikan, secara seragam.
+
+Tugas: kembalikan paper yang sebenarnya KONSISTEN untuk TETAP INCLUDE — yaitu objection reviewer TIDAK didukung oleh what_counts/what_doesnt_count/SCOPE NOTES (paper memenuhi PICO). Untuk yang memang layak EXCLUDE, JANGAN dimasukkan.
+
+Keluarkan HANYA JSON murni:
+{ "keep": [ { "index": 3, "reason": "memenuhi what_counts I; objection tak didukung klausa" } ] }
+Bila semua memang layak EXCLUDE, kembalikan {"keep": []}.`
+	userPrompt := fmt.Sprintf("=== PICO + SCOPE ===\n%s\n\n=== PAPER DITANDAI (objection-only) ===\n%s", pico, flaggedJSON)
+	rawResp, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, err
+	}
+	var res struct {
+		Keep []AuditKeep `json:"keep"`
+	}
+	if err := json.Unmarshal([]byte(CleanJSONResponse(rawResp)), &res); err != nil {
+		return nil, err
+	}
+	return res.Keep, nil
 }
 
 type PrioritizationResult struct {

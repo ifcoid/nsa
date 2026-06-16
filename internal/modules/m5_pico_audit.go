@@ -84,7 +84,7 @@ func (m *M5Screening) runFullPICOAudit(ctx context.Context, session *model.SLRSe
 	}
 
 	// --- Rule B: exclusion-trigger keywords from PICO what_doesnt_count (deterministic) ---
-	terms := extractExclusionTerms(pico)
+	terms := extractExclusionTerms(pico, session.AuditScopeRules)
 	ruleB := 0
 	for _, p := range included {
 		hits := keywordExclusionFlags(getStr(p, "Title", "title"), getStr(p, "Abstract", "abstract"), terms)
@@ -176,12 +176,17 @@ func (m *M5Screening) runFullPICOAudit(ctx context.Context, session *model.SLRSe
 		})
 	}
 
+	// (c) Consistency reconciliation: re-check objection-only flags (no LLM) against the
+	// SAME PICO + scope rules and un-flag those that actually satisfy the criteria, so the
+	// rules are applied uniformly (reduces inconsistent objection-only excludes).
+	slipped, reconciled := m.reconcileFlagged(ctx, primary, picoDef, slipped, session.ID)
+
 	action := "none"
 	if len(slipped) > 0 {
 		action = "re-screening"
 	}
-	summary := fmt.Sprintf("Neuro-symbolic audit (precision-gated): dari %d INCLUDE, sinyal mentah strict/reviewer=%d, keyword=%d, LLM=%d. Setelah pengetatan presisi, %d paper masuk koreksi (kuat: LLM=%d, reviewer-EXCLUDE=%d, kedua-strict=%d). Strict-tunggal & keyword-saja dicatat sebagai konteks, tidak memblok.",
-		total, ruleA, ruleB, llmFlagged, len(slipped), nLLM, nReviewer, nBothStrict)
+	summary := fmt.Sprintf("Neuro-symbolic audit (precision-gated): dari %d INCLUDE, sinyal mentah strict/reviewer=%d, keyword=%d, LLM=%d. Setelah pengetatan presisi: kuat LLM=%d, reviewer-EXCLUDE=%d, kedua-strict=%d. Consistency pass membatalkan %d objection-only. Total %d paper masuk koreksi. Strict-tunggal & keyword-saja = konteks, tidak memblok.",
+		total, ruleA, ruleB, llmFlagged, nLLM, nReviewer, nBothStrict, reconciled, len(slipped))
 	if len(analyses) > 0 {
 		summary += " " + strings.Join(analyses, " ")
 	}
@@ -288,15 +293,26 @@ var (
 
 // extractExclusionTerms (Rule B source) pulls concrete exclusion-trigger terms from the
 // PICO what_doesnt_count operational definitions: quoted phrases and uppercase acronyms.
-func extractExclusionTerms(pico *model.PICODefinitions) []exclTerm {
-	if pico == nil {
-		return nil
+func extractExclusionTerms(pico *model.PICODefinitions, scopeRules string) []exclTerm {
+	var src []struct{ crit, text string }
+	if pico != nil {
+		src = append(src,
+			struct{ crit, text string }{"P", pico.P.OperationalDef.WhatDoesntCount},
+			struct{ crit, text string }{"I", pico.I.OperationalDef.WhatDoesntCount},
+			struct{ crit, text string }{"C", pico.C.OperationalDef.WhatDoesntCount},
+			struct{ crit, text string }{"O", pico.O.OperationalDef.WhatDoesntCount},
+			// Rejected alternatives of the canonical term (e.g. classic SSM / Kalman) are
+			// intervention-level exclusion triggers — fully data-driven, not hardcoded.
+			struct{ crit, text string }{"I", pico.CanonicalTerm.RejectedAlts},
+		)
 	}
-	src := []struct{ crit, text string }{
-		{"P", pico.P.OperationalDef.WhatDoesntCount},
-		{"I", pico.I.OperationalDef.WhatDoesntCount},
-		{"C", pico.C.OperationalDef.WhatDoesntCount},
-		{"O", pico.O.OperationalDef.WhatDoesntCount},
+	// Researcher scope clarifications (HITL) also contribute terms, so each session's
+	// own boundary rulings drive the symbolic rule (multi-tenant safe).
+	if strings.TrimSpace(scopeRules) != "" {
+		src = append(src, struct{ crit, text string }{"SCOPE", scopeRules})
+	}
+	if len(src) == 0 {
+		return nil
 	}
 	seen := map[string]bool{}
 	var out []exclTerm
@@ -350,6 +366,65 @@ func keywordExclusionFlags(title, abstract string, terms []exclTerm) []flagWithC
 		})
 	}
 	return out
+}
+
+// reconcileFlagged is the consistency pass (c): it re-checks papers flagged ONLY by
+// non-LLM signals (reviewer/strict objections) against the same PICO + scope rules and
+// removes those the rules actually permit (objection-only false-excludes). LLM-confirmed
+// violations are never reconsidered. Returns the kept slipped set and the count removed.
+// Best-effort: on any LLM error it is a no-op (returns the input unchanged).
+func (m *M5Screening) reconcileFlagged(ctx context.Context, primary *agent.ScreeningAgent, picoDef string, slipped []model.SlippedPaper, sessionID string) ([]model.SlippedPaper, int) {
+	type cand struct {
+		paperID string
+	}
+	var cands []cand
+	slim := make([]map[string]interface{}, 0)
+	for i := range slipped {
+		hasLLM := false
+		var why []string
+		for _, f := range slipped[i].Flags {
+			if f.Source == "llm-audit" {
+				hasLLM = true
+			}
+			why = append(why, f.Detail)
+		}
+		if hasLLM {
+			continue // LLM-confirmed violation: never reconsider
+		}
+		cands = append(cands, cand{paperID: slipped[i].PaperID})
+		slim = append(slim, map[string]interface{}{
+			"index":     len(cands),
+			"title":     slipped[i].Title,
+			"objection": strings.Join(why, "; "),
+		})
+	}
+	if len(cands) == 0 {
+		return slipped, 0
+	}
+	bj, _ := json.Marshal(slim)
+	keep, err := primary.ReconcilePICOAudit(ctx, picoDef, string(bj))
+	if err != nil || len(keep) == 0 {
+		return slipped, 0
+	}
+	unflag := map[string]bool{}
+	for _, k := range keep {
+		if k.Index >= 1 && k.Index <= len(cands) {
+			unflag[cands[k.Index-1].paperID] = true
+		}
+	}
+	if len(unflag) == 0 {
+		return slipped, 0
+	}
+	out := make([]model.SlippedPaper, 0, len(slipped))
+	for _, sp := range slipped {
+		if unflag[sp.PaperID] {
+			continue
+		}
+		out = append(out, sp)
+	}
+	removed := len(slipped) - len(out)
+	logger.Logf(sessionID, "      [Consistency] %d flag objection-only dibatalkan (konsisten INCLUDE per aturan).", removed)
+	return out, removed
 }
 
 // auditPICOWithFallback runs one audit batch through the primary screening agent and

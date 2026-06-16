@@ -825,6 +825,48 @@ func (h *SessionHandler) RerunPICOAudit(w http.ResponseWriter, req *http.Request
 	})
 }
 
+// SaveAuditScopeRules stores the researcher's PICO scope clarifications (HITL) on the
+// session and forces a fresh full-coverage audit so every INCLUDE is re-judged uniformly
+// against the updated rules. This is the generalizable, multi-tenant mechanism: each
+// session defines its own boundary rulings instead of hardcoding review-specific ones.
+func (h *SessionHandler) SaveAuditScopeRules(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	var payload struct {
+		Rules string `json:"rules"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	if !strings.HasPrefix(session.Status, "M5_STEP4") {
+		sendJSONError(w, http.StatusBadRequest, "Revisi scope hanya tersedia pada tahap akhir Modul 5 (M5_STEP4)")
+		return
+	}
+	session.AuditScopeRules = strings.TrimSpace(payload.Rules)
+	session.PICOAuditLog = nil // force a fresh audit under the new rules
+	session.Status = "M5_STEP4_REVIEW_HASIL"
+	// Atomic save + $unset of the stale audit (omitempty would otherwise drop the nil).
+	if err := h.mongoRepo.SaveSessionUnsetting(ctx, session, "pico_audit_log"); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal menyimpan scope rules: "+err.Error())
+		return
+	}
+	h.pipeline.ExecuteAsync(ctx, session.ID)
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": "Aturan scope PICO tersimpan; audit ulang konsisten dijalankan",
+		"status":  session.Status,
+	})
+}
+
 // DeleteQdrantPaper menghapus vektor dari Qdrant berdasarkan DOI dan mereset status MongoDB
 func (h *SessionHandler) DeleteQdrantPaper(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
