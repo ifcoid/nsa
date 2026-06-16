@@ -479,6 +479,7 @@ type SLRSession struct {
 	Feedback          string            `bson:"feedback" json:"feedback"` // Catatan dari manusia jika butuh revisi
 	SystemError       string            `bson:"system_error" json:"system_error"` // Pesan error dari mesin/pipeline
 	EmbedError        string            `bson:"embed_error,omitempty" json:"embed_error,omitempty"` // alasan pause di M6_STEP2_WAITING_EMBED (endpoint embedding mati)
+	RescreenPending   bool              `bson:"rescreen_pending,omitempty" json:"rescreen_pending,omitempty"` // true setelah mundur ke M5: artefak M6-M9 stale & harus diregenerasi
 	XAILog            []XAIEntry        `bson:"xai_log,omitempty" json:"xai_log,omitempty"`
 	UpdatedAt         time.Time         `bson:"updated_at" json:"updated_at"`
 }

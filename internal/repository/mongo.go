@@ -452,6 +452,43 @@ func (r *MongoRepository) GetDisagreedPapers(ctx context.Context, sessionID stri
 	return results, err
 }
 
+// unresolvedScreeningFilter matches every title/abstract record that has NOT reached a
+// terminal decision: no human Final_Decision yet AND either the reviewers disagree OR at
+// least one reviewer is non-terminal (UNCERTAIN/empty). This is a SUPERSET of
+// GetDisagreedPapers: it also surfaces papers where BOTH reviewers said UNCERTAIN
+// (Agreement=="AGREE"), which the DISAGREE-only filter silently hid.
+func unresolvedScreeningFilter(sessionID string) bson.M {
+	nonTerminal := bson.M{"$nin": []string{"INCLUDE", "EXCLUDE"}}
+	return bson.M{
+		"session_id":     sessionID,
+		"Final_Decision": "",
+		"$or": []bson.M{
+			{"Agreement": "DISAGREE"},
+			{"Screener_1_Decision": nonTerminal},
+			{"Screener_2_Decision": nonTerminal},
+		},
+	}
+}
+
+// GetUnresolvedScreeningPapers returns all non-terminal title/abstract records that
+// still require a human INCLUDE/EXCLUDE decision (disagreements + agreed-UNCERTAIN).
+func (r *MongoRepository) GetUnresolvedScreeningPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
+	cursor, err := r.GetScreeningCollection().Find(ctx, unresolvedScreeningFilter(sessionID))
+	if err != nil {
+		return nil, err
+	}
+	var results []map[string]interface{}
+	err = cursor.All(ctx, &results)
+	return results, err
+}
+
+// CountUnresolvedScreeningPapers counts non-terminal title/abstract records. Used by the
+// M5 closing gate to block PRISMA-incomplete sessions from advancing to M6.
+func (r *MongoRepository) CountUnresolvedScreeningPapers(ctx context.Context, sessionID string) (int, error) {
+	n, err := r.GetScreeningCollection().CountDocuments(ctx, unresolvedScreeningFilter(sessionID))
+	return int(n), err
+}
+
 // =========================================================================
 // 2. MANAJEMEN ARTIKEL / PAPERS (PRISMA SCREENING Pipeline)
 // =========================================================================

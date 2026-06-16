@@ -73,7 +73,10 @@ func bibEscapeValue(s string) string {
 //   - keywords: semicolon-separated keywords
 //   - sections: ordered section content (Introduction, Methods, Results, Discussion, etc.)
 //   - bibFile: bibliography file name without extension (e.g., "references")
-func BuildAcademicLatex(title, author, abstract, keywords string, sections map[string]string, bibFile string) string {
+//   - prismaFigure: complete TikZ PRISMA flow figure (empty string to omit). When
+//     present it is placed as Figure 1 (after keywords, before Introduction) and the
+//     required tikz packages are added to the preamble.
+func BuildAcademicLatex(title, author, abstract, keywords string, sections map[string]string, bibFile, prismaFigure string) string {
 	var out strings.Builder
 
 	// Document class and packages
@@ -87,6 +90,10 @@ func BuildAcademicLatex(title, author, abstract, keywords string, sections map[s
 	out.WriteString("\\usepackage{hyperref}\n")
 	out.WriteString("\\usepackage{longtable}\n")
 	out.WriteString("\\usepackage{natbib}\n")
+	if strings.TrimSpace(prismaFigure) != "" {
+		out.WriteString("\\usepackage{tikz}\n")
+		out.WriteString("\\usetikzlibrary{positioning,arrows.meta}\n")
+	}
 	out.WriteString("\n")
 	out.WriteString("\\doublespacing\n")
 	out.WriteString("\n")
@@ -120,6 +127,12 @@ func BuildAcademicLatex(title, author, abstract, keywords string, sections map[s
 	if keywords != "" {
 		out.WriteString("\\noindent\\textbf{Keywords:} " + escapeLatexTitle(keywords) + "\n")
 		out.WriteString("\n")
+	}
+
+	// PRISMA flow diagram (Figure 1) -- placed before Introduction so its float number
+	// is 1, matching the "Figure 1" references in Methods/Results.
+	if strings.TrimSpace(prismaFigure) != "" {
+		out.WriteString(prismaFigure + "\n\n")
 	}
 
 	// Sections in standard academic order

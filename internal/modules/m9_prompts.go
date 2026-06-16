@@ -120,15 +120,19 @@ Untuk tiap alternatif: \title{judul} | jumlah kata | keywords | geographic hones
 // promptVerification is used for the verification pass that outputs CORRECTED LaTeX text.
 const promptVerification = `Anda adalah verifikator akademik. Periksa teks LaTeX berikut dan PERBAIKI langsung:
 
+SUMBER KEBENARAN: daftar "ALLOWED CITATION KEYS" di bawah adalah SATU-SATUNYA key sah. Bagian "VERIFICATION RESULTS" menandai tiap \cite: INVALID_KEY (key tak ada di daftar), UNVERIFIED, WEAK, atau VERIFIED.
+
 TUGAS:
-1. Untuk setiap \cite{key} dalam teks: jika key ada di PAPER CATALOG dan klaim konsisten, PERTAHANKAN.
-2. Jika \cite{key} merujuk key yang TIDAK ADA di PAPER CATALOG:
-   - Jika merujuk guideline (PRISMA, GRADE, Cochrane), ganti menjadi inline citation (contoh: "following PRISMA 2020 guidelines (Page et al., 2021)")
-   - Jika key benar-benar invalid, HAPUS \cite{key} dan rewrite klaim tanpa referensi atau hapus klaim
-3. Jika klaim BERTENTANGAN dengan data di catalog, perbaiki klaim agar sesuai data.
-4. Jika klaim tidak punya bukti di catalog, tambahkan hedging ("may", "appears to") atau hapus.
+1. Untuk setiap \cite{key}: jika key PERSIS ada di ALLOWED CITATION KEYS dan klaim konsisten, PERTAHANKAN apa adanya.
+2. Untuk \cite yang ditandai INVALID_KEY (termasuk key berhias seperti "wang2024femba" atau key deskriptif seperti "femba_gap9_deployment"):
+   - Ganti dengan key yang BENAR dari ALLOWED CITATION KEYS (cocokkan via penulis/tahun/topik).
+   - Jika merujuk guideline (PRISMA, GRADE, Cochrane) yang tidak ada di daftar, ubah jadi inline citation (contoh: "following PRISMA 2020 guidelines (Page et al., 2021)").
+   - Jika tidak ada key yang cocok, HAPUS \cite{} dan tulis ulang klaim tanpa referensi.
+3. DILARANG KERAS mengarang atau menghias key. Output HANYA boleh memuat key yang ADA di ALLOWED CITATION KEYS.
+4. Jika klaim BERTENTANGAN dengan data, perbaiki klaim. Jika klaim tanpa bukti, tambahkan hedging ("may", "appears to") atau hapus.
 
 OUTPUT: Keluarkan HANYA teks LaTeX yang sudah diperbaiki (section yang sama, sudah terkoreksi). JANGAN keluarkan laporan/daftar/checklist. JANGAN tambah komentar meta. Teks harus siap digunakan langsung sebagai section manuscript.`
+
 // promptStyleCleanup is used for the style cleanup pass that removes AI-style artifacts.
 const promptStyleCleanup = `Anda adalah editor gaya akademik. Bersihkan teks LaTeX berikut dari SEMUA ciri tulisan AI.
 
@@ -139,7 +143,8 @@ CHECKLIST PEMBERSIHAN:
 4. Pecah kalimat yang terlalu panjang (>50 kata). Gabung kalimat yang terlalu pendek berturut-turut.
 5. Hapus pola "not only X but also Y" jika muncul >1x. Variasikan.
 6. Pastikan TIDAK ada bullet (\item, \begin{itemize}) di tengah paragraf prosa.
-7. Pastikan setiap paragraf tetap memiliki minimal 2-3 \cite{}.
+7. Pastikan setiap paragraf tetap memiliki minimal 2-3 \cite{}. JANGAN ubah/hias/karang key \cite{}; pakai HANYA key dari ALLOWED CITATION KEYS di bawah, PERSIS seperti tertulis.
 8. Pastikan TIDAK ada emoji, ikon, simbol dekoratif.
+9. Perbaiki tanda kutip LaTeX: setiap kutipan harus memakai pasangan seimbang (dua backtick pembuka dan dua apostrof penutup), contoh: ` + "``feasibility''" + `. Hapus ` + "''" + ` penutup yang menggantung tanpa pembuka.
 
 Output: teks LaTeX yang telah dibersihkan, siap kompilasi. Jangan tambah komentar meta.`

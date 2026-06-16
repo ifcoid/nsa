@@ -245,6 +245,42 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+// moduleNum extracts the leading module number from a status like "M9_GROUPB..." -> 9.
+// Returns -1 when the status has no recognizable "M<n>_" prefix.
+func moduleNum(status string) int {
+	if !strings.HasPrefix(status, "M") {
+		return -1
+	}
+	i := 1
+	for i < len(status) && status[i] >= '0' && status[i] <= '9' {
+		i++
+	}
+	if i == 1 {
+		return -1
+	}
+	n := 0
+	for _, c := range status[1:i] {
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+// isBackwardToM5 reports whether we are jumping from a module after M5 (M6-M9) back
+// into M5. M5B/M8B-style suffixes resolve by their leading number, so "M8B_" -> 8.
+func isBackwardToM5(current, target string) bool {
+	return moduleNum(target) == 5 && moduleNum(current) > 5
+}
+
+// invalidateDownstreamForRescreen marks the M6-M9 artifacts as stale when the user goes
+// back to re-screen. It clears the regenerable final manuscript (cheap; it is rebuilt by
+// M9 on the forward re-run) and raises RescreenPending so the UI and downstream modules
+// know the prior results no longer reflect the included-study set. Per-paper extraction
+// is preserved (expensive) and re-filtered by current decisions when M6-M9 re-run.
+func invalidateDownstreamForRescreen(session *model.SLRSession) {
+	session.RescreenPending = true
+	session.Manuscript = nil
+}
+
 func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {
@@ -276,6 +312,12 @@ func (h *SessionHandler) ReviseStep(w http.ResponseWriter, req *http.Request) {
 
 	// Determine NEEDS_REVISION status
 	if payload.TargetStatus != "" {
+		// Backward jump to Module 5 from a later module (M6-M9) invalidates everything
+		// downstream of screening: the included-study set may change, so any acquisition,
+		// extraction, synthesis, and manuscript built on the old set is stale.
+		if isBackwardToM5(session.Status, payload.TargetStatus) {
+			invalidateDownstreamForRescreen(session)
+		}
 		session.Status = payload.TargetStatus
 		// Special handling for retrying a failed batch
 		if payload.TargetStatus == "M5_STEP3_BATCH_SCREENING" {
@@ -576,7 +618,9 @@ func (h *SessionHandler) GetDisagreements(w http.ResponseWriter, r *http.Request
 	if r.URL.Query().Get("stage") == "fulltext" {
 		papers, err = h.mongoRepo.GetDisagreedFullTextPapers(r.Context(), id)
 	} else {
-		papers, err = h.mongoRepo.GetDisagreedPapers(r.Context(), id)
+		// Superset of disagreements: also surfaces agreed-UNCERTAIN records so every
+		// non-terminal paper can be resolved before M5 closes (PRISMA completeness).
+		papers, err = h.mongoRepo.GetUnresolvedScreeningPapers(r.Context(), id)
 	}
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to get disagreed papers: "+err.Error())

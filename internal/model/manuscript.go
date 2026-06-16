@@ -16,6 +16,7 @@ type Manuscript struct {
 	Bibtex          string `bson:"bibtex" json:"bibtex"`
 	CoherenceAudit  string `bson:"coherence_audit" json:"coherence_audit"`
 	PrismaChecklist string `bson:"prisma_checklist" json:"prisma_checklist"`
+	PrismaFlow      string `bson:"prisma_flow" json:"prisma_flow"` // complete validated PRISMA 2020 flow (identification->inclusion)
 	Final           string `bson:"final" json:"final"`   // manuscript_final.md
 	Latex           string `bson:"latex" json:"latex"`   // manuscript_final.tex
 	Summary         string `bson:"summary" json:"summary"` // modul9_summary

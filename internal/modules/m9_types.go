@@ -46,4 +46,5 @@ type VerificationResult struct {
 	Neo4jVerified  bool
 	MongoVerified  bool
 	Sources        int
+	InvalidKey     bool // citation key is absent from the paper catalog
 }

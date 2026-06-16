@@ -66,6 +66,26 @@ func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession
 	ms.Bibtex = latex.GenerateBibFile(latexCitations)
 	logger.Logf(session.ID, "      ✓ .bib generated (%d entries from paper catalog)\n", len(citations))
 
+	// Defense-in-depth: re-run the deterministic citation guard over every section so
+	// no \cite{} key can reference an entry absent from the .bib just generated above
+	// (covers approved/older drafts and any key that slipped through M9_GROUPB).
+	m.sanitizeManuscriptCitations(session, citations)
+
+	// Complete, validated PRISMA 2020 flow (identification -> inclusion) recomputed
+	// from ground-truth DB records; backs both the figure and the narrative numbers.
+	prismaTikz := ""
+	if pf, e := m.computePrismaFlow(ctx, session); e == nil {
+		ms.PrismaFlow = pf.artifactText()
+		prismaTikz = pf.tikzFigure()
+		if len(pf.Warnings) > 0 {
+			logger.Logf(session.ID, "      [PRISMA][WARN] flow tidak menutup: %s", strings.Join(pf.Warnings, " | "))
+		} else {
+			logger.Log(session.ID, "      ✓ PRISMA flow valid (aritmetika menutup) + Figure 1 (TikZ)")
+		}
+	} else {
+		logger.Logf(session.ID, "      [WARN] gagal menghitung PRISMA flow: %v", e)
+	}
+
 	// Build references markdown for backward compatibility
 	_, metaRefs := m.includedReferences(ctx, session)
 	refsMd := fmt.Sprintf("## References\n\n_%d referensi dari paper catalog._\n\n%s\n", len(citations), metaRefs)
@@ -113,6 +133,7 @@ func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession
 		m.keywords(session),
 		sections,
 		"references",
+		prismaTikz,
 	)
 
 	// 5. modul9_summary.
@@ -121,6 +142,36 @@ func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession
 	logger.Log(session.ID, "   [System] manuscript_final + .tex + .bib + checklist + audit tersimpan. DIJEDA untuk persetujuan akhir.")
 	session.Status = "M9_COMPILE_WAITING_APPROVAL"
 	return m.deps.MongoRepo.UpdateSession(ctx, session)
+}
+
+// sanitizeManuscriptCitations runs the deterministic citation guard over every
+// manuscript section in-place, guaranteeing each \cite{} resolves to a .bib entry.
+func (m *M9Manuscript) sanitizeManuscriptCitations(session *model.SLRSession, citations []PaperCitation) {
+	ms := session.Manuscript
+	secs := []struct {
+		name string
+		ptr  *string
+	}{
+		{"Introduction", &ms.Introduction},
+		{"Methods", &ms.Methods},
+		{"Results", &ms.Results},
+		{"Discussion", &ms.Discussion},
+		{"Future Research", &ms.FutureResearch},
+		{"Conclusions", &ms.Conclusions},
+		{"Abstract", &ms.Abstract},
+	}
+	totalRemap, totalDrop := 0, 0
+	for _, s := range secs {
+		cleaned, stats := sanitizeCitations(*s.ptr, citations)
+		*s.ptr = cleaned
+		totalRemap += stats.Remapped
+		totalDrop += stats.Dropped
+	}
+	if totalRemap > 0 || totalDrop > 0 {
+		logger.Logf(session.ID, "      [CiteGuard/compile] %d keys remapped, %d dropped across sections", totalRemap, totalDrop)
+	} else {
+		logger.Log(session.ID, "      [CiteGuard/compile] all \\cite keys catalog-clean")
+	}
 }
 
 // includedReferences mengembalikan daftar DOI + daftar referensi terformat (dari metadata included).

@@ -118,11 +118,13 @@ func (m *M9Manuscript) verifyClaims(ctx context.Context, session *model.SLRSessi
 	for _, entry := range entries {
 		paper, found := citationByKey[entry.Key]
 		if !found {
-			// Citation key not in catalog, mark as unverifiable
+			// Citation key not in catalog: invalid (invented/decorated) key, not merely
+			// weak evidence. Flag distinctly so the verification pass deletes/remaps it.
 			results = append(results, VerificationResult{
 				Claim:       entry.Claim,
 				CitationKey: entry.Key,
 				Sources:     0,
+				InvalidKey:  true,
 			})
 			continue
 		}
@@ -354,16 +356,20 @@ func formatVerificationResults(results []VerificationResult) string {
 	var b strings.Builder
 	b.WriteString("\n\n== VERIFICATION RESULTS ==\n")
 
-	verified, unverified, weak := 0, 0, 0
+	verified, unverified, weak, invalid := 0, 0, 0, 0
 	for _, r := range results {
 		status := "UNVERIFIED"
-		if r.Sources >= 2 {
+		switch {
+		case r.InvalidKey:
+			status = "INVALID_KEY"
+			invalid++
+		case r.Sources >= 2:
 			status = "VERIFIED"
 			verified++
-		} else if r.Sources == 1 {
+		case r.Sources == 1:
 			status = "WEAK"
 			weak++
-		} else {
+		default:
 			unverified++
 		}
 
@@ -377,9 +383,9 @@ func formatVerificationResults(results []VerificationResult) string {
 			r.QdrantVerified, r.Neo4jVerified, r.MongoVerified))
 	}
 
-	b.WriteString(fmt.Sprintf("\nSUMMARY: %d verified, %d weak (1 source), %d unverified (0 sources) out of %d total claims.\n",
-		verified, weak, unverified, len(results)))
-	b.WriteString("INSTRUCTIONS: Remove or rephrase UNVERIFIED claims. Strengthen VERIFIED claims with specific evidence. For WEAK claims, add hedging language.\n")
+	b.WriteString(fmt.Sprintf("\nSUMMARY: %d verified, %d weak (1 source), %d unverified (0 sources), %d invalid-key out of %d total claims.\n",
+		verified, weak, unverified, invalid, len(results)))
+	b.WriteString("INSTRUCTIONS: For INVALID_KEY, replace the key with the correct one from ALLOWED CITATION KEYS (match by author/topic) or, if none fits, delete the \\cite{} and rephrase the claim without it. Remove or rephrase UNVERIFIED claims. Strengthen VERIFIED claims with specific evidence. For WEAK claims, add hedging language. Never invent a key that is not in ALLOWED CITATION KEYS.\n")
 	b.WriteString("== END VERIFICATION ==\n")
 	return b.String()
 }

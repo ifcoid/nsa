@@ -102,27 +102,58 @@ func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) e
 //
 // Pass 3: Style cleanup -- removes AI-like phrasing, em dashes, and redundancies.
 func (m *M9Manuscript) generateWithMultiPass(ctx context.Context, ag *agent.ManuscriptAgent, session *model.SLRSession, systemPrompt, userBundle, lang string, citations []PaperCitation) (string, error) {
+	// The allowed-keys list is supplied to passes 2 and 3 so the LLM corrects \cite{}
+	// against the real bibliography instead of inventing decorated/descriptive keys.
+	allowedKeys := buildAllowedKeysList(citations)
+
 	// Pass 1: Generate initial draft
 	draft, err := ag.Write(ctx, systemPrompt+lang, userBundle)
 	if err != nil {
 		return "", fmt.Errorf("multi-pass P1 (draft): %w", err)
 	}
 
-	// Pass 2: Verify claims and ask LLM to fix unverified ones
+	// Pass 2: Verify claims and ask LLM to fix unverified/invalid ones
 	verResults := m.verifyClaims(ctx, session, draft, citations)
 	verSummary := formatVerificationResults(verResults)
-	verifiedDraft, err := ag.Write(ctx, promptVerification+lang, draft+verSummary)
+	verifiedDraft, err := ag.Write(ctx, promptVerification+lang, draft+allowedKeys+verSummary)
 	if err != nil {
 		return "", fmt.Errorf("multi-pass P2 (verify): %w", err)
 	}
 
-	// Pass 3: Style cleanup
-	finalDraft, err := ag.Write(ctx, promptStyleCleanup+lang, verifiedDraft)
+	// Pass 3: Style cleanup (keeps the allowed-keys list in view so style edits
+	// never reintroduce or mangle citation keys)
+	finalDraft, err := ag.Write(ctx, promptStyleCleanup+lang, verifiedDraft+allowedKeys)
 	if err != nil {
 		return "", fmt.Errorf("multi-pass P3 (style): %w", err)
 	}
 
-	return finalDraft, nil
+	// Pass 4 (deterministic): enforce that every \cite{} resolves to a real catalog
+	// key. This is model-agnostic and guarantees a compilable bibliography even if a
+	// lower-capability Brain model invented keys that survived passes 1-3.
+	cleaned, stats := sanitizeCitations(finalDraft, citations)
+	logCiteGuard(session.ID, systemPrompt, stats)
+	return cleaned, nil
+}
+
+// logCiteGuard surfaces what the deterministic citation guard changed so it is
+// visible in the approval-stage log (not just silently rewritten).
+func logCiteGuard(sessionID, systemPrompt string, stats CiteGuardStats) {
+	if stats.Remapped == 0 && stats.Dropped == 0 {
+		logger.Logf(sessionID, "      [CiteGuard] %d/%d \\cite keys valid (catalog-clean)", stats.Valid, stats.Total)
+		return
+	}
+	logger.Logf(sessionID, "      [CiteGuard] %d valid, %d remapped, %d dropped (of %d)",
+		stats.Valid, stats.Remapped, stats.Dropped, stats.Total)
+	for invalid, mapped := range stats.RemapPairs {
+		logger.Logf(sessionID, "         remap  \\cite{%s} -> \\cite{%s}", invalid, mapped)
+	}
+	if len(stats.DroppedSet) > 0 {
+		dropped := make([]string, 0, len(stats.DroppedSet))
+		for k := range stats.DroppedSet {
+			dropped = append(dropped, k)
+		}
+		logger.Logf(sessionID, "         dropped (no catalog match): %s", strings.Join(dropped, ", "))
+	}
 }
 
 // ===== Group generators =====
@@ -148,7 +179,7 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 	// Integrate Qdrant fulltext snippets for top papers in the catalog
 	fulltextCtx := m.buildFulltextSnippets(ctx, session.ID, citations)
 
-	userCtx := bundle + paperBundle + fulltextCtx
+	userCtx := bundle + m.prismaContext(ctx, session) + paperBundle + fulltextCtx
 
 	// Multi-pass: Methods
 	methods, err := m.generateWithMultiPass(ctx, ag, session, promptMethods, userCtx, lang, citations)
@@ -205,7 +236,7 @@ func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSes
 	// Integrate Qdrant fulltext snippets for top papers in the catalog
 	fulltextCtx := m.buildFulltextSnippets(ctx, session.ID, citations)
 
-	userCtx := bundle + paperBundle + fulltextCtx
+	userCtx := bundle + m.prismaContext(ctx, session) + paperBundle + fulltextCtx
 
 	// Multi-pass: Introduction
 	intro, err := m.generateWithMultiPass(ctx, ag, session, promptIntro, userCtx+sectionCtx("RESULTS (untuk tune preview, JANGAN bocorkan angka spesifik di Intro)", trim(ms.Results, 4000)), lang, citations)

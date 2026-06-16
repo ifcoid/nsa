@@ -694,9 +694,19 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			}
 		}
 
-		// 1. FLOW NUMBERS
-		flowNumbers := fmt.Sprintf("- Total records identified: %d\n- Duplicates removed: %d\n- Records screened: %d\n- Records excluded: %d\n- Records included for full-text: %d", 
-			totalIdentified, duplicatesRemoved, recordsScreened, len(excluded), len(included))
+		// 1. FLOW NUMBERS (PRISMA 2020 identification + screening half).
+		// Arithmetic MUST close: screened = excluded + uncertain + included.
+		// `deferredCount` (UNCERTAIN, neither INCLUDE nor EXCLUDE) is reported
+		// explicitly so the chain reconciles; omitting it produced a phantom gap.
+		flowNumbers := fmt.Sprintf("- Total records identified: %d\n- Duplicates removed: %d\n- Records screened: %d\n- Records excluded (title/abstract): %d\n- Records uncertain/unresolved at title/abstract: %d\n- Records included for full-text retrieval: %d",
+			totalIdentified, duplicatesRemoved, recordsScreened, len(excluded), deferredCount, len(included))
+		if recordsScreened != len(excluded)+deferredCount+len(included) {
+			logger.Logf(session.ID, "      [PRISMA][WARN] flow tidak menutup: screened=%d != excluded(%d)+uncertain(%d)+included(%d)",
+				recordsScreened, len(excluded), deferredCount, len(included))
+		}
+		if deferredCount > 0 {
+			logger.Logf(session.ID, "      [PRISMA][WARN] %d record UNCERTAIN belum terselesaikan di title/abstract; PRISMA 2020 mensyaratkan setiap record berakhir include/exclude.", deferredCount)
+		}
 
 		// 2. EXCLUSION REASONS TABLE
 		exclusionReasons := "| Reason Code | Count | % | Deskripsi |\n|---|---|---|---|\n"
@@ -749,7 +759,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		kappaClass := "Fair"
 		if finalKappa >= 0.80 { kappaClass = "Almost Perfect" } else if finalKappa >= 0.60 { kappaClass = "Substantial" }
 		
-		kappaReport := fmt.Sprintf("- Kalibrasi iterasi 1: %.3f\n- Jumlah iterasi kalibrasi: %d\n- Kalibrasi final: %.3f\n- Batch massal final: %.3f\n- Klasifikasi: %s\n- Disagreements resolved: %d\n- Deferred ke full-text: %d",
+		kappaReport := fmt.Sprintf("- Kalibrasi iterasi 1: %.3f\n- Jumlah iterasi kalibrasi: %d\n- Kalibrasi final: %.3f\n- Batch massal final: %.3f\n- Klasifikasi: %s\n- Disagreements resolved: %d\n- Uncertain/unresolved (title/abstract): %d",
 			iter1Kappa, len(session.KalibrasiLog), finalKappa, batchKappa, kappaClass, resolvedDiscussCount, deferredCount)
 
 		// Initialize Agent - gunakan roles config dengan fallback chain
@@ -863,7 +873,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			"FLOW NUMBERS (PRISMA):\n%s\n\n"+
 			"KALIBRASI:\n- Sample 20 records, %d iterasi\n- Kappa iter 1 -> final: %.3f -> %.3f\n\n"+
 			"BATCH SCREENING:\n- Total screened: %d\n- R1 + R2 complete: ✓\n- Final kappa: %.3f\n\n"+
-			"DECISIONS:\n- INCLUDE for full-text: %d\n- EXCLUDE: %d\n- UNCERTAIN deferred: %d\n\n"+
+			"DECISIONS:\n- INCLUDE for full-text: %d\n- EXCLUDE: %d\n- UNCERTAIN/unresolved: %d\n\n"+
 			"EXCLUSION TABLE:\n%s\n\n"+
 			"DISAGREEMENT RESOLUTION:\n- Total resolved/discussed: %d\n\n"+
 			"PICO-CONSISTENCY AUDIT:\n%s\n\n"+
@@ -884,8 +894,19 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		return nil
 
 	case "M5_STEP4_APPROVED":
+		// PRISMA gate: setiap record WAJIB berakhir INCLUDE/EXCLUDE. Jika masih ada
+		// record non-terminal (disagreement belum diputus, atau kedua reviewer
+		// UNCERTAIN), M5 TIDAK boleh ditutup. Alihkan ke UI resolusi konflik (yang
+		// kini menampilkan semua record non-terminal) agar diselesaikan secara bedah.
+		if n, err := m.deps.MongoRepo.CountUnresolvedScreeningPapers(ctx, session.ID); err == nil && n > 0 {
+			session.Status = "M5_STEP3_WAITING_RESOLUTION"
+			session.Feedback = fmt.Sprintf("Modul 5 belum bisa ditutup: %d record masih UNCERTAIN/belum diputus. Selesaikan keputusan INCLUDE/EXCLUDE di panel Resolusi Konflik, lalu approve kembali.", n)
+			logger.Logf(session.ID, "   [System][PRISMA GATE] %d record non-terminal. M5 ditahan; alihkan ke resolusi konflik.", n)
+			return m.deps.MongoRepo.UpdateSession(ctx, session)
+		}
+		session.RescreenPending = false // hilir akan diregenerasi oleh forward re-run
 		session.Status = "M6_INIT"
-		logger.Log(session.ID, "   [System] Modul 5 SELESAI. Memulai Modul 6 (Full-Text Acquisition).")
+		logger.Log(session.ID, "   [System] Modul 5 SELESAI (semua record terselesaikan). Memulai Modul 6 (Full-Text Acquisition).")
 
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
