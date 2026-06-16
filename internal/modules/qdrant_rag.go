@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 )
@@ -580,15 +581,125 @@ func toFloat32(arr []interface{}) []float32 {
 	return out
 }
 
-// SemanticSearch embeds the query string and searches Qdrant for the top-K most
-// similar documents. Returns ranked results with DOI, Title, Score, and a text
-// Snippet. If the embedding endpoint or Qdrant is not configured, returns empty
-// results gracefully (no error).
+// searchSupport mengingat apakah sebuah URL /search mendukung pencarian hybrid,
+// agar kita tidak menembak endpoint yang sudah jelas tak punya /search (mis. API
+// embedding pihak ketiga) berkali-kali dalam satu proses. Key = searchURL.
+var searchSupport sync.Map // searchURL -> bool (false = diketahui tak mendukung)
+
+// deriveSearchURL menentukan URL endpoint /search server PEDE. Utamakan
+// SEARCH_ENDPOINT eksplisit; jika kosong, turunkan dari EMBED_ENDPOINT
+// (".../v1" -> ".../search") supaya user cukup mengelola SATU URL tunnel.
+func deriveSearchURL() string {
+	if s := strings.TrimRight(strings.TrimSpace(os.Getenv("SEARCH_ENDPOINT")), "/ "); s != "" {
+		return s
+	}
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("EMBED_ENDPOINT")), "/ ")
+	if base == "" {
+		return ""
+	}
+	base = strings.TrimRight(strings.TrimSuffix(base, "/v1"), "/ ")
+	return base + "/search"
+}
+
+// HybridSearch memanggil endpoint /search server PEDE yang mengembalikan chunk
+// hasil pencarian HYBRID (dense + sparse, RRF) — logika ranking identik dengan
+// core/vector_store.py. ok=false berarti hybrid tak tersedia (endpoint tak diset
+// atau tak punya /search), sehingga caller harus fallback ke pencarian dense.
+//
+// Catatan skor: skor di sini adalah skor RRF (≈0.01–0.05), BUKAN cosine [0,1].
+// Jangan bandingkan dengan ambang cosine; pakai peringkat (urutan) hasil.
+func HybridSearch(ctx context.Context, query string, topK int) ([]SemanticResult, bool) {
+	searchURL := deriveSearchURL()
+	if searchURL == "" {
+		return nil, false
+	}
+	if v, ok := searchSupport.Load(searchURL); ok && v == false {
+		return nil, false // endpoint ini sudah diketahui tak mendukung /search
+	}
+	if topK <= 0 {
+		topK = 10
+	}
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"query":     query,
+		"n_results": topK,
+	})
+
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	req, e := http.NewRequestWithContext(cctx, "POST", searchURL, strings.NewReader(string(body)))
+	if e != nil {
+		return nil, false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if key := strings.TrimSpace(os.Getenv("EMBED_API_KEY")); key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+
+	resp, e := (&http.Client{Timeout: 35 * time.Second}).Do(req)
+	if e != nil {
+		return nil, false // jaringan/tunnel mati -> caller fallback ke dense
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 404 || resp.StatusCode == 405 {
+		searchSupport.Store(searchURL, false) // bukan server PEDE -> jangan coba lagi
+		return nil, false
+	}
+	if resp.StatusCode != 200 {
+		return nil, false
+	}
+
+	var out struct {
+		Results []struct {
+			Score    float64                `json:"score"`
+			Content  string                 `json:"content"`
+			Metadata map[string]interface{} `json:"metadata"`
+		} `json:"results"`
+	}
+	if e := json.NewDecoder(resp.Body).Decode(&out); e != nil {
+		return nil, false
+	}
+	searchSupport.Store(searchURL, true)
+
+	results := make([]SemanticResult, 0, len(out.Results))
+	for _, r := range out.Results {
+		doi, _ := r.Metadata["doi"].(string)
+		title, _ := r.Metadata["title"].(string)
+		snippet := r.Content
+		if len(snippet) > 500 {
+			snippet = snippet[:500]
+		}
+		results = append(results, SemanticResult{
+			DOI:     doi,
+			Title:   title,
+			Score:   r.Score,
+			Snippet: snippet,
+		})
+	}
+	return results, true
+}
+
+// SemanticSearch mencari top-K dokumen paling relevan terhadap query. Bila server
+// PEDE /search terjangkau, memakai pencarian HYBRID (dense+sparse RRF) yang lebih
+// kuat untuk istilah eksak (DOI, nama metode) — penting untuk verifikasi klaim &
+// sitasi. Jika tidak, fallback ke pencarian DENSE langsung ke Qdrant. Mengembalikan
+// hasil berperingkat (DOI, Title, Score, Snippet); kosong (tanpa error) bila tak
+// ada endpoint yang terjangkau.
+//
+// PERINGATAN skala skor: dalam mode hybrid, Score adalah RRF (≈0.01–0.05); dalam
+// mode dense, Score adalah cosine [0,1]. Caller HARUS memakai peringkat hasil,
+// bukan ambang skor absolut, agar tahan terhadap kedua mode.
 func SemanticSearch(ctx context.Context, query string, topK int) []SemanticResult {
 	if topK <= 0 {
 		topK = 10
 	}
 
+	// Utamakan hybrid (server PEDE /search) bila tersedia.
+	if res, ok := HybridSearch(ctx, query, topK); ok {
+		return res
+	}
+
+	// --- Fallback: pencarian DENSE langsung ke Qdrant (perilaku lama) ---
 	// 1. Embed the query text.
 	vec, available, err := EmbedText(ctx, query)
 	if !available || err != nil || len(vec) == 0 {

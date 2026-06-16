@@ -85,9 +85,10 @@ Berikut adalah daftar lengkap variabel *environment* yang dikenali sistem besert
 - `QDRANT_API_KEY`: Kunci API otentikasi Qdrant.
 
 ### 4. Embedding Server
-- `EMBED_ENDPOINT`: URL endpoint server model *embedding* teks (Contoh: BAAI/bge-m3 via *cloudflared*).
-- `EMBED_API_KEY`: Kunci API server *embedding*.
+- `EMBED_ENDPOINT`: URL endpoint server model *embedding* teks (Contoh: `https://...trycloudflare.com/v1`, BAAI/bge-m3 via *cloudflared*). Dipakai screening Modul 6 (embedding query dense).
+- `EMBED_API_KEY`: Kunci API server *embedding* (sekaligus dipakai untuk endpoint `/search`).
 - `EMBED_MODEL`: Nama spesifik model *embedding* (Contoh: `BAAI/bge-m3`).
+- `SEARCH_ENDPOINT` *(opsional)*: URL endpoint **`/search` hybrid** server PEDE (dense+sparse, RRF) untuk verifikasi klaim/sitasi Modul 9. Jika dikosongkan, **diturunkan otomatis** dari `EMBED_ENDPOINT` (`.../v1` → `.../search`), jadi cukup kelola satu URL tunnel. Bila endpoint bukan server PEDE (tak punya `/search`), `SemanticSearch` otomatis fallback ke pencarian dense.
 
 ### 5. Notifikasi Telegram
 - `TELEGRAM_BOT_TOKEN`: Token otentikasi dari BotFather.

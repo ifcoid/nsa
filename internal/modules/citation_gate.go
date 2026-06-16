@@ -99,11 +99,15 @@ func (cg *CitationGate) ValidateCitations(ctx context.Context, sessionID string,
 				continue // Qdrant not available or no results
 			}
 
-			// Check if the SPECIFIC cited paper appears in results with score >= 0.75
+			// Cek apakah paper yang DISITASI muncul di antara hasil paling relevan.
+			// Pakai CUTOFF PERINGKAT (bukan ambang skor absolut) agar tahan terhadap
+			// dua skala skor SemanticSearch: cosine [0,1] (mode dense) vs RRF ≈0.01–0.05
+			// (mode hybrid). Hasil sudah terurut best-first, jadi indeks = peringkat.
+			const citationRankCutoff = 5 // hanya percayai paper di ~5 besar
 			found := false
-			for _, r := range results {
-				if r.Score < 0.75 {
-					continue
+			for rank, r := range results {
+				if rank >= citationRankCutoff {
+					break
 				}
 				// Match by DOI if both have it
 				if expectedRef.DOI != "" && r.DOI != "" && strings.EqualFold(expectedRef.DOI, r.DOI) {
