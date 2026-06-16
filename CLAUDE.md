@@ -62,6 +62,11 @@ ekstraksi, sintesis, manuskrip) WAJIB memenuhi empat invariant ini:
   berbeda. SEMUA kriteria/aturan/ambang HARUS berasal dari **DATA sesi** (`PICODefinitions`,
   `AuditScopeRules`, dll) yang **bisa diedit user** — JANGAN menanam aturan review-spesifik
   di kode/prompt. Butuh aturan baru → beri **mekanisme edit (HITL)** + simpan di sesi.
+- **Self-heal, BUKAN edit DB manual:** koreksi data dilakukan lewat **aksi UI normal**
+  (tombol/HITL); JANGAN pernah menyuruh user mengedit MongoDB langsung. State tak-konsisten/
+  legacy harus **pulih sendiri** saat operasi rutin (mis. reconcile both-true flag saat
+  Sync). Dan jaga **invariant di SETIAP titik tulis**: bila dua field saling-eksklusif,
+  set satu → **clear lawannya** (mis. `full_text_retrieved` vs `inaccessible`).
 
 ## Model pengujian (penting)
 
