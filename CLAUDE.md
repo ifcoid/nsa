@@ -1,3 +1,26 @@
+## Topologi sistem: 3 repo terpisah (sejajar di folder `awangga`)
+
+Sistem ini tersebar di **tiga repo** yang di-clone bersebelahan di `/home/adb/awangga/`:
+
+- **`nsa`** — **BACKEND** (Go). Orkestrator pipeline SLR M1–M9, state-machine via
+  `session.Status`, REST API, akses MongoDB/Qdrant/Neo4j. Repo: `ifcoid/nsa`. Deploy: fly.io.
+- **`slr`** — **FRONTEND** (vanilla JS). UI HITL: panel keputusan, gate, tabel, tombol Sync,
+  editor scope. Repo: `ifcoid/slr`. Memanggil REST API `nsa`.
+- **`pede`** — **INGESTION + EMBEDDING** (Python). "PDF → Embedding": konversi PDF→markdown
+  (`pymupdf4llm`, OCR PaddleOCR fallback), ekstraksi metadata (3-layer + CrossRef), chunking,
+  embedding **BGE-M3 hybrid (dense+sparse)**, tulis ke **Qdrant** (collection
+  `scientific_articles`, payload key lowercase `title`/`doi`/`article_id`). Repo: `ifcoid/pede`.
+  - `ingest.py` = CLI batch (jalur yang sama dipakai notebook Colab `pede_colab.ipynb`).
+  - `embed_server_colab.ipynb` = server embedding runtime terpisah yang di-query RAG `nsa`
+    (BUKAN bagian ingestion). Ingestion meng-embed **lokal** dengan bge-m3.
+  - Kontrak: `nsa` SyncQdrant mencocokkan rekod screening ↔ Qdrant via **DOI exact ∪
+    title-similarity >0.8**. Field payload `pede` HARUS cocok dengan yang dibaca `nsa`.
+
+Kredensial untuk verifikasi langsung (read-only, JANGAN bocorkan) ada di `/home/adb/awangga/.env`:
+`MONGO_URI`, `DB_NAME` (default `slr_agentic_db`), `QDRANT_ENDPOINT`+`QDRANT_API_KEY`
+(catatan: kode `pede` baca `QDRANT_URL`, jadi map `QDRANT_ENDPOINT`→`QDRANT_URL` saat run),
+`NEO4JURI`/`NEO4JUSER`/`NEO4JPASSWORD`, plus `GHPAT`/`TELEGRAM_BOT_TOKEN`/`CHAT_ID`.
+
 ## Notifikasi Telegram (langsung via Bot API)
 
 TIDAK memakai MCP server (cocote) lagi. Notifikasi progres dikirim **langsung ke
