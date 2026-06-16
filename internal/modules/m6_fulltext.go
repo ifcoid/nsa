@@ -449,14 +449,17 @@ func fullTextKappaReport(total, bothInc, bothExc, r1IncR2Exc, r1ExcR2Inc int) (k
 		return 0, false, fmt.Sprintf("TAK TERDEFINISI (tanpa variansi kategori — paradoks kappa; kedua reviewer memakai satu kelas yang sama untuk semua %d paper). Laporkan persen kesepakatan observasi = %.1f%% (n=%d).", total, poPct, total)
 	}
 	k := (float64(agree)/float64(total) - pE) / (1 - pE)
+	// PABAK (Prevalence-Adjusted Bias-Adjusted Kappa = 2·Po − 1): remedi standar saat
+	// κ tertekan oleh prevalensi timpang (κ rendah walau kesepakatan observasi tinggi).
+	pabak := 2*float64(agree)/float64(total) - 1
 	// Marginal sangat timpang (EXCLUDE sangat jarang di tahap full-text) -> κ kurang
-	// informatif walau terdefinisi; sertakan kesepakatan observasi sebagai pendamping.
+	// informatif walau terdefinisi; PABAK + kesepakatan observasi jadi pendamping wajib.
 	minClass := bothExc + r1IncR2Exc + r1ExcR2Inc // kemunculan EXCLUDE minimal
 	caveat := ""
-	if minClass < 2 {
-		caveat = " ⚠ marginal timpang (EXCLUDE jarang) → κ kurang informatif; dampingi dengan kesepakatan observasi."
+	if k < 0.4 || minClass < 5 {
+		caveat = " ⚠ κ tertekan prevalensi timpang (paradoks kappa) — laporkan PABAK + kesepakatan observasi di manuskrip, bukan κ saja."
 	}
-	return k, true, fmt.Sprintf("κ=%.3f (n=%d, kesepakatan observasi %.1f%%).%s", k, total, poPct, caveat)
+	return k, true, fmt.Sprintf("κ=%.3f (n=%d, kesepakatan observasi %.1f%%, PABAK=%.3f).%s", k, total, poPct, pabak, caveat)
 }
 
 func (m *M6Acquisition) operationalDefsContext(session *model.SLRSession) string {
@@ -549,8 +552,9 @@ func (m *M6Acquisition) buildModul6Outputs(ctx context.Context, session *model.S
 
 	// PICO-CONSISTENCY FINAL AUDIT (15% included)
 	picoAudit := "Audit dilewati (tidak ada INCLUDE)."
+	picoAuditOK := false
 	if len(includedFull) > 0 {
-		picoAudit = m.runFinalPicoAudit(ctx, session, includedFull)
+		picoAudit, picoAuditOK = m.runFinalPicoAudit(ctx, session, includedFull)
 	}
 
 	// OUTPUT 2: inaccessible_impact
@@ -559,7 +563,7 @@ func (m *M6Acquisition) buildModul6Outputs(ctx context.Context, session *model.S
 
 	// OUTPUT 3: extraction_readiness
 	allResolved := len(disagreedRemaining) == 0
-	readyMd := buildExtractionReadiness(len(includedFull), allResolved, len(session.FulltextScreeningLog) > 0)
+	readyMd := buildExtractionReadiness(len(includedFull), allResolved, len(session.FulltextScreeningLog) > 0, picoAuditOK)
 	session.ExtractionReadiness = &model.ExtractionReadiness{AllReady: allResolved, Markdown: readyMd}
 
 	// Exclusion reasons table (full-text)
@@ -624,7 +628,10 @@ func countBatchProcessed(session *model.SLRSession) int {
 	return n
 }
 
-func (m *M6Acquisition) runFinalPicoAudit(ctx context.Context, session *model.SLRSession, included []map[string]interface{}) string {
+// runFinalPicoAudit menjalankan audit konsistensi PICO atas sampel 15% INCLUDE.
+// Mengembalikan (markdown, ok). ok=false bila audit GAGAL (mis. 429 quota) atau dilewati
+// — caller WAJIB tidak menandai checklist "completed" saat ok=false.
+func (m *M6Acquisition) runFinalPicoAudit(ctx context.Context, session *model.SLRSession, included []map[string]interface{}) (string, bool) {
 	sampleSize := len(included) * 15 / 100
 	if sampleSize < 1 {
 		sampleSize = 1
@@ -647,11 +654,11 @@ func (m *M6Acquisition) runFinalPicoAudit(ctx context.Context, session *model.SL
 	} else if c, e := m.deps.LLMFactory.CreateClient(ctx, "zhipu"); e == nil {
 		sc = agent.NewScreeningAgent(c)
 	} else {
-		return "Audit dilewati (tidak ada LLM tersedia)."
+		return "Audit dilewati (tidak ada LLM tersedia).", false
 	}
 	res, err := sc.AuditPICO(ctx, picoDef, string(sampleData))
 	if err != nil || res == nil {
-		return "Audit gagal: " + fmt.Sprint(err)
+		return "Audit gagal: " + fmt.Sprint(err), false
 	}
 	action := res.Action
 	pct := float64(res.SlippedThroughCount) / float64(sampleSize) * 100
@@ -659,7 +666,7 @@ func (m *M6Acquisition) runFinalPicoAudit(ctx context.Context, session *model.SL
 		action = "RE-SCREEN disarankan (slipped-through > 5%)"
 	}
 	return fmt.Sprintf("Sample %d (15%%) | Slipped-through: %d (%.1f%%) | Action: %s\n%s",
-		sampleSize, res.SlippedThroughCount, pct, action, res.Analysis)
+		sampleSize, res.SlippedThroughCount, pct, action, res.Analysis), true
 }
 
 func (m *M6Acquisition) buildInaccessibleImpact(session *model.SLRSession) *model.InaccessibleImpact {
@@ -688,26 +695,41 @@ func (m *M6Acquisition) buildInaccessibleImpact(session *model.SLRSession) *mode
 	return &model.InaccessibleImpact{Count: count, Pct: pct, Markdown: md}
 }
 
-func buildExtractionReadiness(includedCount int, allResolved, kappaDone bool) string {
+func buildExtractionReadiness(includedCount int, allResolved, kappaDone, picoAuditOK bool) string {
 	chk := func(ok bool) string {
 		if ok {
 			return "[x]"
 		}
 		return "[ ]"
 	}
+	picoItem := "PICO-consistency final audit completed"
+	if !picoAuditOK {
+		picoItem = "PICO-consistency final audit **BELUM tuntas** (gagal/terlewat — mis. 429 quota; klik Revisi untuk ulang saat kuota pulih)"
+	}
+	// Gate utama (resolusi konflik) tetap penentu proceed. Audit PICO yang gagal TIDAK
+	// hard-block (umumnya quota transient & bisa di-rerun), tetapi DILAPORKAN jujur +
+	// disarankan rerun — jangan klaim "completed" diam-diam.
+	proceed := "⚠️ Masih ada konflik/uncertain yang belum diputuskan — selesaikan dulu."
+	if allResolved && includedCount > 0 {
+		if picoAuditOK {
+			proceed = "✅ PROCEED ke Modul 7."
+		} else {
+			proceed = "⚠️ Bisa lanjut, TAPI audit PICO final belum tuntas (gagal/terlewat). Disarankan klik **Revisi** untuk menjalankan ulang audit sebelum Modul 7."
+		}
+	}
 	return fmt.Sprintf("## Extraction Readiness Checklist (sebelum Modul 7)\n\n"+
 		"%s Final INCLUDED list finalized (%d studi)\n"+
 		"%s Semua DISAGREE/UNCERTAIN resolved (Final_Decision_Full terisi)\n"+
 		"%s Full-text kappa calculated + terdokumentasi\n"+
 		"%s Exclusion reasons table (full-text) compiled\n"+
-		"%s PICO-consistency final audit completed\n"+
+		"%s %s\n"+
 		"%s Inaccessible dokumentasi ready\n\n"+
 		"%s",
 		chk(includedCount > 0), includedCount,
 		chk(allResolved),
 		chk(kappaDone),
 		chk(true),
+		chk(picoAuditOK), picoItem,
 		chk(true),
-		chk(true),
-		map[bool]string{true: "✅ PROCEED ke Modul 7.", false: "⚠️ Masih ada konflik/uncertain yang belum diputuskan — selesaikan dulu."}[allResolved && includedCount > 0])
+		proceed)
 }
