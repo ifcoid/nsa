@@ -123,6 +123,35 @@ func TestExtractAndMatchExclusionTerms_RuleB(t *testing.T) {
 	}
 }
 
+func TestStrongSlipSignal_PrecisionGate(t *testing.T) {
+	llm := model.SlippedFlag{Source: "llm-audit"}
+	rev := model.SlippedFlag{Source: "rule:reviewer-exclude"}
+	strict := model.SlippedFlag{Source: "rule:strict-exclude"}
+	kw := model.SlippedFlag{Source: "rule:keyword"}
+
+	cases := []struct {
+		name  string
+		flags []model.SlippedFlag
+		want  bool
+		why   string
+	}{
+		{"llm blocks", []model.SlippedFlag{llm}, true, "llm"},
+		{"reviewer-exclude blocks", []model.SlippedFlag{rev}, true, "reviewer"},
+		{"both-strict blocks", []model.SlippedFlag{strict, strict}, true, "both-strict"},
+		{"single strict = noise", []model.SlippedFlag{strict}, false, ""},
+		{"keyword only = noise", []model.SlippedFlag{kw}, false, ""},
+		{"single strict + keyword = noise", []model.SlippedFlag{strict, kw}, false, ""},
+		{"llm dominates strict", []model.SlippedFlag{strict, strict, llm}, true, "llm"},
+		{"reviewer dominates both-strict", []model.SlippedFlag{strict, strict, rev}, true, "reviewer"},
+	}
+	for _, c := range cases {
+		got, why := strongSlipSignal(c.flags)
+		if got != c.want || (got && why != c.why) {
+			t.Errorf("%s: got (%v,%q), want (%v,%q)", c.name, got, why, c.want, c.why)
+		}
+	}
+}
+
 func TestFormatPICOAudit_ShowsProvenance(t *testing.T) {
 	log := &model.PICOAuditLog{
 		Coverage: "100% (124/124)", Action: "re-screening",

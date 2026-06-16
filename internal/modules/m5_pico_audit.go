@@ -140,12 +140,27 @@ func (m *M5Screening) runFullPICOAudit(ctx context.Context, session *model.SLRSe
 		}
 	}
 
-	// --- Merge into the audit log ---
+	// --- Merge into the audit log (PRECISION GATE) ---
+	// Only a STRONG signal blocks the gate: an LLM criteria violation, a reviewer whose
+	// actual decision was EXCLUDE (then resolved to INCLUDE), or BOTH reviewers' strict
+	// interpretation = EXCLUDE. A single strict objection or a keyword-only match is normal
+	// screening noise in a strict/liberal design and must not flood the panel; those papers
+	// stay INCLUDE. All flags are still kept as provenance on the strong papers.
 	var slipped []model.SlippedPaper
+	var nLLM, nReviewer, nBothStrict int
 	for _, id := range order {
 		a := acc[id]
-		if len(a.flags) == 0 {
+		strong, why := strongSlipSignal(a.flags)
+		if !strong {
 			continue
+		}
+		switch why {
+		case "llm":
+			nLLM++
+		case "reviewer":
+			nReviewer++
+		case "both-strict":
+			nBothStrict++
 		}
 		rc := a.reasonCode
 		if rc == "" {
@@ -165,12 +180,12 @@ func (m *M5Screening) runFullPICOAudit(ctx context.Context, session *model.SLRSe
 	if len(slipped) > 0 {
 		action = "re-screening"
 	}
-	summary := fmt.Sprintf("Neuro-symbolic audit: aturan-reviewer/strict menandai %d, aturan-keyword menandai %d, LLM menandai %d; total unik %d dari %d INCLUDE.",
-		ruleA, ruleB, llmFlagged, len(slipped), total)
+	summary := fmt.Sprintf("Neuro-symbolic audit (precision-gated): dari %d INCLUDE, sinyal mentah strict/reviewer=%d, keyword=%d, LLM=%d. Setelah pengetatan presisi, %d paper masuk koreksi (kuat: LLM=%d, reviewer-EXCLUDE=%d, kedua-strict=%d). Strict-tunggal & keyword-saja dicatat sebagai konteks, tidak memblok.",
+		total, ruleA, ruleB, llmFlagged, len(slipped), nLLM, nReviewer, nBothStrict)
 	if len(analyses) > 0 {
 		summary += " " + strings.Join(analyses, " ")
 	}
-	logger.Logf(session.ID, "      ✓ PICO audit: %d slipped-through unik (ruleA=%d ruleB=%d llm=%d) dari %d INCLUDE.", len(slipped), ruleA, ruleB, llmFlagged, total)
+	logger.Logf(session.ID, "      ✓ PICO audit (precision-gated): %d slipped (LLM=%d reviewer=%d both-strict=%d) dari %d INCLUDE; mentah strict/reviewer=%d keyword=%d llm=%d.", len(slipped), nLLM, nReviewer, nBothStrict, total, ruleA, ruleB, llmFlagged)
 	return &model.PICOAuditLog{
 		IncludedAtAudit: total,
 		Coverage:        fmt.Sprintf("100%% (%d/%d)", total, total),
@@ -183,6 +198,36 @@ func (m *M5Screening) runFullPICOAudit(ctx context.Context, session *model.SLRSe
 type flagWithCode struct {
 	flag       model.SlippedFlag
 	reasonCode string
+}
+
+// strongSlipSignal decides whether a paper's flags constitute a STRONG (blocking) audit
+// signal, returning the dominant reason (priority: llm > reviewer > both-strict). Strong =
+// an LLM criteria violation, OR a reviewer whose actual decision was EXCLUDE, OR BOTH
+// reviewers' strict interpretation = EXCLUDE. A single strict objection or a keyword-only
+// match is screening noise (expected in a strict/liberal design) and does not block.
+func strongSlipSignal(flags []model.SlippedFlag) (bool, string) {
+	strict := 0
+	hasLLM, hasReviewer := false, false
+	for _, f := range flags {
+		switch f.Source {
+		case "llm-audit":
+			hasLLM = true
+		case "rule:reviewer-exclude":
+			hasReviewer = true
+		case "rule:strict-exclude":
+			strict++
+		}
+	}
+	switch {
+	case hasLLM:
+		return true, "llm"
+	case hasReviewer:
+		return true, "reviewer"
+	case strict >= 2:
+		return true, "both-strict"
+	default:
+		return false, ""
+	}
 }
 
 // reviewerExcludeFlags implements Rule A: an INCLUDE paper where a reviewer decided
