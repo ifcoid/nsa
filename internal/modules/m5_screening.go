@@ -784,55 +784,27 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		}
 		scAgent := agent.NewScreeningAgent(llmClient)
 
-		// 4. PICO AUDIT (10% Random INCLUDE)
-		picoAuditText := "Audit dilewati (Tidak ada paper INCLUDE)"
-		if len(included) > 0 {
-			logger.Log(session.ID, "      -> Menjalankan PICO-Consistency Audit (10% Sample)...")
-			sampleSize := len(included) / 10
-			if sampleSize < 1 { sampleSize = 1 }
-			if sampleSize > 10 { sampleSize = 10 } // limit token
-
-			rand.Seed(time.Now().UnixNano())
-			rand.Shuffle(len(included), func(i, j int) { included[i], included[j] = included[j], included[i] })
-			
-			sampleData, _ := json.Marshal(included[:sampleSize])
-			
-			picoDef := ""
-			if session.PICODefinitions != nil {
-				picoBytes, _ := json.Marshal(session.PICODefinitions)
-				picoDef = string(picoBytes)
-			}
-
-			auditRes, err := scAgent.AuditPICO(ctx, picoDef, string(sampleData))
-			if err != nil {
-				logger.Log(session.ID, "      [!] Gagal Audit PICO dgn Xiaomi. Mencoba Fallback ke Zhipu...")
-				llmFallback, errFb := m.deps.LLMFactory.CreateClient(ctx, "zhipu")
-				if errFb == nil {
-					scAgentFallback := agent.NewScreeningAgent(llmFallback)
-					auditRes, err = scAgentFallback.AuditPICO(ctx, picoDef, string(sampleData))
-				}
-				
-				// Secondary fallback to groq if Zhipu also fails
-				if err != nil {
-					logger.Log(session.ID, "      [!] Gagal Audit PICO dgn Zhipu. Mencoba Fallback ke Groq...")
-					llmFallback2, errFb2 := m.deps.LLMFactory.CreateClient(ctx, "groq")
-					if errFb2 == nil {
-						scAgentFallback2 := agent.NewScreeningAgent(llmFallback2)
-						auditRes, err = scAgentFallback2.AuditPICO(ctx, picoDef, string(sampleData))
-					}
-				}
-			}
-
-			if err == nil && auditRes != nil {
-				picoAuditText = fmt.Sprintf("Slipped-through: %d\nAction: %s\nAnalysis: %s", auditRes.SlippedThroughCount, auditRes.Action, auditRes.Analysis)
-			} else {
-				picoAuditText = "Gagal menjalankan audit: " + err.Error()
-			}
+		// 4. PICO-CONSISTENCY AUDIT (FULL coverage). First pass audits every INCLUDE
+		// paper and records each probable false-include for human resolution; a
+		// recompute (after the user resolved flags) reuses the stored audit.
+		firstAuditPass := session.PICOAuditLog == nil
+		picoDef := ""
+		if session.PICODefinitions != nil {
+			picoBytes, _ := json.Marshal(session.PICODefinitions)
+			picoDef = string(picoBytes)
 		}
+		if len(included) > 0 && firstAuditPass {
+			session.PICOAuditLog = m.runFullPICOAudit(ctx, session, included, scAgent, picoDef)
+		} else if session.PICOAuditLog != nil {
+			refreshPICOAuditLog(session.PICOAuditLog, included)
+		}
+		picoAuditText := formatPICOAudit(session.PICOAuditLog)
 
-		// 5. FULL-TEXT PRIORITIZATION
+		// 5. FULL-TEXT PRIORITIZATION (reuse on recompute to avoid extra LLM cost)
 		fullTextPrep := "Tidak ada paper untuk diprioritaskan."
-		if len(included) > 0 {
+		if !firstAuditPass && session.ExclusionTable != nil && strings.TrimSpace(session.ExclusionTable.FullTextPrep) != "" {
+			fullTextPrep = session.ExclusionTable.FullTextPrep
+		} else if len(included) > 0 {
 			logger.Log(session.ID, "      -> Menjalankan Full-Text Prioritization...")
 			// Batasi jumlah yang dikirim ke LLM jika terlalu banyak (max 50)
 			limit := len(included)
@@ -902,6 +874,13 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			session.Status = "M5_STEP3_WAITING_RESOLUTION"
 			session.Feedback = fmt.Sprintf("Modul 5 belum bisa ditutup: %d record masih UNCERTAIN/belum diputus. Selesaikan keputusan INCLUDE/EXCLUDE di panel Resolusi Konflik, lalu approve kembali.", n)
 			logger.Logf(session.ID, "   [System][PRISMA GATE] %d record non-terminal. M5 ditahan; alihkan ke resolusi konflik.", n)
+			return m.deps.MongoRepo.UpdateSession(ctx, session)
+		}
+		// Gate 2: PICO-consistency audit flagged false-includes that are not yet actioned.
+		if k := countUnactionedSlipped(session); k > 0 {
+			session.Status = "M5_STEP4_WAITING_APPROVAL"
+			session.Feedback = fmt.Sprintf("Modul 5 belum bisa ditutup: %d paper ditandai PICO audit sebagai salah-INCLUDE dan belum dikoreksi. Buka panel 'Koreksi PICO Audit', putuskan EXCLUDE (terima) atau KEEP (tolak dgn alasan), lalu approve kembali.", k)
+			logger.Logf(session.ID, "   [System][PICO GATE] %d paper slipped-through belum dikoreksi. M5 ditahan.", k)
 			return m.deps.MongoRepo.UpdateSession(ctx, session)
 		}
 		session.RescreenPending = false // hilir akan diregenerasi oleh forward re-run

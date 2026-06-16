@@ -306,28 +306,52 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	return &result, nil
 }
 
+// AuditSlipped identifies one paper that was labelled INCLUDE but violates PICO and
+// should have been EXCLUDE. doi/title are echoed verbatim from the input so the caller
+// can match the paper back to its screening record.
+type AuditSlipped struct {
+	DOI        string `json:"doi"`
+	Title      string `json:"title"`
+	ReasonCode string `json:"reason_code"` // P-NOMATCH / I-NOMATCH / C-NOMATCH / O-NOMATCH / S-NOMATCH / DATE-NOMATCH / OTHER
+	Reason     string `json:"reason"`
+}
+
 type PICOAuditResult struct {
-	SlippedThroughCount int    `json:"slipped_through_count"`
-	Action              string `json:"action"`
-	Analysis            string `json:"analysis"`
+	SlippedThroughCount int            `json:"slipped_through_count"`
+	Action              string         `json:"action"`
+	Analysis            string         `json:"analysis"`
+	Slipped             []AuditSlipped `json:"slipped"`
 }
 
 func (a *ScreeningAgent) AuditPICO(ctx context.Context, pico, includedPapersJSON string) (*PICOAuditResult, error) {
 	systemPrompt := `Anda adalah Auditor Systematic Literature Review.
-Tugas Anda memeriksa ulang sampel acak (10%) dari paper yang sudah dilabeli "INCLUDE" untuk melihat apakah ada yang "lolos" padahal seharusnya tidak (slipped-through) berdasarkan PICO DEFINITIONS.
+Periksa SETIAP paper berlabel "INCLUDE" di bawah terhadap PICO DEFINITIONS, dan temukan yang "lolos" padahal seharusnya EXCLUDE (slipped-through). Audit ketat: utamakan definisi operasional what_counts/what_doesnt_count.
+
+Untuk SETIAP paper yang salah-INCLUDE, salin "doi" dan "title" PERSIS seperti pada input (jangan ubah/terjemahkan), beri reason_code (P-NOMATCH/I-NOMATCH/C-NOMATCH/O-NOMATCH/S-NOMATCH/DATE-NOMATCH/OTHER) dan reason ringkas berbasis kriteria.
 
 Keluarkan HANYA JSON MURNI tanpa markdown:
 {
-  "slipped_through_count": 0,
-  "action": "none" atau "re-screening",
-  "analysis": "Penjelasan hasil audit..."
-}`
-	userPrompt := fmt.Sprintf("=== PICO ===\n%s\n\n=== INCLUDED PAPERS SAMPLE ===\n%s", pico, includedPapersJSON)
+  "slipped_through_count": <jumlah item di slipped>,
+  "action": "none" (bila tidak ada) atau "re-screening" (bila ada >=1),
+  "analysis": "Ringkasan audit batch ini...",
+  "slipped": [
+    { "doi": "...", "title": "...", "reason_code": "I-NOMATCH", "reason": "..." }
+  ]
+}
+Bila tidak ada yang slipped, kembalikan slipped: [] dan slipped_through_count: 0.`
+	userPrompt := fmt.Sprintf("=== PICO ===\n%s\n\n=== INCLUDED PAPERS (audit SEMUA di batch ini) ===\n%s", pico, includedPapersJSON)
 	rawResp, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
 	if err != nil { return nil, err }
-	
+
 	var res PICOAuditResult
 	if err := json.Unmarshal([]byte(CleanJSONResponse(rawResp)), &res); err != nil { return nil, err }
+	// Keep the count consistent with the returned list regardless of model arithmetic.
+	res.SlippedThroughCount = len(res.Slipped)
+	if res.SlippedThroughCount > 0 {
+		res.Action = "re-screening"
+	} else if res.Action == "" {
+		res.Action = "none"
+	}
 	return &res, nil
 }
 

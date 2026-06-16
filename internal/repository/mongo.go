@@ -414,6 +414,23 @@ func (r *MongoRepository) UpdateScreeningPaperResolution(ctx context.Context, se
 	return err
 }
 
+// ExcludePaperWithReason marks a paper EXCLUDE and stamps the reason code so it is
+// attributed correctly in the PRISMA exclusion table. Used by the PICO-audit override.
+func (r *MongoRepository) ExcludePaperWithReason(ctx context.Context, sessionID, paperIDHex, reasonCode, notes string) error {
+	objID, err := primitive.ObjectIDFromHex(paperIDHex)
+	if err != nil {
+		return err
+	}
+	filter := bson.M{"_id": objID, "session_id": sessionID}
+	update := bson.M{"$set": bson.M{
+		"Final_Decision":         "EXCLUDE",
+		"Screener_1_Reason_Code": reasonCode,
+		"Conflict_Resolution":    notes,
+	}}
+	_, err = r.GetScreeningCollection().UpdateOne(ctx, filter, update)
+	return err
+}
+
 // ResetCalibrationScreenings membersihkan field keputusan sebelumnya untuk persiapan re-run kalibrasi.
 func (r *MongoRepository) ResetCalibrationScreenings(ctx context.Context, sessionID string) error {
 	filter := bson.M{

@@ -679,106 +679,77 @@ func HybridSearch(ctx context.Context, query string, topK int) ([]SemanticResult
 	return results, true
 }
 
-// SemanticSearch mencari top-K dokumen paling relevan terhadap query. Bila server
-// PEDE /search terjangkau, memakai pencarian HYBRID (dense+sparse RRF) yang lebih
-// kuat untuk istilah eksak (DOI, nama metode) — penting untuk verifikasi klaim &
-// sitasi. Jika tidak, fallback ke pencarian DENSE langsung ke Qdrant. Mengembalikan
-// hasil berperingkat (DOI, Title, Score, Snippet); kosong (tanpa error) bila tak
-// ada endpoint yang terjangkau.
-//
-// PERINGATAN skala skor: dalam mode hybrid, Score adalah RRF (≈0.01–0.05); dalam
-// mode dense, Score adalah cosine [0,1]. Caller HARUS memakai peringkat hasil,
-// bukan ambang skor absolut, agar tahan terhadap kedua mode.
-func SemanticSearch(ctx context.Context, query string, topK int) []SemanticResult {
-	if topK <= 0 {
-		topK = 10
+// CheckSearchBackend memeriksa kesehatan server PEDE (endpoint /search hybrid)
+// lewat health endpoint "/". Dipakai M9 untuk MENJEDA verifikasi sitasi (bukan
+// degradasi diam-diam) bila server mati — menjaga mode retrieval tetap konsisten
+// hybrid untuk publikasi Q1. Mengembalikan:
+//   ok=false     -> endpoint tak diset / tak merespons (reason berisi sebabnya)
+//   hybrid=false -> server hidup tetapi sparse nonaktif (mis. Colab tanpa GPU)
+func CheckSearchBackend(ctx context.Context) (ok bool, hybrid bool, reason string) {
+	searchURL := deriveSearchURL()
+	if searchURL == "" {
+		return false, false, "Endpoint embedding/pencarian (EMBED_ENDPOINT/SEARCH_ENDPOINT) belum diset."
 	}
+	healthURL := strings.TrimRight(strings.TrimSuffix(searchURL, "/search"), "/ ") + "/"
 
-	// Utamakan hybrid (server PEDE /search) bila tersedia.
-	if res, ok := HybridSearch(ctx, query, topK); ok {
-		return res
+	cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	req, e := http.NewRequestWithContext(cctx, "GET", healthURL, nil)
+	if e != nil {
+		return false, false, fmt.Sprintf("URL health tak valid (%s): %v", healthURL, e)
 	}
-
-	// --- Fallback: pencarian DENSE langsung ke Qdrant (perilaku lama) ---
-	// 1. Embed the query text.
-	vec, available, err := EmbedText(ctx, query)
-	if !available || err != nil || len(vec) == 0 {
-		return nil
+	if key := strings.TrimSpace(os.Getenv("EMBED_API_KEY")); key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
 	}
-
-	// 2. Check Qdrant connectivity.
-	qdrantURL := os.Getenv("QDRANT_URL")
-	if qdrantURL == "" {
-		qdrantURL = os.Getenv("QDRANT_ENDPOINT")
-	}
-	if qdrantURL == "" {
-		return nil
-	}
-	qdrantKey := os.Getenv("QDRANT_API_KEY")
-
-	// 3. Build the query vector as []float64 for JSON marshaling.
-	vecF64 := make([]float64, len(vec))
-	for i, v := range vec {
-		vecF64[i] = float64(v)
-	}
-
-	reqPayload := map[string]interface{}{
-		"query":        vecF64,
-		"limit":        topK,
-		"with_payload": []string{"doi", "title", "content"},
-	}
-	body, _ := json.Marshal(reqPayload)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, "POST",
-		fmt.Sprintf("%s/collections/scientific_articles/points/query", qdrantURL),
-		strings.NewReader(string(body)))
-	if err != nil {
-		return nil
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if qdrantKey != "" {
-		req.Header.Set("api-key", qdrantKey)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil
+	resp, e := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if e != nil {
+		return false, false, fmt.Sprintf("Server PEDE (%s) tak merespons: %v", healthURL, e)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil
+		return false, false, fmt.Sprintf("Server PEDE (%s) balas HTTP %d.", healthURL, resp.StatusCode)
 	}
-
-	var qResp struct {
-		Result struct {
-			Points []struct {
-				Score   float64                `json:"score"`
-				Payload map[string]interface{} `json:"payload"`
-			} `json:"points"`
-		} `json:"result"`
+	var h struct {
+		Status string `json:"status"`
+		Hybrid bool   `json:"hybrid"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&qResp); err != nil {
-		return nil
+	if e := json.NewDecoder(resp.Body).Decode(&h); e != nil {
+		return true, true, "" // health 200 tapi body tak terbaca -> anggap hidup
 	}
+	return true, h.Hybrid, ""
+}
 
-	var results []SemanticResult
-	for _, pt := range qResp.Result.Points {
-		doi, _ := pt.Payload["doi"].(string)
-		title, _ := pt.Payload["title"].(string)
-		content, _ := pt.Payload["content"].(string)
+// EmbedBackendDownError menandai server embedding/pencarian hybrid yang DIBUTUHKAN
+// sedang tak tersedia. M9 mengubahnya menjadi jeda (pause) + notifikasi, bukan
+// melanjutkan verifikasi yang terdegradasi.
+type EmbedBackendDownError struct{ Reason string }
 
-		snippet := content
-		if len(snippet) > 500 {
-			snippet = snippet[:500]
-		}
+func (e *EmbedBackendDownError) Error() string {
+	return "embed/search backend tak tersedia: " + e.Reason
+}
 
-		results = append(results, SemanticResult{
-			DOI:     doi,
-			Title:   title,
-			Score:   pt.Score,
-			Snippet: snippet,
-		})
+// requireHybrid mengembalikan alasan (non-kosong) bila pencarian hybrid TIDAK siap
+// dipakai untuk verifikasi mutu Q1; string kosong berarti siap dipakai.
+func requireHybrid(ctx context.Context) string {
+	ok, hybrid, reason := CheckSearchBackend(ctx)
+	if !ok {
+		return reason
 	}
-	return results
+	if !hybrid {
+		return "Server embedding hidup tetapi mode HYBRID nonaktif (sparse mati — pastikan Runtime = GPU di Colab). Verifikasi sitasi Q1 mensyaratkan dense+sparse."
+	}
+	return ""
+}
+
+// SemanticSearch mencari top-K chunk paling relevan via server PEDE /search
+// (HYBRID dense+sparse, RRF — ranking identik core/vector_store.py). HYBRID WAJIB:
+// TIDAK ada fallback dense diam-diam, agar mode retrieval verifikasi deterministik
+// untuk publikasi Q1. Mengembalikan (hasil, available); available=false berarti
+// backend tak tersedia dan caller TIDAK boleh melanjutkan verifikasi terdegradasi
+// (jeda + beri tahu user — lihat CheckSearchBackend / requireHybrid).
+//
+// CATATAN skor: Score adalah skor RRF (≈0.01–0.05), BUKAN cosine. Caller HARUS
+// memakai PERINGKAT hasil, bukan ambang skor absolut.
+func SemanticSearch(ctx context.Context, query string, topK int) ([]SemanticResult, bool) {
+	return HybridSearch(ctx, query, topK)
 }

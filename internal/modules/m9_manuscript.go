@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
@@ -46,7 +47,7 @@ func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) e
 
 	// ---- GROUP A: Methods + Results + Discussion + Future Research ----
 	case "M9_GROUPA":
-		return m.generateGroupA(ctx, session)
+		return m.runGroup(ctx, session, "M9_GROUPA_WAITING_EMBED", m.generateGroupA)
 	case "M9_GROUPA_WAITING_APPROVAL":
 		logger.Log(session.ID, "   [System] Tinjau Methods/Results/Discussion/Future Research. Approve / revisi.")
 		return nil
@@ -58,9 +59,15 @@ func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) e
 		session.Status = "M9_GROUPB"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
+	// Server verifikasi (BGE-M3 hybrid) mati saat menulis -> tunggu user menyalakan
+	// Colab lagi, lalu resume ke group tertunda (lihat session_handler approve).
+	case "M9_GROUPA_WAITING_EMBED", "M9_GROUPB_WAITING_EMBED":
+		logger.Log(session.ID, "   [System] M9 dijeda: server embedding/pencarian BGE-M3 (hybrid) mati. Nyalakan Colab, masukkan endpoint via web, lalu lanjutkan.")
+		return nil
+
 	// ---- GROUP B: Introduction + Conclusions + Abstract + Title ----
 	case "M9_GROUPB":
-		return m.generateGroupB(ctx, session)
+		return m.runGroup(ctx, session, "M9_GROUPB_WAITING_EMBED", m.generateGroupB)
 	case "M9_GROUPB_WAITING_APPROVAL":
 		logger.Log(session.ID, "   [System] Tinjau Introduction/Conclusions/Abstract/Title. Approve / revisi.")
 		return nil
@@ -112,8 +119,14 @@ func (m *M9Manuscript) generateWithMultiPass(ctx context.Context, ag *agent.Manu
 		return "", fmt.Errorf("multi-pass P1 (draft): %w", err)
 	}
 
-	// Pass 2: Verify claims and ask LLM to fix unverified/invalid ones
-	verResults := m.verifyClaims(ctx, session, draft, citations)
+	// Pass 2: Verify claims and ask LLM to fix unverified/invalid ones.
+	// Bila backend hybrid mati, verifyClaims mengembalikan EmbedBackendDownError -->
+	// propagasi ke runGroup supaya M9 MENJEDA (bukan menutup manuskrip dgn
+	// verifikasi terdegradasi).
+	verResults, err := m.verifyClaims(ctx, session, draft, citations)
+	if err != nil {
+		return "", err
+	}
 	verSummary := formatVerificationResults(verResults)
 	verifiedDraft, err := ag.Write(ctx, promptVerification+lang, draft+allowedKeys+verSummary)
 	if err != nil {
@@ -158,8 +171,28 @@ func logCiteGuard(sessionID, systemPrompt string, stats CiteGuardStats) {
 
 // ===== Group generators =====
 
+// runGroup menjalankan generator group dan mengubah EmbedBackendDownError menjadi
+// JEDA (pause) + status WAITING, sehingga user diberi tahu untuk menyalakan kembali
+// server embedding/pencarian — menjamin verifikasi sitasi selalu hybrid (Q1).
+func (m *M9Manuscript) runGroup(ctx context.Context, session *model.SLRSession, waitStatus string, fn func(context.Context, *model.SLRSession) error) error {
+	err := fn(ctx, session)
+	var be *EmbedBackendDownError
+	if errors.As(err, &be) {
+		logger.Logf(session.ID, "   [PAUSE] M9 dijeda — verifikasi sitasi butuh server hybrid: %s\n", be.Reason)
+		session.Status = waitStatus
+		session.EmbedError = be.Reason
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	}
+	return err
+}
+
 func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [L1-L4] Menulis Methods, Results, Discussion, Future Research...")
+	// Pra-syarat Q1: server verifikasi hybrid harus hidup SEBELUM menulis (hemat
+	// token Brain bila ternyata mati -> langsung jeda via runGroup).
+	if reason := requireHybrid(ctx); reason != "" {
+		return &EmbedBackendDownError{Reason: reason}
+	}
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
 		return fmt.Errorf("brain (M9) gagal dimuat: %w", err)
@@ -219,6 +252,10 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 
 func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [L5-L9] Menulis Introduction, Conclusions, Abstract, Title...")
+	// Pra-syarat Q1: server verifikasi hybrid harus hidup sebelum menulis.
+	if reason := requireHybrid(ctx); reason != "" {
+		return &EmbedBackendDownError{Reason: reason}
+	}
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
 		return fmt.Errorf("brain (M9) gagal dimuat: %w", err)

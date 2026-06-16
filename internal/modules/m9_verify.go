@@ -100,10 +100,16 @@ func extractClaimFromPreceding(text string) string {
 // verifyClaims cross-references claims in the draft against Qdrant (semantic search),
 // Neo4j (paper relations), and MongoDB (extraction key_findings). Each claim is scored
 // by how many sources can confirm support for the cited paper.
-func (m *M9Manuscript) verifyClaims(ctx context.Context, session *model.SLRSession, draft string, citations []PaperCitation) []VerificationResult {
+func (m *M9Manuscript) verifyClaims(ctx context.Context, session *model.SLRSession, draft string, citations []PaperCitation) ([]VerificationResult, error) {
 	entries := parseCiteClaims(draft)
 	if len(entries) == 0 {
-		return nil
+		return nil, nil
+	}
+
+	// Q1: verifikasi sitasi WAJIB lewat retrieval hybrid. Bila server mati, JEDA M9
+	// (jangan hasilkan manuskrip dengan verifikasi diam-diam dilewati/terdegradasi).
+	if reason := requireHybrid(ctx); reason != "" {
+		return nil, &EmbedBackendDownError{Reason: reason}
 	}
 
 	// Build lookup maps for citations
@@ -165,7 +171,7 @@ func (m *M9Manuscript) verifyClaims(ctx context.Context, session *model.SLRSessi
 	}
 	logger.Logf(session.ID, "      [Verify] %d/%d claims verified (2+ sources)", verified, len(results))
 
-	return results
+	return results, nil
 }
 
 // verifyViaQdrant checks if semantic search results for the claim text include
@@ -174,8 +180,8 @@ func (m *M9Manuscript) verifyViaQdrant(ctx context.Context, claim, doi string) b
 	if doi == "" || claim == "" {
 		return false
 	}
-	results := SemanticSearch(ctx, claim, 10)
-	if len(results) == 0 {
+	results, ok := SemanticSearch(ctx, claim, 10)
+	if !ok || len(results) == 0 {
 		return false
 	}
 	normalizedDOI := normalizeDOIForRAG(doi)

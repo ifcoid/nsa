@@ -94,9 +94,9 @@ func (cg *CitationGate) ValidateCitations(ctx context.Context, sessionID string,
 			}
 
 			// Semantic search: does the claim match the SPECIFIC cited paper?
-			results := SemanticSearch(ctx, claimText, 10)
-			if len(results) == 0 {
-				continue // Qdrant not available or no results
+			results, ok := SemanticSearch(ctx, claimText, 10)
+			if !ok || len(results) == 0 {
+				continue // server pencarian hybrid tak tersedia atau tak ada hasil
 			}
 
 			// Cek apakah paper yang DISITASI muncul di antara hasil paling relevan.

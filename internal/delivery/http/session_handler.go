@@ -218,6 +218,10 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 			// User sudah memasukkan endpoint embedding baru (via /api/embed-config) -> lanjut.
 			session.Status = "M6_STEP2_FULLTEXT_SCREENING"
 			session.EmbedError = ""
+		} else if strings.HasSuffix(session.Status, "_WAITING_EMBED") {
+			// M9: server embedding/pencarian sudah dinyalakan lagi -> resume ke group tertunda.
+			session.Status = strings.TrimSuffix(session.Status, "_WAITING_EMBED")
+			session.EmbedError = ""
 		}
 
 		// Custom data handling untuk M2_STEP1
@@ -691,6 +695,88 @@ func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Reque
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"message": "Resolusi konflik tersimpan",
+		"status":  session.Status,
+	})
+}
+
+// ResolvePICOAudit applies the user's decision on each PICO-audit slipped-through paper
+// (EXCLUDE = accept the audit, KEEP = override with justification), then recomputes the
+// Module 5 summary so the PRISMA numbers reflect the corrected inclusion set.
+func (h *SessionHandler) ResolvePICOAudit(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	var payload struct {
+		Resolutions []struct {
+			PaperID  string `json:"paper_id"`
+			Decision string `json:"decision"` // "EXCLUDE" | "KEEP"
+			Note     string `json:"note"`
+		} `json:"resolutions"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	if session.PICOAuditLog == nil {
+		sendJSONError(w, http.StatusBadRequest, "Tidak ada PICO audit untuk sesi ini")
+		return
+	}
+
+	// reason code per flagged paper, for correct exclusion-table attribution.
+	reasonByID := map[string]string{}
+	for _, s := range session.PICOAuditLog.Slipped {
+		reasonByID[s.PaperID] = s.ReasonCode
+	}
+
+	resMap := map[string]string{}
+	for _, r := range payload.Resolutions {
+		if r.PaperID == "" || (r.Decision != "EXCLUDE" && r.Decision != "KEEP") {
+			continue
+		}
+		resMap[r.PaperID] = r.Decision
+		if r.Decision == "EXCLUDE" {
+			note := strings.TrimSpace(r.Note)
+			if note == "" {
+				note = "PICO audit override: EXCLUDE"
+			}
+			rc := reasonByID[r.PaperID]
+			if rc == "" {
+				rc = "OTHER"
+			}
+			if e := h.mongoRepo.ExcludePaperWithReason(ctx, id, r.PaperID, rc, "[PICO-AUDIT] "+note); e != nil {
+				sendJSONError(w, http.StatusInternalServerError, "Gagal mengupdate keputusan: "+e.Error())
+				return
+			}
+		}
+	}
+
+	for i := range session.PICOAuditLog.Slipped {
+		s := &session.PICOAuditLog.Slipped[i]
+		if dec, ok := resMap[s.PaperID]; ok {
+			s.Actioned = true
+			s.Resolution = dec
+		}
+	}
+
+	// Recompute the Module 5 summary with the corrected inclusion set (audit is reused,
+	// not re-run, because PICOAuditLog already exists).
+	session.Status = "M5_STEP4_REVIEW_HASIL"
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mengupdate sesi: "+err.Error())
+		return
+	}
+	h.pipeline.ExecuteAsync(ctx, session.ID)
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": "Koreksi PICO audit tersimpan, ringkasan Modul 5 dihitung ulang",
 		"status":  session.Status,
 	})
 }

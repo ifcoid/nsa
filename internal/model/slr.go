@@ -409,6 +409,29 @@ type ExclusionTable struct {
 	FullTextPrep     string `bson:"full_text_prep" json:"full_text_prep"`
 }
 
+// SlippedPaper is one INCLUDE paper flagged by the PICO-consistency audit as a probable
+// false-include, plus the human resolution (EXCLUDE accept / KEEP override).
+type SlippedPaper struct {
+	PaperID    string `bson:"paper_id" json:"paper_id"` // screening _id hex
+	DOI        string `bson:"doi" json:"doi"`
+	Title      string `bson:"title" json:"title"`
+	ReasonCode string `bson:"reason_code" json:"reason_code"`
+	Reason     string `bson:"reason" json:"reason"`
+	Actioned   bool   `bson:"actioned" json:"actioned"`     // human has decided
+	Resolution string `bson:"resolution" json:"resolution"` // "EXCLUDE" | "KEEP"
+}
+
+// PICOAuditLog records the full-coverage PICO-consistency audit over the INCLUDE set
+// and tracks resolution of each flagged paper. M5 cannot close until every flagged
+// paper is actioned (excluded or explicitly kept with justification).
+type PICOAuditLog struct {
+	IncludedAtAudit int            `bson:"included_at_audit" json:"included_at_audit"`
+	Coverage        string         `bson:"coverage" json:"coverage"` // e.g. "100% (124/124)"
+	Action          string         `bson:"action" json:"action"`     // "none" | "re-screening"
+	Analysis        string         `bson:"analysis" json:"analysis"`
+	Slipped         []SlippedPaper `bson:"slipped" json:"slipped"`
+}
+
 type DataMiningLog struct {
 	InitialSample InitialSearchSample `bson:"initial_sample" json:"initial_sample"`
 	SanityCheck   *SanityCheckVerdict `bson:"sanity_check,omitempty" json:"sanity_check,omitempty"`
@@ -444,6 +467,7 @@ type SLRSession struct {
 	Reviewer2Perspectives []ScreeningPerspective `bson:"reviewer2_perspectives,omitempty" json:"reviewer2_perspectives,omitempty"`
 	ScreeningResultsLog   []ScreeningResultsLog  `bson:"screening_results_log,omitempty" json:"screening_results_log,omitempty"`
 	ExclusionTable        *ExclusionTable        `bson:"exclusion_table,omitempty" json:"exclusion_table,omitempty"`
+	PICOAuditLog          *PICOAuditLog          `bson:"pico_audit_log,omitempty" json:"pico_audit_log,omitempty"`
 	Modul5Summary         *Modul5Summary         `bson:"modul5_summary,omitempty" json:"modul5_summary,omitempty"`
 	AcquisitionLog        *AcquisitionLog        `bson:"acquisition_log,omitempty" json:"acquisition_log,omitempty"`
 	FulltextScreeningLog  []ScreeningResultsLog  `bson:"fulltext_screening_log,omitempty" json:"fulltext_screening_log,omitempty"`

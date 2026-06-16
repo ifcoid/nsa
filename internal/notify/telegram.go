@@ -78,6 +78,11 @@ func describe(status string) string {
 		return "⏸️ Screening dijeda: endpoint embedding (BGE-M3) mati.\n" +
 			"▶️ Nyalakan Colab (bisa di Chrome Android): " + ColabEmbedURL + "\n" +
 			"Lalu Run all → salin EMBED_ENDPOINT → masukkan di web."
+	case strings.HasSuffix(status, "_WAITING_EMBED"):
+		// M9: verifikasi sitasi dijeda agar tidak terdegradasi (mutu Q1).
+		return "⏸️ Verifikasi sitasi (M9) dijeda: server embedding/pencarian BGE-M3 (hybrid) mati.\n" +
+			"▶️ Nyalakan Colab: " + ColabEmbedURL + "\n" +
+			"Run all → salin EMBED_ENDPOINT → masukkan di web, lalu lanjutkan."
 	case status == "M6_STEP2_WAITING_RESOLUTION":
 		return "🧪 Batch full-text screening selesai. Resolusi konflik / Setuju & Lanjut di web."
 	case status == "M6_STEP1_WAITING_SYNC":
