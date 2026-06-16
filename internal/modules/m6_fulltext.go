@@ -429,6 +429,36 @@ func cohensKappa(total, bothInc, bothExc, r1IncR2Exc, r1ExcR2Inc int) float64 {
 	return 1.0
 }
 
+// fullTextKappaReport menghitung Cohen's κ atas SELURUH paper dual-screened DAN memberi
+// catatan kejujuran statistik. κ TAK TERDEFINISI bila tak ada variansi kategori (mis.
+// kedua reviewer sepakat satu kelas untuk semua paper -> pE=1 -> 0/0) — kasus ini WAJIB
+// dilaporkan apa adanya (persen kesepakatan observasi), bukan disembunyikan jadi 1.000,
+// agar manuskrip tak melebih-lebihkan reliabilitas (paradoks kappa / prevalence problem).
+func fullTextKappaReport(total, bothInc, bothExc, r1IncR2Exc, r1ExcR2Inc int) (kappa float64, defined bool, note string) {
+	if total == 0 {
+		return 0, false, "TAK TERDEFINISI — belum ada paper dual-screened (n=0)"
+	}
+	agree := bothInc + bothExc
+	poPct := float64(agree) / float64(total) * 100
+	probR1Inc := float64(bothInc+r1IncR2Exc) / float64(total)
+	probR2Inc := float64(bothInc+r1ExcR2Inc) / float64(total)
+	probR1Exc := float64(bothExc+r1ExcR2Inc) / float64(total)
+	probR2Exc := float64(bothExc+r1IncR2Exc) / float64(total)
+	pE := probR1Inc*probR2Inc + probR1Exc*probR2Exc
+	if 1-pE <= 1e-9 {
+		return 0, false, fmt.Sprintf("TAK TERDEFINISI (tanpa variansi kategori — paradoks kappa; kedua reviewer memakai satu kelas yang sama untuk semua %d paper). Laporkan persen kesepakatan observasi = %.1f%% (n=%d).", total, poPct, total)
+	}
+	k := (float64(agree)/float64(total) - pE) / (1 - pE)
+	// Marginal sangat timpang (EXCLUDE sangat jarang di tahap full-text) -> κ kurang
+	// informatif walau terdefinisi; sertakan kesepakatan observasi sebagai pendamping.
+	minClass := bothExc + r1IncR2Exc + r1ExcR2Inc // kemunculan EXCLUDE minimal
+	caveat := ""
+	if minClass < 2 {
+		caveat = " ⚠ marginal timpang (EXCLUDE jarang) → κ kurang informatif; dampingi dengan kesepakatan observasi."
+	}
+	return k, true, fmt.Sprintf("κ=%.3f (n=%d, kesepakatan observasi %.1f%%).%s", k, total, poPct, caveat)
+}
+
 func (m *M6Acquisition) operationalDefsContext(session *model.SLRSession) string {
 	if session.PICODefinitions != nil {
 		b, _ := json.Marshal(session.PICODefinitions)
@@ -464,6 +494,10 @@ func (m *M6Acquisition) buildModul6Outputs(ctx context.Context, session *model.S
 	var includedFull, excludedFull []map[string]interface{}
 	reasonCounts := map[string]int{}
 	uncertain := 0
+	// Matriks konfusi dual-reviewer atas SELURUH paper dual-screened (untuk kappa
+	// FINAL yang benar — bukan hanya batch terakhir). Hanya keputusan biner
+	// INCLUDE/EXCLUDE yang dihitung (UNCERTAIN diabaikan dari kappa).
+	var kTotal, kBothInc, kBothExc, kR1IncR2Exc, kR1ExcR2Inc int
 
 	for _, p := range papers {
 		// hanya paper eligible full-text
@@ -488,10 +522,29 @@ func (m *M6Acquisition) buildModul6Outputs(ctx context.Context, session *model.S
 		default:
 			uncertain++
 		}
+
+		// Akumulasi matriks konfusi biner (per-reviewer) untuk kappa final overall.
+		d1f, d2f := getStr(p, "Screener_1_Decision_Full"), getStr(p, "Screener_2_Decision_Full")
+		bin := func(s string) bool { return s == "INCLUDE" || s == "EXCLUDE" }
+		if bin(d1f) && bin(d2f) {
+			kTotal++
+			switch {
+			case d1f == "INCLUDE" && d2f == "INCLUDE":
+				kBothInc++
+			case d1f == "EXCLUDE" && d2f == "EXCLUDE":
+				kBothExc++
+			case d1f == "INCLUDE" && d2f == "EXCLUDE":
+				kR1IncR2Exc++
+			default:
+				kR1ExcR2Inc++
+			}
+		}
 	}
 
-	// OUTPUT 1: fulltext_screening_log (sudah terisi per-batch). Final kappa:
-	finalKappa := session.FulltextKappa
+	// OUTPUT 1: kappa FINAL dihitung atas SELURUH paper dual-screened (bukan batch
+	// terakhir), dan dilaporkan jujur bila tak terdefinisi (tanpa variansi kategori).
+	finalKappa, _, kappaNote := fullTextKappaReport(kTotal, kBothInc, kBothExc, kR1IncR2Exc, kR1ExcR2Inc)
+	session.FulltextKappa = finalKappa
 	disagreedRemaining, _ := m.deps.MongoRepo.GetDisagreedFullTextPapers(ctx, session.ID)
 
 	// PICO-CONSISTENCY FINAL AUDIT (15% included)
@@ -531,14 +584,14 @@ func (m *M6Acquisition) buildModul6Outputs(ctx context.Context, session *model.S
 	}
 	summary := fmt.Sprintf("=== FULL-TEXT SCREENING SUMMARY (SLR) ===\n\n"+
 		"ACQUISITION:\n%s\n\n"+
-		"FULL-TEXT SCREENING:\n- Total dievaluasi (batch): %d\n- Full-text kappa final: %.3f\n- Disagreements belum terselesaikan: %d\n\n"+
+		"FULL-TEXT SCREENING:\n- Total dual-screened (full-text, biner): %d\n- Inter-rater reliability (Cohen's κ): %s\n- Disagreements belum terselesaikan: %d\n\n"+
 		"DECISIONS:\n- FINAL INCLUDED: %d studi\n- EXCLUDED (full-text): %d\n- UNCERTAIN/pending: %d\n\n"+
 		"EXCLUSION REASONS (full-text stage):\n%s\n"+
 		"PICO-CONSISTENCY FINAL AUDIT:\n%s\n\n"+
 		"INACCESSIBLE IMPACT:\n%s\n\n"+
 		"EXTRACTION READINESS:\n%s\n\n"+
 		"NEXT: Data extraction + QA (Modul 7)",
-		acqLine, countBatchProcessed(session), finalKappa, len(disagreedRemaining),
+		acqLine, kTotal, kappaNote, len(disagreedRemaining),
 		len(includedFull), len(excludedFull), uncertain, exTable, picoAudit, inacc.Markdown, readyMd)
 
 	session.Modul6Summary = &model.Modul6Summary{Markdown: summary}
