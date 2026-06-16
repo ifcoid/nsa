@@ -99,6 +99,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("GET /api/sessions/{id}/disagreements", r.sessionHndlr.GetDisagreements)
 	protected.HandleFunc("POST /api/sessions/{id}/resolve-conflicts", r.sessionHndlr.ResolveConflicts)
 	protected.HandleFunc("POST /api/sessions/{id}/pico-audit/resolve", r.sessionHndlr.ResolvePICOAudit)
+	protected.HandleFunc("POST /api/sessions/{id}/pico-audit/rerun", r.sessionHndlr.RerunPICOAudit)
 	protected.HandleFunc("GET /api/sessions/{id}/extractions", r.sessionHndlr.GetExtractions)
 	protected.HandleFunc("GET /api/sessions/{id}/extractions/ambiguous", r.sessionHndlr.GetAmbiguousExtractions)
 	protected.HandleFunc("PUT /api/sessions/{id}/extractions/{ext_id}/resolve", r.sessionHndlr.ResolveExtractionManual)

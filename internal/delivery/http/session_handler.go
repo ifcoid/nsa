@@ -781,6 +781,38 @@ func (h *SessionHandler) ResolvePICOAudit(w http.ResponseWriter, req *http.Reque
 	})
 }
 
+// RerunPICOAudit forces a fresh full-coverage PICO-consistency audit over the current
+// INCLUDE set by clearing the stored audit, so M5_STEP4_REVIEW_HASIL re-runs it. Use
+// after corrections to re-verify the cleaned inclusion set.
+func (h *SessionHandler) RerunPICOAudit(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	if !strings.HasPrefix(session.Status, "M5_STEP4") {
+		sendJSONError(w, http.StatusBadRequest, "Audit ulang hanya tersedia pada tahap akhir Modul 5 (M5_STEP4)")
+		return
+	}
+	session.PICOAuditLog = nil // force a fresh full-coverage audit on recompute
+	session.Status = "M5_STEP4_REVIEW_HASIL"
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mengupdate sesi: "+err.Error())
+		return
+	}
+	h.pipeline.ExecuteAsync(ctx, session.ID)
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": "Audit ulang PICO dimulai (cakupan penuh atas semua paper INCLUDE)",
+		"status":  session.Status,
+	})
+}
+
 // DeleteQdrantPaper menghapus vektor dari Qdrant berdasarkan DOI dan mereset status MongoDB
 func (h *SessionHandler) DeleteQdrantPaper(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
