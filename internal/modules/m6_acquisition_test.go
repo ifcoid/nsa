@@ -26,3 +26,20 @@ func TestIsValidDOI(t *testing.T) {
 		}
 	}
 }
+
+func TestArxivPDFURL(t *testing.T) {
+	cases := map[string]string{
+		"http://arxiv.org/abs/2410.09998":    "http://arxiv.org/pdf/2410.09998.pdf",
+		"http://arxiv.org/abs/2208.04166v1":  "http://arxiv.org/pdf/2208.04166v1.pdf",
+		"https://arxiv.org/abs/2408.13074v2": "https://arxiv.org/pdf/2408.13074v2.pdf",
+	}
+	for in, want := range cases {
+		if got := arxivPDFURL(in); got != want {
+			t.Errorf("arxivPDFURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// ID tanpa pola /abs/ tidak bisa dikonversi -> kosong (jangan mengarang URL).
+	if got := arxivPDFURL("http://arxiv.org/something/123"); got != "" {
+		t.Errorf("expected empty for non-abs id, got %q", got)
+	}
+}

@@ -129,15 +129,34 @@ func (m *M6Acquisition) processAcquisition(ctx context.Context, session *model.S
 			continue
 		}
 
+		// Title dipakai untuk fallback pencarian arXiv by-title (preprint sering punya
+		// DOI berbeda / tanpa DOI terbit). Dokumen bisa menyimpan "title" atau "Title".
+		title, _ := p["title"].(string)
+		if title == "" {
+			title, _ = p["Title"].(string)
+		}
+
 		doi, ok := p["DOI"].(string)
 		if !ok || doi == "" {
-			// Jika tidak ada DOI, langsung hitl download
+			doi, _ = p["doi"].(string)
+		}
+		if doi == "" {
+			// Tidak ada DOI sama sekali: coba arXiv by-title dulu sebelum menyerah ke HITL.
+			if arxivURL := m.checkArxiv(client, "", title); arxivURL != "" {
+				m.updatePaperAcquisition(ctx, coll, p["_id"], "arxiv", arxivURL)
+				continue
+			}
 			m.updatePaperAcquisition(ctx, coll, p["_id"], "hitl download", "")
 			continue
 		}
 		if !isValidDOI(doi) {
-			// Identifier bukan DOI asli (mis. Scopus EID "2-s2.0-..."); Unpaywall/arXiv akan
-			// gagal diam-diam. Langsung hitl download + tandai agar user tahu harus cari manual.
+			// Identifier bukan DOI asli (mis. Scopus EID "2-s2.0-..."): Unpaywall/arXiv-by-DOI
+			// gagal diam-diam. Coba arXiv by-title; kalau gagal -> hitl download + tandai.
+			if arxivURL := m.checkArxiv(client, "", title); arxivURL != "" {
+				logger.Logf(session.ID, "      [M6] '%s' bukan DOI valid tapi preprint ketemu di arXiv (by-title) -> %s", doi, arxivURL)
+				m.updatePaperAcquisition(ctx, coll, p["_id"], "arxiv", arxivURL)
+				continue
+			}
 			logger.Logf(session.ID, "      [M6] Identifier bukan DOI valid ('%s') -> hitl download (cari manual)", doi)
 			m.updatePaperAcquisition(ctx, coll, p["_id"], "hitl download", "")
 			_, _ = coll.UpdateByID(ctx, p["_id"], bson.M{"$set": bson.M{"id_not_doi": true}})
@@ -151,8 +170,9 @@ func (m *M6Acquisition) processAcquisition(ctx context.Context, session *model.S
 			continue
 		}
 
-		// 2. Cek ArXiv via API (jika DOI ditemukan di arXiv)
-		arxivURL := m.checkArxiv(client, doi)
+		// 2. Cek arXiv: pertama by-DOI, lalu fallback by-title (preprint sering punya
+		//    arXiv-ID sendiri sedangkan DOI terbit IEEE/Springer tidak terdaftar di arXiv).
+		arxivURL := m.checkArxiv(client, doi, title)
 		if arxivURL != "" {
 			m.updatePaperAcquisition(ctx, coll, p["_id"], "arxiv", arxivURL)
 			continue
@@ -265,34 +285,69 @@ func (m *M6Acquisition) checkUnpaywall(client *http.Client, doi, email string) s
 	return ""
 }
 
-func (m *M6Acquisition) checkArxiv(client *http.Client, doi string) string {
-	if !isValidDOI(doi) {
+// checkArxiv mencari PDF preprint di arXiv. Pertama by-DOI (exact), lalu fallback by-title.
+// Fallback ini penting: DOI terbit (IEEE/Springer) sering TIDAK terdaftar di arXiv walau
+// preprint-nya ada dengan arXiv-ID sendiri -> by-DOI gagal diam-diam. Kandidat by-title
+// hanya diterima bila judulnya mirip (titleSim >= 0.8) agar tidak salah-match paper lain.
+func (m *M6Acquisition) checkArxiv(client *http.Client, doi, title string) string {
+	// 1. By-DOI: DOI yang sama persis -> entri pertama valid tanpa cek judul.
+	if isValidDOI(doi) {
+		if entries := m.arxivQuery(client, "doi:"+doi); len(entries) > 0 {
+			if u := arxivPDFURL(entries[0].ID); u != "" {
+				return u
+			}
+		}
+	}
+
+	// 2. Fallback by-title (dengan guard similarity untuk cegah false-match).
+	t := strings.TrimSpace(title)
+	if t == "" {
 		return ""
 	}
-	urlStr := fmt.Sprintf("http://export.arxiv.org/api/query?search_query=doi:%s", url.QueryEscape(doi))
-	req, _ := http.NewRequest("GET", urlStr, nil)
+	nt := NormTitle(t)
+	for _, e := range m.arxivQuery(client, `ti:"`+t+`"`) {
+		if titleSim(nt, NormTitle(e.Title)) >= 0.8 {
+			if u := arxivPDFURL(e.ID); u != "" {
+				return u
+			}
+		}
+	}
+	return ""
+}
+
+type arxivEntry struct {
+	ID    string `xml:"id"`
+	Title string `xml:"title"`
+}
+
+// arxivQuery menjalankan satu query ke arXiv API dan mengembalikan entri (max 5).
+func (m *M6Acquisition) arxivQuery(client *http.Client, searchQuery string) []arxivEntry {
+	params := url.Values{}
+	params.Set("search_query", searchQuery)
+	params.Set("max_results", "5")
+	req, _ := http.NewRequest("GET", "http://export.arxiv.org/api/query?"+params.Encode(), nil)
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != 200 {
-		return ""
+		return nil
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	
-	type ArxivEntry struct {
-		ID string `xml:"id"`
+	var feed struct {
+		Entries []arxivEntry `xml:"entry"`
 	}
-	type ArxivFeed struct {
-		Entries []ArxivEntry `xml:"entry"`
+	if err := xml.Unmarshal(body, &feed); err != nil {
+		return nil
 	}
-	var feed ArxivFeed
-	if err := xml.Unmarshal(body, &feed); err == nil && len(feed.Entries) > 0 {
-		// Convert standard arxiv URL to PDF URL
-		// Example ID: http://arxiv.org/abs/2101.00001
-		pdfURL := strings.Replace(feed.Entries[0].ID, "/abs/", "/pdf/", 1)
-		if pdfURL != "" && pdfURL != feed.Entries[0].ID {
-			return pdfURL + ".pdf"
-		}
+	return feed.Entries
+}
+
+// arxivPDFURL mengubah arXiv abs-ID menjadi URL PDF.
+// Contoh: http://arxiv.org/abs/2101.00001v1 -> http://arxiv.org/pdf/2101.00001v1.pdf
+func arxivPDFURL(id string) string {
+	pdfURL := strings.Replace(id, "/abs/", "/pdf/", 1)
+	if pdfURL == "" || pdfURL == id {
+		return ""
 	}
-	return ""
+	return pdfURL + ".pdf"
 }
