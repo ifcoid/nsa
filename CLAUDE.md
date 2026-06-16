@@ -44,3 +44,32 @@ saya 2-3 kali keliru menyalahkan deploy/fly.io padahal akarnya bug `omitempty` d
 2. Cek apakah field itu `omitempty` dan sedang di-set ke nilai zero (nil/false/"").
 3. Cek log runtime: langkahnya benar dijalankan atau di-SKIP (mis. `firstAuditPass`)?
 4. BARU setelah 1-3 bersih, curigai deploy/cache/CI (cek commit SHA yang live + log).
+
+## Arsitektur WAJIB: HITL, xAI, Neuro-Symbolic, Multi-tenant
+
+Setiap fitur yang menyentuh **keputusan ilmiah** (screening, audit, inklusi/eksklusi,
+ekstraksi, sintesis, manuskrip) WAJIB memenuhi empat invariant ini:
+
+- **HITL (Human-in-the-Loop):** AI **mengusulkan/menandai**, MANUSIA **memutuskan**.
+  Jangan auto-apply keputusan inklusi/eksklusi tanpa konfirmasi manusia. Sediakan **gate**
+  yang memblok kemajuan sampai keputusan manusia lengkap.
+- **xAI (Explainable):** setiap flag/keputusan AI membawa **provenance** yang bisa diaudit
+  (sumber sinyal + bukti + **klausa kriteria yang dikutip**), tersimpan & bisa diekspor.
+- **Neuro-Symbolic:** gabungkan **aturan simbolik deterministik** (diturunkan dari
+  definisi/kriteria yang TERSIMPAN di sesi) DENGAN **penilaian neural (LLM)**. Aturan
+  menjamin recall pada kasus pasti; LLM menangani nuansa. LLM **bukan** satu-satunya hakim.
+- **Multi-tenant — TIDAK boleh hardcode:** sistem dipakai banyak peneliti dengan PICO
+  berbeda. SEMUA kriteria/aturan/ambang HARUS berasal dari **DATA sesi** (`PICODefinitions`,
+  `AuditScopeRules`, dll) yang **bisa diedit user** — JANGAN menanam aturan review-spesifik
+  di kode/prompt. Butuh aturan baru → beri **mekanisme edit (HITL)** + simpan di sesi.
+
+## Model pengujian (penting)
+
+Korektnya **perilaku** TIDAK bisa diklaim hanya dari unit test + build hijau. **User =
+tester manusia nyata** yang menjalankan alur sungguhan lalu mengirim output untuk
+dievaluasi (AI tak bisa menguji interaktif tanpa user).
+
+- Setelah implementasi: jalankan build + unit test + (bila relevan) verifikasi mekanis
+  (mis. `pdflatex`), lalu nyatakan **"siap diuji"** — BUKAN "selesai/matang".
+- **"Selesai/matang" hanya setelah user menjalankan test nyata** dan hasilnya sesuai.
+- Bedakan unit test (komponen) vs verifikasi perilaku end-to-end (butuh user).
