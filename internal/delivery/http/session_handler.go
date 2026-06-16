@@ -806,6 +806,13 @@ func (h *SessionHandler) RerunPICOAudit(w http.ResponseWriter, req *http.Request
 		sendJSONError(w, http.StatusInternalServerError, "Gagal mengupdate sesi: "+err.Error())
 		return
 	}
+	// UpdateSession cannot clear an omitempty nil pointer (it is dropped from $set), so
+	// explicitly unset the stored audit. Without this the rerun silently reuses the old
+	// audit and the fresh full-coverage run is skipped.
+	if err := h.mongoRepo.ClearPICOAudit(ctx, id); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mereset audit PICO: "+err.Error())
+		return
+	}
 	h.pipeline.ExecuteAsync(ctx, session.ID)
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"message": "Audit ulang PICO dimulai (cakupan penuh atas semua paper INCLUDE)",

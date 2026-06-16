@@ -109,6 +109,16 @@ func (r *MongoRepository) UpdateSession(ctx context.Context, session *model.SLRS
 	return err
 }
 
+// ClearPICOAudit removes the stored PICO audit log from a session. UpdateSession cannot
+// do this by setting the field to nil: the field is `omitempty`, so a nil value is
+// dropped from the $set document and the old value persists in Mongo. An explicit
+// $unset is required so the next M5_STEP4_REVIEW_HASIL re-runs a fresh full audit.
+func (r *MongoRepository) ClearPICOAudit(ctx context.Context, sessionID string) error {
+	collection := r.client.Database(r.dbName).Collection("slr_sessions")
+	_, err := collection.UpdateOne(ctx, bson.M{"_id": sessionID}, bson.M{"$unset": bson.M{"pico_audit_log": ""}})
+	return err
+}
+
 // GetDB returns the underlying mongo.Database for direct collection access.
 func (r *MongoRepository) GetDB() *mongo.Database {
 	return r.client.Database(r.dbName)
