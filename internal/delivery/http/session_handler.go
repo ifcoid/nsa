@@ -1473,8 +1473,9 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 
 			if matched {
 				updateFields := bson.M{
-					"full_text_retrieved": true, 
-					"acquisition_date": time.Now().Format(time.RFC3339),
+					"full_text_retrieved": true,
+					"acquisition_date":    time.Now().Format(time.RFC3339),
+					"inaccessible":        false, // retrieved & inaccessible are mutually exclusive
 				}
 				if newDOI != "" {
 					updateFields["doi"] = newDOI
@@ -1491,7 +1492,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 		// Mock mode: Tandai semua yang "unpaywall" sebagai retrieved
 		for _, p := range papers {
 			if loc, ok := p["full_text_location"].(string); ok && loc == "unpaywall" {
-				update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339)}}
+				update := bson.M{"$set": bson.M{"full_text_retrieved": true, "acquisition_date": time.Now().Format(time.RFC3339), "inaccessible": false}}
 				coll.UpdateByID(ctx, p["_id"], update)
 				syncedCount++
 			}
@@ -1562,6 +1563,10 @@ func (h *SessionHandler) MarkInaccessible(w http.ResponseWriter, req *http.Reque
 		"$set": bson.M{
 			"inaccessible":               true,
 			"documentation_inaccessible": payload.Documentation,
+			// inaccessible & retrieved are mutually exclusive: clear the retrieved flags so
+			// a paper can never be counted in both VectorizedCount and InaccessibleCount.
+			"full_text_retrieved": false,
+			"Full_Text_Retrieved": false,
 		},
 	}
 	_, err := coll.UpdateByID(ctx, objID, update)

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"nsa/internal/logger"
 	"nsa/internal/model"
+	"regexp"
 	"strings"
 	"time"
 
@@ -134,6 +135,14 @@ func (m *M6Acquisition) processAcquisition(ctx context.Context, session *model.S
 			m.updatePaperAcquisition(ctx, coll, p["_id"], "hitl download", "")
 			continue
 		}
+		if !isValidDOI(doi) {
+			// Identifier bukan DOI asli (mis. Scopus EID "2-s2.0-..."); Unpaywall/arXiv akan
+			// gagal diam-diam. Langsung hitl download + tandai agar user tahu harus cari manual.
+			logger.Logf(session.ID, "      [M6] Identifier bukan DOI valid ('%s') -> hitl download (cari manual)", doi)
+			m.updatePaperAcquisition(ctx, coll, p["_id"], "hitl download", "")
+			_, _ = coll.UpdateByID(ctx, p["_id"], bson.M{"$set": bson.M{"id_not_doi": true}})
+			continue
+		}
 
 		// 1. Cek Unpaywall
 		oaURL := m.checkUnpaywall(client, doi, email)
@@ -212,7 +221,21 @@ func (m *M6Acquisition) updateAcquisitionLog(ctx context.Context, session *model
 	return nil
 }
 
+// doiPattern matches a real DOI (after stripping any doi.org prefix).
+var doiPattern = regexp.MustCompile(`^10\.\d{4,9}/`)
+
+// isValidDOI reports whether s looks like a real DOI. Non-DOI identifiers (e.g. Scopus
+// EID "2-s2.0-...") make Unpaywall/arXiv fail silently, so callers skip them.
+func isValidDOI(s string) bool {
+	s = strings.TrimPrefix(s, "https://doi.org/")
+	s = strings.TrimPrefix(s, "http://doi.org/")
+	return doiPattern.MatchString(strings.TrimSpace(s))
+}
+
 func (m *M6Acquisition) checkUnpaywall(client *http.Client, doi, email string) string {
+	if !isValidDOI(doi) {
+		return ""
+	}
 	urlStr := fmt.Sprintf("https://api.unpaywall.org/v2/%s?email=%s", url.PathEscape(doi), url.QueryEscape(email))
 	req, _ := http.NewRequest("GET", urlStr, nil)
 	resp, err := client.Do(req)
@@ -243,6 +266,9 @@ func (m *M6Acquisition) checkUnpaywall(client *http.Client, doi, email string) s
 }
 
 func (m *M6Acquisition) checkArxiv(client *http.Client, doi string) string {
+	if !isValidDOI(doi) {
+		return ""
+	}
 	urlStr := fmt.Sprintf("http://export.arxiv.org/api/query?search_query=doi:%s", url.QueryEscape(doi))
 	req, _ := http.NewRequest("GET", urlStr, nil)
 	resp, err := client.Do(req)
