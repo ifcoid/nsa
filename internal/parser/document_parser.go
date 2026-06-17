@@ -97,21 +97,33 @@ func parseCSV(content []byte) ([]ParsedDocument, error) {
 		reader.Comma = ','
 	}
 
-	records, err := reader.ReadAll()
+	// Read header row first
+	headers, err := reader.Read()
 	if err != nil {
 		return nil, err
 	}
 
-	if len(records) < 2 {
-		return []ParsedDocument{}, nil
-	}
-
-	headers := records[0]
 	headerMap := make(map[string]int)
 	for i, h := range headers {
 		h = strings.TrimSpace(strings.ToLower(strings.ReplaceAll(h, "\"", "")))
 		h = strings.TrimPrefix(h, "\ufeff") // Strip any remaining BOM chars
 		headerMap[h] = i
+	}
+
+	// Read records one at a time to handle malformed rows gracefully.
+	// Using ReadAll() would discard all records after the first parse error,
+	// which causes issues with Scopus CSV files that may have quoting problems.
+	var records [][]string
+	for {
+		row, err := reader.Read()
+		if err != nil {
+			break // EOF or unrecoverable error - stop reading
+		}
+		records = append(records, row)
+	}
+
+	if len(records) == 0 {
+		return []ParsedDocument{}, nil
 	}
 
 	// Map known variants
@@ -142,7 +154,7 @@ func parseCSV(content []byte) ([]ParsedDocument, error) {
 	referencesIdx := getIdx(headerMap, "references")
 
 	var docs []ParsedDocument
-	for _, row := range records[1:] {
+	for _, row := range records {
 		doc := ParsedDocument{}
 		if titleIdx != -1 && titleIdx < len(row) { doc.Title = row[titleIdx] }
 		if absIdx != -1 && absIdx < len(row) { doc.Abstract = row[absIdx] }
@@ -483,12 +495,10 @@ func parseNBIB(content []byte) ([]ParsedDocument, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Empty lines can serve as record separators in some exports
+		// In PubMed NBIB/MEDLINE format, blank lines are just formatting
+		// whitespace within records. Records are separated by PMID- tags
+		// or ER (End of Record) tags, NOT by blank lines.
 		if line == "" {
-			// If we have a completed record (has title), finalize it
-			if currentDoc != nil && currentDoc.Title != "" {
-				finalizeRecord()
-			}
 			continue
 		}
 
