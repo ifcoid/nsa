@@ -1819,6 +1819,101 @@ func (h *SessionHandler) RecodeExclusions(w http.ResponseWriter, req *http.Reque
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "Re-code diterapkan, menyusun ulang ringkasan", "recoded": n})
 }
 
+// SuggestRecodes meminta LLM (role Auditor configurable) mengusulkan reason_code spesifik
+// untuk tiap paper EXCLUDE full-text berdasar PICO + bukti. AI mengusulkan; HITL memutuskan
+// (hasil hanya pre-isi dropdown, TIDAK auto-apply).
+func (h *SessionHandler) SuggestRecodes(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	coll := h.mongoRepo.GetScreeningCollection()
+	cursor, err := coll.Find(ctx, bson.M{"session_id": id, "full_text_retrieved": true})
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mengambil data")
+		return
+	}
+	var papers []bson.M
+	_ = cursor.All(ctx, &papers)
+
+	idx2paper := map[int]string{}
+	arr := []map[string]interface{}{}
+	i := 0
+	for _, p := range papers {
+		if !fullTextExcluded(p) {
+			continue
+		}
+		title, _ := p["Title"].(string)
+		if title == "" {
+			title, _ = p["title"].(string)
+		}
+		ev, _ := p["Screener_1_Notes_Full"].(string)
+		oid, _ := p["_id"].(primitive.ObjectID)
+		idx2paper[i] = oid.Hex()
+		arr = append(arr, map[string]interface{}{"index": i, "title": title, "evidence": ev})
+		i++
+	}
+	if len(arr) == 0 {
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{"suggestions": []interface{}{}})
+		return
+	}
+
+	picoDef := ""
+	if session.PICODefinitions != nil {
+		b, _ := json.Marshal(session.PICODefinitions)
+		picoDef = string(b)
+	}
+	reasonCodes := []string{}
+	if session.ScreeningSetup != nil {
+		reasonCodes = session.ScreeningSetup.ReasonCodes
+	}
+	papersJSON, _ := json.Marshal(arr)
+
+	factory := h.pipeline.GetLLMFactory()
+	roles := h.mongoRepo.GetLLMRoles(ctx)
+	var suggestions []agent.ExclusionCodeSuggestion
+	var lastErr error
+	for _, prov := range []string{roles.Auditor, roles.AuditorFallback} {
+		if strings.TrimSpace(prov) == "" {
+			continue
+		}
+		c, e := factory.CreateClient(ctx, prov)
+		if e != nil {
+			lastErr = e
+			continue
+		}
+		s, e2 := agent.NewScreeningAgent(c).SuggestExclusionCodes(ctx, picoDef, strings.Join(reasonCodes, ", "), string(papersJSON))
+		if e2 == nil {
+			suggestions = s
+			lastErr = nil
+			break
+		}
+		lastErr = e2
+	}
+	if lastErr != nil && len(suggestions) == 0 {
+		sendJSONError(w, http.StatusBadGateway, "AI saran gagal (cek role/kuota Auditor): "+lastErr.Error())
+		return
+	}
+
+	out := []map[string]interface{}{}
+	for _, s := range suggestions {
+		pid, ok := idx2paper[s.Index]
+		if !ok {
+			continue
+		}
+		out = append(out, map[string]interface{}{"paper_id": pid, "suggested_code": s.ReasonCode, "rationale": s.Rationale})
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"suggestions": out})
+}
+
 func (h *SessionHandler) GetM6Papers(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {

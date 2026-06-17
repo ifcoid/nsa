@@ -398,6 +398,41 @@ type PrioritizationResult struct {
 	Report string `json:"report"`
 }
 
+// ExclusionCodeSuggestion = usulan kode eksklusi spesifik untuk satu paper (AI proposes).
+type ExclusionCodeSuggestion struct {
+	Index      int    `json:"index"`
+	ReasonCode string `json:"reason_code"`
+	Rationale  string `json:"rationale"`
+}
+
+// SuggestExclusionCodes mengusulkan reason_code PALING SPESIFIK (dari daftar yang diberikan)
+// untuk tiap paper yang SUDAH EXCLUDE, berdasar PICO + bukti. AI mengusulkan; manusia
+// memutuskan (HITL) — hasil dipakai untuk pre-isi dropdown, bukan auto-apply.
+func (a *ScreeningAgent) SuggestExclusionCodes(ctx context.Context, pico, reasonCodesCSV, papersJSON string) ([]ExclusionCodeSuggestion, error) {
+	systemPrompt := `Anda Auditor Systematic Literature Review. Tiap paper di bawah SUDAH diputuskan EXCLUDE pada tahap full-text — Anda TIDAK mengubah keputusan, hanya memilih KODE ALASAN yang paling tepat.
+
+Tugas: untuk SETIAP paper, pilih SATU reason_code PALING SPESIFIK dari daftar REASON CODES yang diberikan, berdasar PICO + bukti/alasan yang menyertainya.
+- JANGAN memakai "OTHER" bila ada kode spesifik yang cocok. Contoh: tidak ada Intervensi yang dimaksud -> I-NOMATCH; Outcome/metrik tak dilaporkan -> O-NOMATCH; Populasi tak cocok -> P-NOMATCH; desain studi tak sesuai -> STUDY-DESIGN.
+- Pakai HANYA kode dari daftar REASON CODES (persis). Bila benar-benar tak ada yang cocok, baru "OTHER".
+- Pakai field "index" PERSIS sebagai identitas (jangan dikarang).
+- "rationale" = 1 kalimat MENGUTIP klausa PICO / bukti yang mendasari (xAI).
+
+Keluarkan HANYA JSON murni tanpa markdown:
+{ "suggestions": [ { "index": 0, "reason_code": "I-NOMATCH", "rationale": "what_counts I tak terpenuhi: tak ada modul SSM/Mamba." } ] }`
+	userPrompt := fmt.Sprintf("=== PICO ===\n%s\n\n=== REASON CODES (pilih PERSIS salah satu) ===\n%s\n\n=== PAPER EXCLUDE (pakai index sbg identitas) ===\n%s", pico, reasonCodesCSV, papersJSON)
+	rawResp, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, err
+	}
+	var res struct {
+		Suggestions []ExclusionCodeSuggestion `json:"suggestions"`
+	}
+	if err := json.Unmarshal([]byte(CleanJSONResponse(rawResp)), &res); err != nil {
+		return nil, err
+	}
+	return res.Suggestions, nil
+}
+
 func (a *ScreeningAgent) PrioritizeFullText(ctx context.Context, includedPapersJSON string) (string, error) {
 	systemPrompt := `Anda adalah Asisten Peneliti. Kelompokkan paper INCLUDE berikut menjadi prioritas full-text (HIGH, MEDIUM, LOW) berdasarkan abstract.
 Keluarkan output dalam bentuk teks Markdown murni (tanpa awalan markdown blok code).`
