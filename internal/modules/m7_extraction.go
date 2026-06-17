@@ -9,7 +9,10 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/ifcoid/refs"
 
 	"nsa/internal/agent"
 	"nsa/internal/llm"
@@ -198,6 +201,7 @@ func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSes
 	}
 
 	included := m.finalIncludedPapers(ctx, session)
+	m.enrichDocTypes(ctx, session.ID, included) // isi document_type (CrossRef) -> breakdown akurat
 	designBreakdown := docTypeBreakdown(included)
 
 	fw, err := ag.RecommendFramework(ctx, picoJSON, rqJSON, designBreakdown)
@@ -516,6 +520,57 @@ func (m *M7Extraction) agentWithFallback(ctx context.Context, primary, fallback 
 		return nil, errP
 	}
 	return agent.NewExtractionAgent(llm.NewRetryingClient(p, fb)), nil
+}
+
+// enrichDocTypes mengisi `document_type` (Journal Article / Conference Paper / dst.) dari
+// CrossRef untuk paper INCLUDE yang belum punya — agar breakdown framework + Methods PRISMA
+// (jurnal vs konferensi) akurat untuk jurnal Q1. Idempotent (skip yang sudah terisi),
+// persisten, dan progres ter-log per-paper ke Live Log (konvensi operasi panjang).
+func (m *M7Extraction) enrichDocTypes(ctx context.Context, sessionID string, included []map[string]interface{}) {
+	need := 0
+	for _, p := range included {
+		if getStr(p, "document_type", "Document_Type", "DocumentType") == "" {
+			need++
+		}
+	}
+	if need == 0 {
+		return
+	}
+	logger.Logf(sessionID, "   [DocType] Mengisi tipe dokumen via CrossRef untuk %d paper (Q1: breakdown jurnal/konferensi)...", need)
+	coll := m.deps.MongoRepo.GetScreeningCollection()
+	done := 0
+	for _, p := range included {
+		if getStr(p, "document_type", "Document_Type", "DocumentType") != "" {
+			continue
+		}
+		done++
+		doi := strings.TrimSpace(getStr(p, "DOI", "doi"))
+		title := getStr(p, "Title", "title")
+		var work *refs.CrossrefWork
+		if isValidDOI(doi) {
+			if w, e := refs.GetCrossrefWork(doi); e == nil {
+				work = w
+			}
+		}
+		if work == nil && title != "" {
+			if resp, e := refs.SearchCrossrefWorks(title, 1, 0); e == nil && resp != nil && len(resp.Message.Items) > 0 {
+				work = &resp.Message.Items[0]
+			}
+		}
+		if work == nil || work.Type == "" {
+			logger.Logf(sessionID, "   [DocType] %d/%d: %s → tak ada metadata CrossRef, lewati", done, need, truncTitle(title, 50))
+			time.Sleep(1500 * time.Millisecond)
+			continue
+		}
+		dt := formatStudyType(work.Type)
+		p["document_type"] = dt // update in-memory agar breakdown segera akurat
+		if oid, ok := p["_id"].(primitive.ObjectID); ok {
+			_, _ = coll.UpdateByID(ctx, oid, bson.M{"$set": bson.M{"document_type": dt}})
+		}
+		logger.Logf(sessionID, "   [DocType] %d/%d: %s → %s", done, need, truncTitle(title, 50), dt)
+		time.Sleep(1500 * time.Millisecond)
+	}
+	logger.Logf(sessionID, "   [DocType] Selesai mengisi tipe dokumen.")
 }
 
 func docTypeBreakdown(papers []map[string]interface{}) string {

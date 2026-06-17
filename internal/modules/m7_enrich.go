@@ -396,6 +396,14 @@ func buildFieldsFromCrossRef(work *refs.CrossrefWork) bson.A {
 			"evidence": "CrossRef metadata (type field)",
 			"status":   "REPORTED",
 		})
+		// document_type eksplisit (Journal Article / Conference Paper / dst.) untuk
+		// breakdown jenis publikasi di Methods PRISMA (jurnal vs konferensi) — Q1.
+		fields = append(fields, bson.M{
+			"key":      "document_type",
+			"value":    formatStudyType(work.Type),
+			"evidence": "CrossRef metadata (type field)",
+			"status":   "REPORTED",
+		})
 	}
 
 	// geographic from author affiliations
