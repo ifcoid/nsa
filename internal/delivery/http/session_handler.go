@@ -1701,6 +1701,124 @@ func getPublisherFromDOI(doi string) string {
 }
 
 // GetM6Papers mengembalikan data paper Modul 6 dalam format JSON untuk Web Viewer
+// fullTextExcluded mengembalikan true bila keputusan full-text paper = EXCLUDE
+// (mirror finalFullDecision di modul M6).
+func fullTextExcluded(p bson.M) bool {
+	if fd, _ := p["Final_Decision_Full"].(string); fd != "" {
+		return fd == "EXCLUDE"
+	}
+	d1, _ := p["Screener_1_Decision_Full"].(string)
+	d2, _ := p["Screener_2_Decision_Full"].(string)
+	return d1 == "EXCLUDE" && d2 == "EXCLUDE"
+}
+
+// GetExcludedFullText mengembalikan daftar paper EXCLUDE tahap full-text + reason codes
+// sesi (multi-tenant) untuk panel HITL re-code alasan eksklusi (tabel PRISMA lebih bersih).
+func (h *SessionHandler) GetExcludedFullText(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	reasonCodes := []string{}
+	if session.ScreeningSetup != nil && len(session.ScreeningSetup.ReasonCodes) > 0 {
+		reasonCodes = session.ScreeningSetup.ReasonCodes
+	}
+
+	coll := h.mongoRepo.GetScreeningCollection()
+	cursor, err := coll.Find(ctx, bson.M{"session_id": id, "full_text_retrieved": true})
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mengambil data")
+		return
+	}
+	var papers []bson.M
+	_ = cursor.All(ctx, &papers)
+
+	out := []map[string]interface{}{}
+	for _, p := range papers {
+		if !fullTextExcluded(p) {
+			continue
+		}
+		title, _ := p["Title"].(string)
+		if title == "" {
+			title, _ = p["title"].(string)
+		}
+		doi, _ := p["DOI"].(string)
+		if doi == "" {
+			doi, _ = p["doi"].(string)
+		}
+		rc, _ := p["Screener_1_Reason_Code_Full"].(string)
+		if rc == "" || rc == "-" {
+			rc = "OTHER"
+		}
+		ev, _ := p["Screener_1_Notes_Full"].(string)
+		if i := strings.Index(ev, "Evidence:"); i >= 0 {
+			ev = strings.TrimSpace(ev[i+len("Evidence:"):])
+		}
+		oid, _ := p["_id"].(primitive.ObjectID)
+		out = append(out, map[string]interface{}{
+			"paper_id":    oid.Hex(),
+			"title":       title,
+			"doi":         doi,
+			"reason_code": rc,
+			"evidence":    ev,
+		})
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"reason_codes": reasonCodes,
+		"papers":       out,
+	})
+}
+
+// RecodeExclusions menerapkan re-code alasan eksklusi full-text (HITL) lalu meregenerasi
+// output Modul 6 agar tabel PRISMA memakai kode baru.
+func (h *SessionHandler) RecodeExclusions(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	var payload struct {
+		Recodes []struct {
+			PaperID    string `json:"paper_id"`
+			ReasonCode string `json:"reason_code"`
+		} `json:"recodes"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	ctx := context.Background()
+	n := 0
+	for _, rc := range payload.Recodes {
+		if strings.TrimSpace(rc.PaperID) == "" || strings.TrimSpace(rc.ReasonCode) == "" {
+			continue
+		}
+		if e := h.mongoRepo.RecodeFullTextExclusion(ctx, id, rc.PaperID, rc.ReasonCode, "[HITL re-code] alasan eksklusi diperbarui manual"); e == nil {
+			n++
+		}
+	}
+	// Regenerasi summary M6 dengan kode baru.
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	session.Status = "M6_STEP3_REVIEW"
+	if e := h.mongoRepo.UpdateSession(ctx, session); e != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal update sesi")
+		return
+	}
+	h.pipeline.ExecuteAsync(ctx, id)
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "Re-code diterapkan, menyusun ulang ringkasan", "recoded": n})
+}
+
 func (h *SessionHandler) GetM6Papers(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {

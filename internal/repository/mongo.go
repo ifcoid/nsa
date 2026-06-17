@@ -454,6 +454,23 @@ func (r *MongoRepository) ExcludePaperWithReason(ctx context.Context, sessionID,
 	return err
 }
 
+// RecodeFullTextExclusion mengganti reason code eksklusi TAHAP FULL-TEXT (HITL). Hanya
+// menyentuh Screener_1_Reason_Code_Full + jejak catatan re-code — TIDAK mengubah keputusan
+// (paper memang sudah EXCLUDE; ini hanya merapikan kode untuk tabel PRISMA).
+func (r *MongoRepository) RecodeFullTextExclusion(ctx context.Context, sessionID, paperIDHex, reasonCode, note string) error {
+	objID, err := primitive.ObjectIDFromHex(paperIDHex)
+	if err != nil {
+		return err
+	}
+	filter := bson.M{"_id": objID, "session_id": sessionID}
+	update := bson.M{"$set": bson.M{
+		"Screener_1_Reason_Code_Full": reasonCode,
+		"fulltext_recode_note":        note,
+	}}
+	_, err = r.GetScreeningCollection().UpdateOne(ctx, filter, update)
+	return err
+}
+
 // ResetCalibrationScreenings membersihkan field keputusan sebelumnya untuk persiapan re-run kalibrasi.
 func (r *MongoRepository) ResetCalibrationScreenings(ctx context.Context, sessionID string) error {
 	filter := bson.M{
