@@ -308,6 +308,8 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 				baseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
 			} else if provider == "nvidia" {
 				baseURL = "https://integrate.api.nvidia.com/v1"
+			} else if provider == "aerolink" {
+				baseURL = "https://capi.aerolink.lat/v1"
 			} else if strings.HasPrefix(provider, "rprompt") {
 				baseURL = "https://rprompt.ll.my.id/v1"
 			} else {
@@ -318,6 +320,9 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 		
 		// Pastikan tidak berakhiran slash
 		baseURL = strings.TrimSuffix(baseURL, "/")
+		if provider == "aerolink" && !strings.HasSuffix(baseURL, "/v1") {
+			baseURL += "/v1"
+		}
 		url := baseURL + "/models"
 		
 		httpReq, _ := http.NewRequest("GET", url, nil)
@@ -431,6 +436,9 @@ func (h *LLMHandler) CheckHealth(w http.ResponseWriter, req *http.Request) {
 					baseURL = "https://api.openai.com/v1"
 				}
 				baseURL = strings.TrimSuffix(baseURL, "/")
+				if c.ProviderName == "aerolink" && !strings.HasSuffix(baseURL, "/v1") {
+					baseURL += "/v1"
+				}
 				url = baseURL + "/models"
 			}
 
