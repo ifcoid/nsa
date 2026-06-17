@@ -551,12 +551,21 @@ func (m *M6Acquisition) buildModul6Outputs(ctx context.Context, session *model.S
 	session.FulltextKappa = finalKappa
 	disagreedRemaining, _ := m.deps.MongoRepo.GetDisagreedFullTextPapers(ctx, session.ID)
 
-	// PICO-CONSISTENCY FINAL AUDIT (15% included)
+	// PICO-CONSISTENCY FINAL AUDIT (15% included). Saat regenerasi dipicu RE-CODE
+	// (SkipReaudit), PERTAHANKAN hasil audit lama: re-code hanya mengubah kode EKSKLUSI,
+	// tak mempengaruhi audit INKLUSI — hindari boros LLM + risiko 429 mematahkan status hijau.
 	picoAudit := "Audit dilewati (tidak ada INCLUDE)."
 	picoAuditOK := false
 	if len(includedFull) > 0 {
-		picoAudit, picoAuditOK = m.runFinalPicoAudit(ctx, session, includedFull)
+		if session.SkipReaudit && strings.TrimSpace(session.FinalPicoAuditMD) != "" {
+			picoAudit, picoAuditOK = session.FinalPicoAuditMD, session.FinalPicoAuditOK
+			logger.Log(session.ID, "   [M6.3] Re-code: audit PICO final DIPERTAHANKAN (tidak di-run ulang).")
+		} else {
+			picoAudit, picoAuditOK = m.runFinalPicoAudit(ctx, session, includedFull)
+			session.FinalPicoAuditMD, session.FinalPicoAuditOK = picoAudit, picoAuditOK
+		}
 	}
+	session.SkipReaudit = false // konsumsi sinyal apa pun jalurnya
 
 	// OUTPUT 2: inaccessible_impact
 	inacc := m.buildInaccessibleImpact(session)

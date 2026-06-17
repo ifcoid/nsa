@@ -485,6 +485,9 @@ type SLRSession struct {
 	InaccessibleImpact    *InaccessibleImpact    `bson:"inaccessible_impact,omitempty" json:"inaccessible_impact,omitempty"`
 	ExtractionReadiness   *ExtractionReadiness   `bson:"extraction_readiness,omitempty" json:"extraction_readiness,omitempty"`
 	Modul6Summary         *Modul6Summary         `bson:"modul6_summary,omitempty" json:"modul6_summary,omitempty"`
+	FinalPicoAuditMD      string                 `bson:"final_pico_audit_md,omitempty" json:"final_pico_audit_md,omitempty"` // hasil audit PICO final M6.3 (untuk dipertahankan saat regen non-audit, mis. re-code)
+	FinalPicoAuditOK      bool                   `bson:"final_pico_audit_ok" json:"final_pico_audit_ok,omitempty"`           // tanpa bson omitempty: false harus tersimpan
+	SkipReaudit           bool                   `bson:"skip_reaudit" json:"skip_reaudit,omitempty"`                         // sinyal: regen M6.3 pertahankan audit lama (re-code). tanpa bson omitempty
 	FrameworkSelection    *FrameworkSelection    `bson:"framework_selection,omitempty" json:"framework_selection,omitempty"`
 	ExtractionLog         *ExtractionLog         `bson:"extraction_log,omitempty" json:"extraction_log,omitempty"`
 	QAThreshold           *QAThresholdJustification `bson:"qa_threshold_justification,omitempty" json:"qa_threshold_justification,omitempty"`

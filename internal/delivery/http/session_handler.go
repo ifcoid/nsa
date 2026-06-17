@@ -1826,6 +1826,7 @@ func (h *SessionHandler) RecodeExclusions(w http.ResponseWriter, req *http.Reque
 		return
 	}
 	session.Status = "M6_STEP3_REVIEW"
+	session.SkipReaudit = true // re-code: jangan re-run audit PICO final saat regen
 	if e := h.mongoRepo.UpdateSession(ctx, session); e != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Gagal update sesi")
 		return
