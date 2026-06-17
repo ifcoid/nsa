@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -578,6 +579,29 @@ func (m *M6Acquisition) buildModul6Outputs(ctx context.Context, session *model.S
 	if len(reasonCounts) == 0 {
 		exTable += "| (tidak ada) | 0 | 0% |\n"
 	}
+	// Rincian per-paper (PRISMA "reports excluded with reasons" + xAI): judul + kode +
+	// cuplikan bukti, agar kode "OTHER" tidak opaque dan bisa di-recode via HITL.
+	if len(excludedFull) > 0 {
+		exTable += "\nRincian eksklusi (kode — judul — bukti):\n"
+		for _, p := range excludedFull {
+			rc := getStr(p, "Screener_1_Reason_Code_Full")
+			if rc == "" || rc == "-" {
+				rc = "OTHER"
+			}
+			title := getStr(p, "title", "Title")
+			if len(title) > 90 {
+				title = title[:90] + "…"
+			}
+			ev := getStr(p, "Screener_1_Notes_Full")
+			if i := strings.Index(ev, "Evidence:"); i >= 0 {
+				ev = strings.TrimSpace(ev[i+len("Evidence:"):])
+			}
+			if len(ev) > 180 {
+				ev = ev[:180] + "…"
+			}
+			exTable += fmt.Sprintf("- [%s] %s — %s\n", rc, title, ev)
+		}
+	}
 
 	// OUTPUT 4: modul6_summary
 	acq := session.AcquisitionLog
@@ -639,8 +663,25 @@ func (m *M6Acquisition) runFinalPicoAudit(ctx context.Context, session *model.SL
 	if sampleSize > 10 {
 		sampleSize = 10
 	}
-	rand.Shuffle(len(included), func(i, j int) { included[i], included[j] = included[j], included[i] })
-	sampleData, _ := json.Marshal(included[:sampleSize])
+	// Sampel DETERMINISTIK (reproducible untuk jejak audit) TANPA memutasi slice caller:
+	// urutkan indeks salinan berdasar DOI lalu ambil merata (stride) agar representatif.
+	// Re-run audit -> sampel & hasil sama (auditable), bukan acak tiap Revisi.
+	order := make([]int, len(included))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return getStr(included[order[a]], "DOI", "doi") < getStr(included[order[b]], "DOI", "doi")
+	})
+	stride := len(order) / sampleSize
+	if stride < 1 {
+		stride = 1
+	}
+	sample := make([]map[string]interface{}, 0, sampleSize)
+	for i := 0; i < len(order) && len(sample) < sampleSize; i += stride {
+		sample = append(sample, included[order[i]])
+	}
+	sampleData, _ := json.Marshal(sample)
 
 	picoDef := ""
 	if session.PICODefinitions != nil {
