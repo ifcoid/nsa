@@ -494,6 +494,9 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 	if err != nil {
 		logger.Logf(session.ID, "   [WARN] Verifier (%s/%s) gagal: %v. Lewati verifikasi.\n", vp, vf, err)
 	}
+	verifierModel := m.modelLabel(ctx, vp)
+	logger.Logf(session.ID, "   [Info] Verifikasi ~%d dari %d paper (20%% sampel + semua AMBIGUOUS) via %s; ~4 dtk/paper.\n",
+		sample, total, verifierModel)
 
 	disagree, checked, ambiguous := 0, 0, 0
 	for i := 0; i < total; i++ {
@@ -510,14 +513,21 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 		doi := normalizeDOIForRAG(getStr(p, "DOI", "doi"))
 		ft := ftIndex[doi]
 		if ft == "" {
+			logger.Logf(session.ID, "      -> Verify [%d/%d] %s — full-text tak ada di RAG, dilewati.\n", i+1, total, doi)
 			continue
 		}
+		logger.Logf(session.ID, "      -> Verify [%d/%d] %s — memanggil verifier (%s)... ~4 dtk.\n", i+1, total, doi, verifierModel)
 		priorJSON, _ := json.Marshal(p["fields"])
 		res, e := verAg.VerifyExtraction(ctx, opDefs, getStr(p, "Title"), ft, string(priorJSON))
 		checked++
-		if e == nil && res != nil && res.Disagree {
+		if e != nil {
+			logger.Logf(session.ID, "         [!] verifikasi gagal: %v\n", e)
+		} else if res != nil && res.Disagree {
 			disagree++
+			logger.Logf(session.ID, "         [≠] Disagreement — ditandai untuk ditinjau (HITL).\n")
 			_, _ = coll.UpdateByID(ctx, p["_id"], bson.M{"$set": bson.M{"verify_disagree": true, "verify_notes": res.Notes}})
+		} else {
+			logger.Logf(session.ID, "         [✓] Sesuai (tidak ada disagreement).\n")
 		}
 		time.Sleep(4 * time.Second)
 	}
