@@ -72,6 +72,22 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 		session.Feedback = ""
 		session.Status = "M7_STEP2_EXTRACTION"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	case "M7_STEP2_REEXTRACT_FAILED":
+		// Self-heal hemat: re-extract HANYA paper yang gagal/kosong (ERROR, EMPTY_RESULT,
+		// NO_FULLTEXT_RAG, atau coverage kosong) — PERTAHANKAN 67 paper yang sudah baik.
+		// Hindari nuke-semua (re-approve framework + 13 menit + risiko 429). runExtractionL2
+		// hanya mengambil paper extracted!=true, jadi cukup reset flag pada yg gagal.
+		failFilter := bson.M{"session_id": session.ID, "coverage": bson.M{"$in": bson.A{"ERROR", "EMPTY_RESULT", "NO_FULLTEXT_RAG", ""}}}
+		nFail, _ := m.deps.MongoRepo.GetExtractionCollection().CountDocuments(ctx, failFilter)
+		logger.Logf(session.ID, "   [Self-heal 7.2] Re-extract %d paper gagal/kosong (paper baik dipertahankan)\n", nFail)
+		_, _ = m.deps.MongoRepo.GetExtractionCollection().UpdateMany(ctx, failFilter,
+			bson.M{"$set": bson.M{"extracted": false, "verified": false}})
+		// Unset extraction_log agar spot-verify + statistik dihitung ulang setelah re-extract.
+		_, _ = m.deps.MongoRepo.GetSessionCollection().UpdateOne(ctx,
+			bson.M{"_id": session.ID}, bson.M{"$unset": bson.M{"extraction_log": ""}})
+		session.ExtractionLog = nil
+		session.Status = "M7_STEP2_EXTRACTION"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	case "M7_STEP2_APPROVED":
 		session.Status = "M7_STEP3_QA"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
@@ -255,6 +271,26 @@ func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSes
 
 // ===== L2 =====
 
+// modelLabel mengembalikan atribusi model xAI lengkap "Provider (model)" dari LLMConfig
+// suatu provider role, bukan ModelName() mentah (yg bisa dobel-prefix "openai/openai/...").
+// Fallback ke ID provider bila config tak ada. Dipakai konsisten di L1/L2/QA.
+func (m *M7Extraction) modelLabel(ctx context.Context, providerID string) string {
+	if providerID == "" {
+		return ""
+	}
+	if cfg, _ := m.deps.MongoRepo.GetLLMConfig(ctx, providerID); cfg != nil {
+		lbl := cfg.ProviderName
+		if lbl == "" {
+			lbl = providerID
+		}
+		if cfg.DefaultModel != "" {
+			lbl += " (" + cfg.DefaultModel + ")"
+		}
+		return lbl
+	}
+	return providerID
+}
+
 func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [Langkah 7.2] Systematic extraction (RAG Qdrant)...")
 	coll := m.deps.MongoRepo.GetExtractionCollection()
@@ -301,6 +337,9 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 	if err != nil {
 		return fmt.Errorf("extractor utama (%s/%s) gagal: %w", rp1, rf1, err)
 	}
+	// xAI: atribusi model konsisten = provider role + NAMA MODEL asli (bukan ModelName()
+	// mentah "openai/openai/gpt-oss-120b" yang dobel-prefix & menyesatkan). Samakan dgn M7 L1/QA.
+	extractorModel := m.modelLabel(ctx, rp1)
 
 	for i, p := range batch {
 		if ctx.Err() != nil {
@@ -327,14 +366,25 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 				logger.Logf(session.ID, "         [!] gagal extract: %v (ditandai ERROR)\n", e)
 				update["coverage"] = "ERROR"
 				update["notes"] = "Ekstraksi gagal: " + e.Error()
+			} else if len(res.Fields) == 0 {
+				// Silent-empty: parse sukses tapi LLM tak mengembalikan satu field pun.
+				// JANGAN sembunyikan sbg "selesai" — tandai agar terlihat & bisa re-extract HITL.
+				logger.Logf(session.ID, "         [!] hasil kosong (0 field) — ditandai EMPTY_RESULT\n")
+				update["coverage"] = "EMPTY_RESULT"
+				update["notes"] = "LLM mengembalikan hasil kosong (0 field) walau full-text tersedia; perlu ekstraksi ulang."
+				update["model_extraction"] = extractorModel
 			} else {
+				cov, covNote := agent.NormalizeCoverage(res.Coverage)
 				update["fields"] = res.Fields
 				update["key_findings"] = res.KeyFindings
 				update["qa_red_flags"] = res.QARedFlags
 				update["ambiguous"] = res.Ambiguous
-				update["coverage"] = res.Coverage
+				update["coverage"] = cov
+				if covNote != "" {
+					update["notes"] = covNote
+				}
 				update["nr_count"] = countNotReported(res.Fields)
-				update["model_extraction"] = leadAg.ModelName()
+				update["model_extraction"] = extractorModel
 			}
 			time.Sleep(5 * time.Second)
 		}
@@ -372,7 +422,9 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 	logger.Log(session.ID, "   [Langkah 7.2] Spot-verification 20% (extractor 2)...")
 	coll := m.deps.MongoRepo.GetExtractionCollection()
 
-	cur, _ := coll.Find(ctx, bson.M{"session_id": session.ID, "coverage": bson.M{"$nin": bson.A{"NO_FULLTEXT_RAG", "ERROR"}}})
+	// Hanya paper dengan data nyata: kecualikan gagal/kosong agar tidak diverifikasi sia-sia
+	// dan tidak ikut dihitung sbg "extracted". (EMPTY_RESULT/"" = hasil kosong, perlu re-extract.)
+	cur, _ := coll.Find(ctx, bson.M{"session_id": session.ID, "coverage": bson.M{"$nin": bson.A{"NO_FULLTEXT_RAG", "ERROR", "EMPTY_RESULT", ""}}})
 	var all []bson.M
 	_ = cur.All(ctx, &all)
 
@@ -431,6 +483,12 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 		nrNote = "5-15%: refine protocol, re-do subset yang di-flag."
 	}
 	rp1, _ := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
+	// Hitung paper gagal/kosong yang masih perlu re-extract (surfacing utk tombol HITL).
+	failedCount, _ := coll.CountDocuments(ctx, bson.M{"session_id": session.ID,
+		"coverage": bson.M{"$in": bson.A{"ERROR", "EMPTY_RESULT", "NO_FULLTEXT_RAG", ""}}})
+	// xAI: atribusi model LENGKAP (provider role + nama model) utk header log, samakan per-paper.
+	extractorModelLbl := m.modelLabel(ctx, rp1)
+	refineModelLbl := m.modelLabel(ctx, vp)
 	colsJSON := "[]"
 	if session.FrameworkSelection != nil {
 		b, _ := json.Marshal(session.FrameworkSelection.Columns)
@@ -468,11 +526,12 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 		DisagreementRate:    rate,
 		AmbiguousCount:      ambiguous,
 		NRNote:              nrNote,
+		FailedCount:         int(failedCount),
 		SystemPrompt:        systemPrompt,
-		ModelExtraction:     rp1,
-		ModelRefineProtocol: vp,
+		ModelExtraction:     extractorModelLbl,
+		ModelRefineProtocol: refineModelLbl,
 	}
-	logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d; disagreement %.1f%%.\n", total, checked, rate)
+	logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d; disagreement %.1f%%; gagal/kosong %d.\n", total, checked, rate, failedCount)
 	session.Status = "M7_STEP2_WAITING_APPROVAL"
 	return m.deps.MongoRepo.UpdateSession(ctx, session)
 }

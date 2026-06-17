@@ -605,6 +605,7 @@ type ExtractionLog struct {
 	DisagreementRate    float64 `bson:"disagreement_rate" json:"disagreement_rate"`
 	AmbiguousCount      int     `bson:"ambiguous_count" json:"ambiguous_count"`
 	NRNote              string  `bson:"nr_note" json:"nr_note"`
+	FailedCount         int     `bson:"failed_count,omitempty" json:"failed_count,omitempty"` // paper ERROR/EMPTY_RESULT/NO_FULLTEXT yg perlu re-extract
 	ExtractionKappa     float64 `bson:"extraction_kappa,omitempty" json:"extraction_kappa,omitempty"`
 	SystemPrompt        string  `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 	ModelExtraction     string  `bson:"model_extraction,omitempty" json:"model_extraction,omitempty"`

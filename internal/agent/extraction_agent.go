@@ -147,11 +147,59 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	if err != nil {
 		return nil, fmt.Errorf("ExtractPaper LLM: %w", err)
 	}
+	cleaned := CleanJSONResponse(raw)
 	var res ExtractionResult
-	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
+	if err := json.Unmarshal([]byte(cleaned), &res); err != nil {
+		// Toleransi 1: array berisi objek ExtractionResult penuh ([{...}]) -> ambil pertama yg
+		// punya fields. Dicek lebih dulu agar `[{"fields":[...]}]` tidak salah-tafsir sbg list field.
+		var arr []ExtractionResult
+		if err2 := json.Unmarshal([]byte(cleaned), &arr); err2 == nil {
+			for i := range arr {
+				if len(arr[i].Fields) > 0 {
+					return &arr[i], nil
+				}
+			}
+		}
+		// Toleransi 2: CleanJSONResponse mengekstrak array `fields` saja (mis. wrapper objek
+		// ke-truncate / ada teks trailing) -> perlakukan sbg daftar fields. Hanya terima bila
+		// minimal satu elemen punya Key non-kosong (hindari array bukan-field yg parse "sukses").
+		var fields []ExtractedField
+		if err3 := json.Unmarshal([]byte(cleaned), &fields); err3 == nil {
+			hasReal := false
+			for _, f := range fields {
+				if strings.TrimSpace(f.Key) != "" {
+					hasReal = true
+					break
+				}
+			}
+			if hasReal {
+				return &ExtractionResult{Fields: fields, Coverage: "PARTIAL"}, nil
+			}
+		}
 		return nil, fmt.Errorf("parse ExtractionResult (%w). Raw: %s", err, raw)
 	}
 	return &res, nil
+}
+
+// NormalizeCoverage memetakan nilai coverage bebas-teks dari LLM ke token enum kanonik
+// (COMPLETE / PARTIAL / INCOMPLETE). Kalimat penjelasan yang ikut ditulis LLM di field
+// coverage dikembalikan terpisah sebagai catatan agar tidak mencemari enum (rusakkan
+// grouping/pewarnaan tabel). Mengembalikan (token, sisaPenjelasan).
+func NormalizeCoverage(raw string) (string, string) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", ""
+	}
+	up := strings.ToUpper(s)
+	for _, tok := range []string{"COMPLETE", "INCOMPLETE", "PARTIAL"} {
+		if strings.HasPrefix(up, tok) {
+			rest := strings.TrimSpace(s[len(tok):])
+			rest = strings.TrimLeft(rest, " :–-—.")
+			return tok, strings.TrimSpace(rest)
+		}
+	}
+	// Tidak ada token kanonik di awal: anggap PARTIAL, simpan seluruhnya sbg catatan.
+	return "PARTIAL", s
 }
 
 type VerifyResult struct {
