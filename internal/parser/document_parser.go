@@ -46,19 +46,32 @@ func ParseFile(filename string, content []byte) ([]ParsedDocument, error) {
 	// Strip UTF-8 BOM if present (common in Windows exports from Scopus, etc.)
 	content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
 
-	if strings.HasSuffix(filename, ".csv") {
-		return parseCSV(content)
-	} else if strings.HasSuffix(filename, ".bib") || strings.HasSuffix(filename, ".bibtex") {
-		return parseBibTeX(content)
-	} else if strings.HasSuffix(filename, ".nbib") {
-		return parseNBIB(content)
-	} else if strings.HasSuffix(filename, ".txt") {
-		// Detect content format for .txt files
-		return parseTxtByContent(content)
+	var docs []ParsedDocument
+	var err error
+	switch {
+	case strings.HasSuffix(filename, ".csv"):
+		docs, err = parseCSV(content)
+	case strings.HasSuffix(filename, ".bib"), strings.HasSuffix(filename, ".bibtex"):
+		docs, err = parseBibTeX(content)
+	case strings.HasSuffix(filename, ".nbib"):
+		docs, err = parseNBIB(content)
+	case strings.HasSuffix(filename, ".txt"):
+		// Detect content format for .txt files (PubMed/NBIB, RIS, BibTeX, or CSV)
+		docs, err = parseTxtByContent(content)
+	default:
+		docs, err = parseCSV(content)
 	}
 
-	// Default fallback to CSV
-	return parseCSV(content)
+	// Safety net against silent total-loss: a known export format misnamed by extension
+	// (e.g. an IEEE Xplore BibTeX dump saved as .txt/.csv, or a Scopus CSV saved as .txt)
+	// must NOT vanish without a trace. If the extension-based parser found nothing but the
+	// file clearly has content, retry by sniffing the actual content format.
+	if len(docs) == 0 && len(bytes.TrimSpace(content)) > 0 {
+		if sniffed, serr := parseTxtByContent(content); len(sniffed) > 0 {
+			return sniffed, serr
+		}
+	}
+	return docs, err
 }
 
 // parseTxtByContent detects the format of a .txt file by inspecting its content.
@@ -79,9 +92,20 @@ func parseTxtByContent(content []byte) ([]ParsedDocument, error) {
 		return parseRIS(content)
 	}
 
+	// Check for BibTeX format. IEEE Xplore's "Download > BibTeX" produces @ARTICLE{...}
+	// entries; users often save these as .txt. Without this branch the file falls through
+	// to CSV and silently yields ZERO records (the whole database vanishes from the count).
+	if bibtexEntryRe.Match(content) {
+		return parseBibTeX(content)
+	}
+
 	// Fallback to CSV
 	return parseCSV(content)
 }
+
+// bibtexEntryRe matches a BibTeX entry header like "@article{", "@inproceedings {",
+// tolerant of leading whitespace and case (IEEE uses uppercase @ARTICLE).
+var bibtexEntryRe = regexp.MustCompile(`(?i)@(article|inproceedings|incollection|inbook|book|booklet|conference|manual|mastersthesis|misc|phdthesis|proceedings|techreport|unpublished)\s*\{`)
 
 // readCSVRecords membaca header + records dengan satu mode kutip (lazy/strict).
 // Per-baris + SKIP baris ParseError (bukan break): satu baris rusak tidak membuang sisanya.

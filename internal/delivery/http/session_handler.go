@@ -475,8 +475,14 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 		// We use parser.ParseFile
 		parsedDocs, err := parser.ParseFile(fileHeader.Filename, content)
 		if err != nil {
-			// fallback silently or log
+			// JANGAN diam-diam: file yang gagal parse harus terlihat user (xAI/anti silent-loss).
+			logger.Logf(id, "[Import] ⚠️ File '%s' GAGAL di-parse: %v — 0 record dari file ini.", fileHeader.Filename, err)
 			continue
+		}
+		if len(parsedDocs) == 0 {
+			// File terbaca tapi tak menghasilkan record (mis. format tak dikenali / kolom judul
+			// tak ter-map). Surface eksplisit supaya tidak terasa "Total Records ga sesuai".
+			logger.Logf(id, "[Import] ⚠️ File '%s' menghasilkan 0 record (cek format/kolom judul).", fileHeader.Filename)
 		}
 
 		fileCount := 0
