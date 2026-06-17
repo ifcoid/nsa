@@ -103,6 +103,26 @@ ekstraksi, sintesis, manuskrip) WAJIB memenuhi empat invariant ini:
   Sync). Dan jaga **invariant di SETIAP titik tulis**: bila dua field saling-eksklusif,
   set satu → **clear lawannya** (mis. `full_text_retrieved` vs `inaccessible`).
 
+## UX WAJIB untuk operasi AI yang lama (progress, toast, atribusi model)
+
+Setiap aksi yang memanggil LLM dan butuh waktu (screening, audit, saran, sintesis) HARUS
+memberi umpan-balik agar user tahu prosesnya jalan dan bisa mengevaluasi modelnya:
+
+- **JANGAN sinkron-lama di handler HTTP** (risiko timeout proxy fly.io). Pola: handler
+  memulai **job background** (goroutine), balas segera `{started,total}`, frontend **poll**
+  endpoint hasil tiap ~2 dtk. Pola sama dengan pipeline screening (`ExecuteAsync`).
+- **Progress per-item ke Live Log**: `logger.Logf(sessionID, ...)` → tersiar via WebSocket
+  `/ws/logs/{id}` ke panel Live Log. Log mulai, **tiap item** (mis. `Paper i/N: <judul>`),
+  dan selesai. Inilah cara user melihat "lagi di paper A".
+- **Toast** (frontend `showToast` di `js/ui.js`) saat **mulai** ("AI menganalisis N…") dan
+  **selesai** ("✅ N saran via <model>"). Bukan `alert()`.
+- **Atribusi MODEL**: SELALU sertakan model/provider yang dipakai di output AI (di hasil +
+  log), supaya user bisa menilai model mana yang cocok. Provider berasal dari **role
+  configurable** (lihat `LLMRoles`: Reviewer/Supervisor/Brain/**Auditor**), bukan hardcode.
+- **Tombol di-disable saat diklik** (anti dobel-klik), tampilkan progres di teks tombol
+  (mis. `🤖 3/16…`), aktifkan lagi hanya saat selesai/error. Tambahkan **guard server**
+  (job in-flight → jangan mulai job baru) sebagai jaring kedua.
+
 ## Model pengujian (penting)
 
 Korektnya **perilaku** TIDAK bisa diklaim hanya dari unit test + build hijau. **User =
