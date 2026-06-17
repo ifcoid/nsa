@@ -3,11 +3,24 @@ package llm
 import (
 	"context"
 	"log"
+	"strings"
 	"time"
 
 	"nsa/internal/model"
 	"nsa/internal/repository"
 )
+
+// displayModelName membuang prefix ADAPTER (mis. "openai/", "claude/", "gemini/")
+// dari ModelName() agar yang tersimpan adalah NAMA MODEL asli. Tanpa ini, model groq
+// yang id-nya sudah mengandung slash (mis. "openai/gpt-oss-120b") tampil dobel:
+// adapter "openai/" + model "openai/gpt-oss-120b" = "openai/openai/gpt-oss-120b".
+// "openai/" di sini hanya tipe adapter API, bukan vendor (lih. CLAUDE.md atribusi xAI).
+func displayModelName(raw string) string {
+	if k := strings.Index(raw, "/"); k >= 0 {
+		return raw[k+1:]
+	}
+	return raw
+}
 
 // xaiLoggingClient wraps an LLMClient and logs every Generate call to MongoDB
 // as an xAI audit entry (non-blocking).
@@ -49,7 +62,7 @@ func (c *xaiLoggingClient) Generate(ctx context.Context, systemPrompt, userPromp
 	entry := model.XAIEntry{
 		Step:              xaiCtx.Step,
 		AgentFunc:         xaiCtx.AgentFunc,
-		ModelName:         c.inner.ModelName(),
+		ModelName:         displayModelName(c.inner.ModelName()),
 		SystemPrompt:      systemPrompt,
 		UserPromptPreview: preview,
 		Timestamp:         time.Now(),
