@@ -43,9 +43,11 @@ func main() {
 	llmColl := db.Collection("llm_providers")
 
 	providersToUpdate := map[string]string{
-		"gemini": "AIzaSyCOm3cKm_p0qziiCixSsLko5J6Tj-m6CdM",
-		"zhipu":  "ffeade6ff7464124a2b4d8b0187ddf65.2eAdK8a7fGi15uoF",
-		"groq":   "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",
+		"gemini":   "AIzaSyCOm3cKm_p0qziiCixSsLko5J6Tj-m6CdM",
+		"zhipu":    "ffeade6ff7464124a2b4d8b0187ddf65.2eAdK8a7fGi15uoF",
+		"groq":     "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",
+		"unimodel": "GANTI_DENGAN_API_KEY_UNIMODEL",
+		"aerolink": "GANTI_DENGAN_API_KEY_AEROLINK",
 	}
 
 	fmt.Println("Mengupdate API Keys di MongoDB...")
@@ -78,6 +80,14 @@ func main() {
 					providerName = "openai-compatible"
 					baseURL = "https://api.groq.com/openai/v1"
 					defaultModel = "llama3-70b-8192"
+				} else if providerID == "unimodel" {
+					providerName = "unimodel"
+					baseURL = "https://unimodel.ai/v1"
+					defaultModel = "gpt-4o-mini"
+				} else if providerID == "aerolink" {
+					providerName = "aerolink"
+					baseURL = "https://capi.aerolink.lat"
+					defaultModel = "claude-3-5-sonnet-20240620"
 				}
 
 				_, err = llmColl.InsertOne(ctx, bson.M{

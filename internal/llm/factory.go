@@ -40,8 +40,19 @@ func (f *LLMFactory) CreateClient(ctx context.Context, providerID string) (LLMCl
 	case "gemini":
 		client = NewGeminiClient(config.APIKey, config.DefaultModel)
 
-	case "claude":
-		client = NewClaudeClient(config.APIKey, config.DefaultModel)
+	case "claude", "anthropic":
+		baseURL := config.BaseURL
+		if baseURL == "" {
+			baseURL = "https://api.anthropic.com"
+		}
+		client = NewAnthropicCompatibleClient(config.APIKey, baseURL, config.DefaultModel)
+
+	case "aerolink":
+		baseURL := config.BaseURL
+		if baseURL == "" {
+			baseURL = "https://capi.aerolink.lat"
+		}
+		client = NewAnthropicCompatibleClient(config.APIKey, baseURL, config.DefaultModel)
 
 	case "cohere":
 		client = NewCohereClient(config.APIKey, config.DefaultModel)
@@ -50,6 +61,13 @@ func (f *LLMFactory) CreateClient(ctx context.Context, providerID string) (LLMCl
 		baseURL := config.BaseURL
 		if baseURL == "" {
 			baseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
+		}
+		client = NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel)
+
+	case "unimodel":
+		baseURL := config.BaseURL
+		if baseURL == "" {
+			baseURL = "https://unimodel.ai/v1"
 		}
 		client = NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel)
 
