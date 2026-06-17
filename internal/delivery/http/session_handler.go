@@ -1934,7 +1934,17 @@ func (h *SessionHandler) SuggestRecodes(w http.ResponseWriter, req *http.Request
 				s, e2 := agent.NewScreeningAgent(c).SuggestExclusionCodes(bg, picoDef, codesCSV, string(single))
 				if e2 == nil && len(s) > 0 {
 					got = &s[0]
+					// Atribusi xAI LENGKAP: provider + nama MODEL asli (satu provider bisa
+					// banyak model). ModelName() = "openai/<model>" / "claude/<model>" → ambil
+					// bagian setelah "/" dan gabung dengan provider role.
+					mn := c.ModelName()
+					if k := strings.Index(mn, "/"); k >= 0 {
+						mn = mn[k+1:]
+					}
 					usedModel = prov
+					if mn != "" {
+						usedModel = prov + " / " + mn
+					}
 					break
 				}
 			}

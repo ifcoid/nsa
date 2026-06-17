@@ -116,9 +116,11 @@ memberi umpan-balik agar user tahu prosesnya jalan dan bisa mengevaluasi modelny
   dan selesai. Inilah cara user melihat "lagi di paper A".
 - **Toast** (frontend `showToast` di `js/ui.js`) saat **mulai** ("AI menganalisis N…") dan
   **selesai** ("✅ N saran via <model>"). Bukan `alert()`.
-- **Atribusi MODEL**: SELALU sertakan model/provider yang dipakai di output AI (di hasil +
-  log), supaya user bisa menilai model mana yang cocok. Provider berasal dari **role
-  configurable** (lihat `LLMRoles`: Reviewer/Supervisor/Brain/**Auditor**), bukan hardcode.
+- **Atribusi MODEL (xAI)**: SELALU sertakan **provider + NAMA MODEL asli** di output AI
+  (di hasil + log) — bukan hanya nama provider, karena **satu provider bisa beberapa model**.
+  Ambil dari `client.ModelName()` (mis. `"openai/<model>"` → ambil bagian setelah `/`) dan
+  gabung dengan provider role, mis. `groq / llama-3.3-70b-versatile`. Provider berasal dari
+  **role configurable** (`LLMRoles`: Reviewer/Supervisor/Brain/**Auditor**), bukan hardcode.
 - **Tombol di-disable saat diklik** (anti dobel-klik), tampilkan progres di teks tombol
   (mis. `🤖 3/16…`), aktifkan lagi hanya saat selesai/error. Tambahkan **guard server**
   (job in-flight → jangan mulai job baru) sebagai jaring kedua.
