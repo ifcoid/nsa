@@ -37,24 +37,47 @@ type ParsedDocument struct {
 	References     string
 }
 
-// ParseFiles reads the content of a file based on its filename/extension and extracts ParsedDocuments
+// ParseFile reads the content of a file based on its filename/extension and extracts ParsedDocuments
 func ParseFile(filename string, content []byte) ([]ParsedDocument, error) {
 	filename = strings.ToLower(filename)
-	
+
+	// Strip UTF-8 BOM if present (common in Windows exports from Scopus, etc.)
+	content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
+
 	if strings.HasSuffix(filename, ".csv") {
 		return parseCSV(content)
 	} else if strings.HasSuffix(filename, ".bib") || strings.HasSuffix(filename, ".bibtex") {
 		return parseBibTeX(content)
-	} else if strings.HasSuffix(filename, ".nbib") || strings.HasSuffix(filename, ".txt") {
-		// Attempt NBIB parsing, fallback to CSV if it fails or looks like CSV
-		if bytes.Contains(content, []byte("TI  - ")) || bytes.Contains(content, []byte("PMID- ")) {
-			return parseNBIB(content)
-		}
-		// Try CSV fallback for txt
-		return parseCSV(content)
+	} else if strings.HasSuffix(filename, ".nbib") {
+		return parseNBIB(content)
+	} else if strings.HasSuffix(filename, ".txt") {
+		// Detect content format for .txt files
+		return parseTxtByContent(content)
 	}
-	
+
 	// Default fallback to CSV
+	return parseCSV(content)
+}
+
+// parseTxtByContent detects the format of a .txt file by inspecting its content.
+// It supports PubMed/NBIB tagged format, RIS format, and falls back to CSV.
+func parseTxtByContent(content []byte) ([]ParsedDocument, error) {
+	// Check for PubMed/NBIB format markers (tagged format with 4-char tags)
+	if bytes.Contains(content, []byte("PMID- ")) ||
+		bytes.Contains(content, []byte("TI  - ")) ||
+		bytes.Contains(content, []byte("FAU - ")) ||
+		bytes.Contains(content, []byte("AU  - ")) ||
+		bytes.Contains(content, []byte("AB  - ")) {
+		return parseNBIB(content)
+	}
+
+	// Check for RIS format (used by IEEE and others)
+	if bytes.Contains(content, []byte("TY  - ")) ||
+		(bytes.Contains(content, []byte("T1  - ")) && bytes.Contains(content, []byte("ER  - "))) {
+		return parseRIS(content)
+	}
+
+	// Fallback to CSV
 	return parseCSV(content)
 }
 
@@ -87,6 +110,7 @@ func parseCSV(content []byte) ([]ParsedDocument, error) {
 	headerMap := make(map[string]int)
 	for i, h := range headers {
 		h = strings.TrimSpace(strings.ToLower(strings.ReplaceAll(h, "\"", "")))
+		h = strings.TrimPrefix(h, "\ufeff") // Strip any remaining BOM chars
 		headerMap[h] = i
 	}
 
@@ -172,15 +196,22 @@ func parseBibTeX(content []byte) ([]ParsedDocument, error) {
 	// Split content into individual BibTeX entries using a state machine
 	entries := splitBibEntriesRaw(string(content))
 
+	entryRegex := regexp.MustCompile(`(?i)@([a-zA-Z]+)\s*\{([^,]*),`)
+
 	for _, entry := range entries {
 		// Extract entry type and cite key from the header
-		entryRegex := regexp.MustCompile(`(?i)@([a-zA-Z]+)\s*\{([^,]*),`)
 		headerMatch := entryRegex.FindStringSubmatch(entry)
 		if headerMatch == nil {
 			continue
 		}
 
 		docType := headerMatch[1]
+
+		// Skip non-document entries (metadata entries)
+		docTypeLower := strings.ToLower(docType)
+		if docTypeLower == "string" || docTypeLower == "comment" || docTypeLower == "preamble" {
+			continue
+		}
 
 		// Parse all fields using brace-counting
 		fields := extractAllBibFields(entry)
@@ -402,16 +433,18 @@ func detectBibDatabase(doc ParsedDocument, fields map[string]string) string {
 func parseNBIB(content []byte) ([]ParsedDocument, error) {
 	var docs []ParsedDocument
 	var currentDoc *ParsedDocument
-	
+
 	scanner := bufio.NewScanner(bytes.NewReader(content))
+	// Increase scanner buffer for large lines
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var lastTag string
-	
+
 	// Accumulators for multi-value fields
 	var otVals []string  // OT = Author Keywords
 	var mhVals []string  // MH = MeSH Headings (Index Keywords)
 	var adVals []string  // AD = Affiliations
 	var grVals []string  // GR = Grants/Funding
-	
+
 	flushAccumulators := func() {
 		if currentDoc == nil {
 			return
@@ -429,26 +462,51 @@ func parseNBIB(content []byte) ([]ParsedDocument, error) {
 			currentDoc.FundingDetails = strings.Join(grVals, "; ")
 		}
 	}
-	
+
 	resetAccumulators := func() {
 		otVals = nil
 		mhVals = nil
 		adVals = nil
 		grVals = nil
 	}
-	
+
+	finalizeRecord := func() {
+		if currentDoc != nil && currentDoc.Title != "" {
+			flushAccumulators()
+			docs = append(docs, *currentDoc)
+		}
+		currentDoc = nil
+		resetAccumulators()
+		lastTag = ""
+	}
+
 	for scanner.Scan() {
 		line := scanner.Text()
-		
+
+		// Empty lines can serve as record separators in some exports
 		if line == "" {
+			// If we have a completed record (has title), finalize it
+			if currentDoc != nil && currentDoc.Title != "" {
+				finalizeRecord()
+			}
 			continue
 		}
-		
+
+		// Handle ER (End of Record) tag - official MEDLINE record terminator
+		if strings.HasPrefix(line, "ER  -") || strings.HasPrefix(line, "ER  ") {
+			finalizeRecord()
+			continue
+		}
+
 		// New record typically starts with PMID
 		if strings.HasPrefix(line, "PMID- ") {
+			// Finalize previous record if any
 			if currentDoc != nil && currentDoc.Title != "" {
-				flushAccumulators()
-				docs = append(docs, *currentDoc)
+				finalizeRecord()
+			} else if currentDoc != nil {
+				// Discard incomplete record without title
+				currentDoc = nil
+				resetAccumulators()
 			}
 			currentDoc = &ParsedDocument{Database: "PubMed"}
 			resetAccumulators()
@@ -456,7 +514,7 @@ func parseNBIB(content []byte) ([]ParsedDocument, error) {
 			lastTag = "PMID"
 			continue
 		}
-		
+
 		if currentDoc == nil {
 			// In case it doesn't start with PMID, initialize on first valid tag
 			if len(line) > 4 && line[4] == '-' {
@@ -466,7 +524,7 @@ func parseNBIB(content []byte) ([]ParsedDocument, error) {
 				continue
 			}
 		}
-		
+
 		var tag, val string
 		if len(line) > 6 && line[4] == '-' {
 			tag = strings.TrimSpace(line[:4])
@@ -562,7 +620,169 @@ func parseNBIB(content []byte) ([]ParsedDocument, error) {
 		flushAccumulators()
 		docs = append(docs, *currentDoc)
 	}
-	
+
+	return docs, nil
+}
+
+// parseRIS parses RIS (Research Information Systems) format commonly used by IEEE exports.
+func parseRIS(content []byte) ([]ParsedDocument, error) {
+	var docs []ParsedDocument
+	var currentDoc *ParsedDocument
+
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var authors []string
+	var keywords []string
+
+	finalizeRecord := func() {
+		if currentDoc != nil && currentDoc.Title != "" {
+			if len(authors) > 0 {
+				currentDoc.Authors = strings.Join(authors, "; ")
+			}
+			if len(keywords) > 0 {
+				currentDoc.Keywords = strings.Join(keywords, "; ")
+			}
+			docs = append(docs, *currentDoc)
+		}
+		currentDoc = nil
+		authors = nil
+		keywords = nil
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// End of Record
+		if strings.HasPrefix(line, "ER  -") || strings.TrimSpace(line) == "ER  -" {
+			finalizeRecord()
+			continue
+		}
+
+		// Empty line - could be record separator
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		// Start of new record
+		if strings.HasPrefix(line, "TY  - ") {
+			if currentDoc != nil {
+				finalizeRecord()
+			}
+			currentDoc = &ParsedDocument{}
+			authors = nil
+			keywords = nil
+			docType := strings.TrimSpace(line[6:])
+			currentDoc.DocumentType = docType
+			continue
+		}
+
+		// If no current doc and we see a valid tag, start one
+		if currentDoc == nil {
+			if len(line) > 6 && line[2] == ' ' && line[3] == ' ' && line[4] == '-' && line[5] == ' ' {
+				currentDoc = &ParsedDocument{}
+				authors = nil
+				keywords = nil
+			} else {
+				continue
+			}
+		}
+
+		var tag, val string
+		if len(line) > 6 && line[2] == ' ' && line[3] == ' ' && line[4] == '-' && line[5] == ' ' {
+			tag = strings.TrimSpace(line[:2])
+			val = strings.TrimSpace(line[6:])
+		} else if len(line) > 5 && line[2] == ' ' && line[3] == ' ' && line[4] == '-' {
+			// Tag with empty value
+			tag = strings.TrimSpace(line[:2])
+			val = ""
+		} else {
+			// Continuation or unrecognized - skip
+			continue
+		}
+
+		switch tag {
+		case "TI", "T1": // Title
+			if currentDoc.Title != "" {
+				currentDoc.Title += " " + val
+			} else {
+				currentDoc.Title = val
+			}
+		case "AB", "N2": // Abstract
+			if currentDoc.Abstract != "" {
+				currentDoc.Abstract += " " + val
+			} else {
+				currentDoc.Abstract = val
+			}
+		case "DO", "DOI": // DOI
+			if currentDoc.DOI == "" {
+				currentDoc.DOI = val
+			}
+		case "PY", "Y1", "DA": // Year
+			if currentDoc.Year == "" && len(val) >= 4 {
+				currentDoc.Year = val[:4]
+			}
+		case "AU", "A1": // Author
+			if val != "" {
+				authors = append(authors, val)
+			}
+		case "KW": // Keywords
+			if val != "" {
+				keywords = append(keywords, val)
+			}
+		case "JO", "JF", "T2": // Journal / Conference name
+			if currentDoc.Journal == "" {
+				currentDoc.Journal = val
+			}
+		case "VL": // Volume
+			if currentDoc.Volume == "" {
+				currentDoc.Volume = val
+			}
+		case "IS": // Issue
+			if currentDoc.Issue == "" {
+				currentDoc.Issue = val
+			}
+		case "SP": // Start Page
+			if currentDoc.PageStart == "" {
+				currentDoc.PageStart = val
+			}
+		case "EP": // End Page
+			if currentDoc.PageEnd == "" {
+				currentDoc.PageEnd = val
+			}
+		case "SN": // ISSN/ISBN
+			if currentDoc.ISSN == "" {
+				currentDoc.ISSN = val
+			}
+		case "PB": // Publisher
+			if currentDoc.Publisher == "" {
+				currentDoc.Publisher = val
+			}
+		case "LA": // Language
+			if currentDoc.Language == "" {
+				currentDoc.Language = val
+			}
+		case "DB": // Database
+			if currentDoc.Database == "" {
+				currentDoc.Database = val
+			}
+		}
+	}
+
+	// Finalize last record
+	finalizeRecord()
+
+	// Set database for entries without explicit DB tag
+	for i := range docs {
+		if docs[i].Database == "" {
+			// Detect based on DOI or other heuristics
+			if strings.Contains(docs[i].DOI, "10.1109") {
+				docs[i].Database = "IEEE"
+			} else {
+				docs[i].Database = "RIS Import"
+			}
+		}
+	}
+
 	return docs, nil
 }
 

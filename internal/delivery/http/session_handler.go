@@ -463,12 +463,14 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 		}
 		defer file.Close()
 
-		content := make([]byte, fileHeader.Size)
-		_, err = file.Read(content)
+		content, err := io.ReadAll(file)
 		if err != nil {
 			sendJSONError(w, http.StatusInternalServerError, "Failed to read file")
 			return
 		}
+
+		// Strip UTF-8 BOM if present
+		content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
 
 		// We use parser.ParseFile
 		parsedDocs, err := parser.ParseFile(fileHeader.Filename, content)
