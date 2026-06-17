@@ -34,9 +34,18 @@ func LogStreamHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// Berlangganan (Subscribe) ke log manager
-	logChan := logger.Subscribe(sessionID)
+	// Berlangganan (Subscribe) ke log manager + ambil backlog histori sesi ini.
+	logChan, backlog := logger.Subscribe(sessionID)
 	defer logger.Unsubscribe(sessionID, logChan)
+
+	// Replay histori DULU (di goroutine ini, sebelum writer goroutine dimulai → penulis
+	// tunggal, aman utk gorilla/websocket). Ini yang membuat panel Live Log langsung terisi
+	// untuk log yang sudah terbit sebelum klien connect (auto-resume/refresh/restart server).
+	for _, msg := range backlog {
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
+			return
+		}
+	}
 
 	// Goroutine untuk mengirim log ke klien saat log tersedia di channel
 	go func() {
