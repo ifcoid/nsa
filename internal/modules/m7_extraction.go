@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -23,6 +24,11 @@ import (
 
 type M7Extraction struct {
 	deps *ModuleDeps
+	// ftCache menyimpan indeks full-text Qdrant per-sesi agar tidak dibangun ulang tiap batch.
+	// BuildFulltextIndex men-scroll SELURUH koleksi global `scientific_articles` (mahal); tanpa
+	// cache ia berjalan ulang di setiap batch 6-paper (puluhan scroll penuh per sesi) sambil
+	// senyap → terlihat "lama & log kosong". Key = sessionID. Aman lintas-sesi (sync.Map).
+	ftCache sync.Map
 }
 
 func NewM7Extraction(deps *ModuleDeps) *M7Extraction {
@@ -32,6 +38,47 @@ func NewM7Extraction(deps *ModuleDeps) *M7Extraction {
 func (m *M7Extraction) Name() string { return "M7_EXTRACTION" }
 
 const extractionBatchSize = 6
+
+// ftCacheTTL membatasi umur indeks full-text yang di-cache. Cukup panjang untuk menampung
+// banyak batch dalam satu run, tapi tetap di-rebuild bila run berjalan sangat lama (mis. ada
+// ingestion full-text baru di Qdrant). Setiap rebuild di-log agar live log tak pernah gelap.
+const ftCacheTTL = 30 * time.Minute
+
+type ftCacheEntry struct {
+	index   map[string]string
+	builtAt time.Time
+}
+
+// fulltextIndexCached mengembalikan indeks full-text Qdrant, memakai cache per-sesi lintas
+// batch. Selalu memberi log mulai/selesai (+durasi & jumlah entri) supaya user melihat proses
+// berjalan, bukan layar log kosong selama scroll koleksi global yang besar.
+func (m *M7Extraction) fulltextIndexCached(ctx context.Context, sessionID string) map[string]string {
+	if v, ok := m.ftCache.Load(sessionID); ok {
+		if e := v.(ftCacheEntry); time.Since(e.builtAt) < ftCacheTTL {
+			logger.Logf(sessionID, "      [RAG] Pakai indeks full-text dari cache: %d entri (hemat scroll Qdrant).\n", len(e.index))
+			return e.index
+		}
+	}
+	logger.Log(sessionID, "      [RAG] Membangun indeks full-text dari Qdrant (scroll koleksi global)... mohon tunggu.")
+	start := time.Now()
+	idx, _, err := BuildFulltextIndex(ctx)
+	if err != nil {
+		logger.Logf(sessionID, "      [RAG] ⚠️ Gagal membangun indeks full-text: %v (lanjut tanpa RAG).\n", err)
+	}
+	if idx == nil {
+		idx = map[string]string{}
+	}
+	logger.Logf(sessionID, "      [RAG] Indeks full-text siap: %d entri (%.1fs). Di-cache untuk batch berikutnya.\n",
+		len(idx), time.Since(start).Seconds())
+	m.ftCache.Store(sessionID, ftCacheEntry{index: idx, builtAt: time.Now()})
+	return idx
+}
+
+// invalidateFulltextCache menghapus indeks cached saat ekstraksi selesai / akan di-ulang,
+// agar run berikutnya membaca state Qdrant terbaru dan memori dibebaskan.
+func (m *M7Extraction) invalidateFulltextCache(sessionID string) {
+	m.ftCache.Delete(sessionID)
+}
 
 func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) error {
 	logger.Logf(session.ID, ">> [MODUL 7: EXTRACTION + QA] State: %s\n", session.Status)
@@ -64,6 +111,7 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 		return nil
 	case "M7_STEP2_NEEDS_REVISION":
 		logger.Logf(session.ID, "   [Revisi 7.2] Ekstraksi ulang (feedback: '%s')\n", session.Feedback)
+		m.invalidateFulltextCache(session.ID) // re-extract: paksa indeks Qdrant dibangun ulang
 		_, _ = m.deps.MongoRepo.GetExtractionCollection().UpdateMany(ctx,
 			bson.M{"session_id": session.ID}, bson.M{"$set": bson.M{"extracted": false, "verified": false}})
 		_, _ = m.deps.MongoRepo.GetSessionCollection().UpdateOne(ctx,
@@ -316,6 +364,7 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 		if session.ExtractionLog == nil {
 			return m.spotVerifyL2(ctx, session)
 		}
+		m.invalidateFulltextCache(session.ID) // ekstraksi tuntas: bebaskan indeks cached
 		session.Status = "M7_STEP2_WAITING_APPROVAL"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	}
@@ -327,10 +376,11 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 	}
 	opDefs := m.opDefs(session)
 
-	ftIndex, _, _ := BuildFulltextIndex(ctx)
-	if ftIndex == nil {
-		ftIndex = map[string]string{}
-	}
+	ftIndex := m.fulltextIndexCached(ctx, session.ID)
+
+	doneCount, _ := coll.CountDocuments(ctx, bson.M{"session_id": session.ID, "extracted": true})
+	logger.Logf(session.ID, "   [Info] Progres ekstraksi: %d/%d selesai. Memproses batch %d paper berikutnya (tiap paper ~10-60 dtk via LLM).\n",
+		doneCount, totalCount, len(batch))
 
 	rp1, rf1 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
 	leadAg, err := m.agentWithFallback(ctx, rp1, rf1)
@@ -358,9 +408,11 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 
 		update := bson.M{"extracted": true}
 		if ft == "" {
+			logger.Logf(session.ID, "         [RAG] Full-text TIDAK ada di Qdrant — ditandai NO_FULLTEXT_RAG (perlu ekstraksi manual).\n")
 			update["coverage"] = "NO_FULLTEXT_RAG"
 			update["notes"] = "Full-text tidak tersedia di Qdrant; perlu ekstraksi manual."
 		} else {
+			logger.Logf(session.ID, "         [LLM] Memanggil extractor (%s)... bisa 10-60 dtk, mohon tunggu.\n", extractorModel)
 			res, e := leadAg.ExtractPaper(ctx, colsJSON, opDefs, title, ft)
 			if e != nil {
 				logger.Logf(session.ID, "         [!] gagal extract: %v (ditandai ERROR)\n", e)
@@ -385,6 +437,7 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 				}
 				update["nr_count"] = countNotReported(res.Fields)
 				update["model_extraction"] = extractorModel
+				logger.Logf(session.ID, "         [✓] Ekstraksi sukses: %d field, coverage=%s (%s).\n", len(res.Fields), cov, extractorModel)
 			}
 			time.Sleep(5 * time.Second)
 		}
@@ -435,10 +488,7 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 	}
 
 	opDefs := m.opDefs(session)
-	ftIndex, _, _ := BuildFulltextIndex(ctx)
-	if ftIndex == nil {
-		ftIndex = map[string]string{}
-	}
+	ftIndex := m.fulltextIndexCached(ctx, session.ID)
 	vp, vf := m.deps.LLMFactory.RoleProviders(ctx, "reviewer2")
 	verAg, err := m.agentWithFallback(ctx, vp, vf)
 	if err != nil {
@@ -532,6 +582,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 		ModelRefineProtocol: refineModelLbl,
 	}
 	logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d; disagreement %.1f%%; gagal/kosong %d.\n", total, checked, rate, failedCount)
+	m.invalidateFulltextCache(session.ID) // selesai: bebaskan indeks cached
 	session.Status = "M7_STEP2_WAITING_APPROVAL"
 	return m.deps.MongoRepo.UpdateSession(ctx, session)
 }
