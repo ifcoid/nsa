@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"nsa/internal/agent"
@@ -27,14 +28,28 @@ import (
 )
 
 type SessionHandler struct {
-	mongoRepo *repository.MongoRepository
-	pipeline  *orchestrator.SLRPipeline
+	mongoRepo  *repository.MongoRepository
+	pipeline   *orchestrator.SLRPipeline
+	recodeJobs map[string]*recodeJob
+	recodeMu   sync.Mutex
+}
+
+// recodeJob = status job saran re-code (AI) yang berjalan di background, agar progres
+// per-paper tampil di Live Log dan hasil bisa di-poll frontend tanpa memblok HTTP.
+type recodeJob struct {
+	Done        bool                     `json:"done"`
+	Model       string                   `json:"model"`
+	Total       int                      `json:"total"`
+	Progress    int                      `json:"progress"`
+	Suggestions []map[string]interface{} `json:"suggestions"`
+	Error       string                   `json:"error"`
 }
 
 func NewSessionHandler(mongo *repository.MongoRepository, pipeline *orchestrator.SLRPipeline) *SessionHandler {
 	return &SessionHandler{
-		mongoRepo: mongo,
-		pipeline:  pipeline,
+		mongoRepo:  mongo,
+		pipeline:   pipeline,
+		recodeJobs: make(map[string]*recodeJob),
 	}
 }
 
@@ -1819,9 +1834,10 @@ func (h *SessionHandler) RecodeExclusions(w http.ResponseWriter, req *http.Reque
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "Re-code diterapkan, menyusun ulang ringkasan", "recoded": n})
 }
 
-// SuggestRecodes meminta LLM (role Auditor configurable) mengusulkan reason_code spesifik
-// untuk tiap paper EXCLUDE full-text berdasar PICO + bukti. AI mengusulkan; HITL memutuskan
-// (hasil hanya pre-isi dropdown, TIDAK auto-apply).
+// SuggestRecodes memulai job background: LLM (role Auditor) mengusulkan reason_code spesifik
+// untuk tiap paper EXCLUDE, SATU per SATU, dengan progres ter-log ke Live Log + atribusi
+// MODEL. Mengembalikan segera ({started,total}); frontend poll GetRecodeResult untuk hasil.
+// AI mengusulkan; HITL memutuskan (tak auto-apply). Anti dobel-run: job berjalan -> tolak.
 func (h *SessionHandler) SuggestRecodes(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {
@@ -1834,6 +1850,16 @@ func (h *SessionHandler) SuggestRecodes(w http.ResponseWriter, req *http.Request
 		sendJSONError(w, http.StatusNotFound, "Session not found")
 		return
 	}
+
+	// Anti dobel-klik di sisi server: kalau job sesi ini masih berjalan, kembalikan statusnya.
+	h.recodeMu.Lock()
+	if j, ok := h.recodeJobs[id]; ok && !j.Done {
+		total := j.Total
+		h.recodeMu.Unlock()
+		sendJSONResponse(w, http.StatusAccepted, map[string]interface{}{"started": true, "total": total, "already_running": true})
+		return
+	}
+	h.recodeMu.Unlock()
 
 	coll := h.mongoRepo.GetScreeningCollection()
 	cursor, err := coll.Find(ctx, bson.M{"session_id": id, "full_text_retrieved": true})
@@ -1862,7 +1888,7 @@ func (h *SessionHandler) SuggestRecodes(w http.ResponseWriter, req *http.Request
 		i++
 	}
 	if len(arr) == 0 {
-		sendJSONResponse(w, http.StatusOK, map[string]interface{}{"suggestions": []interface{}{}})
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{"started": false, "total": 0, "suggestions": []interface{}{}})
 		return
 	}
 
@@ -1871,47 +1897,89 @@ func (h *SessionHandler) SuggestRecodes(w http.ResponseWriter, req *http.Request
 		b, _ := json.Marshal(session.PICODefinitions)
 		picoDef = string(b)
 	}
-	reasonCodes := []string{}
+	codesCSV := ""
 	if session.ScreeningSetup != nil {
-		reasonCodes = session.ScreeningSetup.ReasonCodes
+		codesCSV = strings.Join(session.ScreeningSetup.ReasonCodes, ", ")
 	}
-	papersJSON, _ := json.Marshal(arr)
+
+	job := &recodeJob{Total: len(arr)}
+	h.recodeMu.Lock()
+	h.recodeJobs[id] = job
+	h.recodeMu.Unlock()
 
 	factory := h.pipeline.GetLLMFactory()
 	roles := h.mongoRepo.GetLLMRoles(ctx)
-	var suggestions []agent.ExclusionCodeSuggestion
-	var lastErr error
-	for _, prov := range []string{roles.Auditor, roles.AuditorFallback} {
-		if strings.TrimSpace(prov) == "" {
-			continue
+
+	go func() {
+		bg := context.Background()
+		logger.Logf(id, "   🤖 [Saran AI] Mulai menganalisis %d paper EXCLUDE (role Auditor: %s, fb %s)...", len(arr), roles.Auditor, roles.AuditorFallback)
+		out := []map[string]interface{}{}
+		usedModel := ""
+		for n, paper := range arr {
+			title, _ := paper["title"].(string)
+			if len(title) > 70 {
+				title = title[:70] + "…"
+			}
+			logger.Logf(id, "   🤖 [Saran AI] Paper %d/%d: %s", n+1, len(arr), title)
+			single, _ := json.Marshal([]map[string]interface{}{paper})
+			var got *agent.ExclusionCodeSuggestion
+			for _, prov := range []string{roles.Auditor, roles.AuditorFallback} {
+				if strings.TrimSpace(prov) == "" {
+					continue
+				}
+				c, e := factory.CreateClient(bg, prov)
+				if e != nil {
+					continue
+				}
+				s, e2 := agent.NewScreeningAgent(c).SuggestExclusionCodes(bg, picoDef, codesCSV, string(single))
+				if e2 == nil && len(s) > 0 {
+					got = &s[0]
+					usedModel = prov
+					break
+				}
+			}
+			if got != nil {
+				logger.Logf(id, "      → %s (via %s)", got.ReasonCode, usedModel)
+				if pid, ok := idx2paper[paper["index"].(int)]; ok {
+					out = append(out, map[string]interface{}{"paper_id": pid, "suggested_code": got.ReasonCode, "rationale": got.Rationale, "model": usedModel})
+				}
+			} else {
+				logger.Logf(id, "      → gagal (AI tak membalas / kuota)")
+			}
+			h.recodeMu.Lock()
+			job.Progress = n + 1
+			h.recodeMu.Unlock()
 		}
-		c, e := factory.CreateClient(ctx, prov)
-		if e != nil {
-			lastErr = e
-			continue
-		}
-		s, e2 := agent.NewScreeningAgent(c).SuggestExclusionCodes(ctx, picoDef, strings.Join(reasonCodes, ", "), string(papersJSON))
-		if e2 == nil {
-			suggestions = s
-			lastErr = nil
-			break
-		}
-		lastErr = e2
+		h.recodeMu.Lock()
+		job.Done = true
+		job.Model = usedModel
+		job.Suggestions = out
+		h.recodeMu.Unlock()
+		logger.Logf(id, "   🤖 [Saran AI] Selesai: %d/%d usulan%s.", len(out), len(arr), map[bool]string{true: " via " + usedModel, false: ""}[usedModel != ""])
+	}()
+
+	sendJSONResponse(w, http.StatusAccepted, map[string]interface{}{"started": true, "total": len(arr)})
+}
+
+// GetRecodeResult mengembalikan status/hasil job saran re-code (untuk polling frontend).
+func (h *SessionHandler) GetRecodeResult(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	h.recodeMu.Lock()
+	job, ok := h.recodeJobs[id]
+	var snap recodeJob
+	if ok {
+		snap = *job
 	}
-	if lastErr != nil && len(suggestions) == 0 {
-		sendJSONError(w, http.StatusBadGateway, "AI saran gagal (cek role/kuota Auditor): "+lastErr.Error())
+	h.recodeMu.Unlock()
+	if !ok {
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{"found": false})
 		return
 	}
-
-	out := []map[string]interface{}{}
-	for _, s := range suggestions {
-		pid, ok := idx2paper[s.Index]
-		if !ok {
-			continue
-		}
-		out = append(out, map[string]interface{}{"paper_id": pid, "suggested_code": s.ReasonCode, "rationale": s.Rationale})
-	}
-	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"suggestions": out})
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"found": true, "done": snap.Done, "model": snap.Model,
+		"total": snap.Total, "progress": snap.Progress,
+		"suggestions": snap.Suggestions, "error": snap.Error,
+	})
 }
 
 func (h *SessionHandler) GetM6Papers(w http.ResponseWriter, req *http.Request) {

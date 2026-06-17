@@ -115,6 +115,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("GET /api/sessions/{id}/m6/excluded-fulltext", r.sessionHndlr.GetExcludedFullText)
 	protected.HandleFunc("POST /api/sessions/{id}/m6/recode-exclusions", r.sessionHndlr.RecodeExclusions)
 	protected.HandleFunc("POST /api/sessions/{id}/m6/suggest-recodes", r.sessionHndlr.SuggestRecodes)
+	protected.HandleFunc("GET /api/sessions/{id}/m6/suggest-recodes/result", r.sessionHndlr.GetRecodeResult)
 
 	// Modul 7 Reset
 	protected.HandleFunc("POST /api/sessions/{id}/reset-m7", r.sessionHndlr.ResetModul7)
