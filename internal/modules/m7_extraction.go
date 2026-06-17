@@ -206,6 +206,19 @@ func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSes
 	}
 	session.FrameworkSelection = fw
 
+	// xAI: atribusi model konsisten = provider + NAMA MODEL asli (bukan ModelName() mentah
+	// "openai/opus" yang menyesatkan — "openai/" hanya tipe adapter, bukan vendor). Samakan
+	// dengan langkah QA M7.
+	brainPrimary, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
+	if cfgBrain, _ := m.deps.MongoRepo.GetLLMConfig(ctx, brainPrimary); cfgBrain != nil {
+		fw.ModelUsed = cfgBrain.ProviderName
+		if cfgBrain.DefaultModel != "" {
+			fw.ModelUsed += " (" + cfgBrain.DefaultModel + ")"
+		}
+	} else if brainPrimary != "" {
+		fw.ModelUsed = brainPrimary
+	}
+
 	// Pre-populate koleksi extraction (idempotent untuk sesi ini).
 	coll := m.deps.MongoRepo.GetExtractionCollection()
 	_, _ = coll.DeleteMany(ctx, bson.M{"session_id": session.ID})
