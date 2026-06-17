@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/csv"
+	"errors"
+	"io"
 	"regexp"
 	"strings"
 )
@@ -81,26 +83,63 @@ func parseTxtByContent(content []byte) ([]ParsedDocument, error) {
 	return parseCSV(content)
 }
 
-func parseCSV(content []byte) ([]ParsedDocument, error) {
+// readCSVRecords membaca header + records dengan satu mode kutip (lazy/strict).
+// Per-baris + SKIP baris ParseError (bukan break): satu baris rusak tidak membuang sisanya.
+// encoding/csv pulih ke baris berikutnya setelah ParseError. Hanya io.EOF / error non-parse
+// yang mengakhiri loop. Mengembalikan (headers, records, jumlahDilewati).
+func readCSVRecords(content []byte, comma rune, lazy bool) ([]string, [][]string, int) {
 	reader := csv.NewReader(bytes.NewReader(content))
-	reader.LazyQuotes = true
-	reader.FieldsPerRecord = -1 // Allow variable number of fields
-	
-	// Detect delimiter. Scopus sometimes uses comma, sometimes semicolon.
+	reader.Comma = comma
+	reader.LazyQuotes = lazy
+	reader.FieldsPerRecord = -1 // izinkan jumlah field bervariasi
+
+	headers, err := reader.Read()
+	if err != nil {
+		return nil, nil, 0
+	}
+
+	var records [][]string
+	skipped := 0
+	for {
+		row, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			var pe *csv.ParseError
+			if errors.As(err, &pe) {
+				skipped++
+				continue // baris rusak — lewati, lanjut baca sisanya
+			}
+			break // error non-parse (mis. I/O) — tak bisa dipulihkan
+		}
+		records = append(records, row)
+	}
+	return headers, records, skipped
+}
+
+func parseCSV(content []byte) ([]ParsedDocument, error) {
+	// Deteksi delimiter dari baris pertama. Scopus kadang comma, kadang semicolon.
 	firstLine := string(content)
 	if idx := strings.Index(firstLine, "\n"); idx != -1 {
 		firstLine = firstLine[:idx]
 	}
+	comma := ','
 	if strings.Count(firstLine, ";") > strings.Count(firstLine, ",") {
-		reader.Comma = ';'
-	} else {
-		reader.Comma = ','
+		comma = ';'
 	}
 
-	// Read header row first
-	headers, err := reader.Read()
-	if err != nil {
-		return nil, err
+	// LazyQuotes=true DIAM-DIAM menelan baris saat kutip tak seimbang (mis. abstrak Scopus
+	// dgn kutip nyasar) -> under-count parah (201 jadi 139). LazyQuotes=false memunculkan
+	// ParseError yg kita SKIP per-baris, jadi baris valid lain tetap terbaca utuh. Tapi file
+	// yg penuh kutip-nyasar bisa membuat strict men-skip banyak. Maka: coba KEDUA mode, pakai
+	// yang memulihkan record TERBANYAK (jaminan tidak pernah lebih buruk dari sebelumnya).
+	headers, records, _ := readCSVRecords(content, comma, false) // strict
+	if hL, rL, _ := readCSVRecords(content, comma, true); len(rL) > len(records) {
+		headers, records = hL, rL
+	}
+	if headers == nil {
+		return []ParsedDocument{}, nil
 	}
 
 	headerMap := make(map[string]int)
@@ -108,18 +147,6 @@ func parseCSV(content []byte) ([]ParsedDocument, error) {
 		h = strings.TrimSpace(strings.ToLower(strings.ReplaceAll(h, "\"", "")))
 		h = strings.TrimPrefix(h, "\ufeff") // Strip any remaining BOM chars
 		headerMap[h] = i
-	}
-
-	// Read records one at a time to handle malformed rows gracefully.
-	// Using ReadAll() would discard all records after the first parse error,
-	// which causes issues with Scopus CSV files that may have quoting problems.
-	var records [][]string
-	for {
-		row, err := reader.Read()
-		if err != nil {
-			break // EOF or unrecoverable error - stop reading
-		}
-		records = append(records, row)
 	}
 
 	if len(records) == 0 {
@@ -156,32 +183,82 @@ func parseCSV(content []byte) ([]ParsedDocument, error) {
 	var docs []ParsedDocument
 	for _, row := range records {
 		doc := ParsedDocument{}
-		if titleIdx != -1 && titleIdx < len(row) { doc.Title = row[titleIdx] }
-		if absIdx != -1 && absIdx < len(row) { doc.Abstract = row[absIdx] }
-		if doiIdx != -1 && doiIdx < len(row) { doc.DOI = row[doiIdx] }
-		if yearIdx != -1 && yearIdx < len(row) { doc.Year = row[yearIdx] }
-		if authIdx != -1 && authIdx < len(row) { doc.Authors = row[authIdx] }
-		if dbIdx != -1 && dbIdx < len(row) { doc.Database = row[dbIdx] }
-		if typeIdx != -1 && typeIdx < len(row) { doc.DocumentType = row[typeIdx] }
-		if journalIdx != -1 && journalIdx < len(row) { doc.Journal = row[journalIdx] }
-		if keywordsIdx != -1 && keywordsIdx < len(row) { doc.Keywords = row[keywordsIdx] }
-		if indexKwIdx != -1 && indexKwIdx < len(row) { doc.IndexKeywords = row[indexKwIdx] }
-		if affiliationsIdx != -1 && affiliationsIdx < len(row) { doc.Affiliations = row[affiliationsIdx] }
-		if volumeIdx != -1 && volumeIdx < len(row) { doc.Volume = row[volumeIdx] }
-		if issueIdx != -1 && issueIdx < len(row) { doc.Issue = row[issueIdx] }
-		if pageStartIdx != -1 && pageStartIdx < len(row) { doc.PageStart = row[pageStartIdx] }
-		if pageEndIdx != -1 && pageEndIdx < len(row) { doc.PageEnd = row[pageEndIdx] }
-		if issnIdx != -1 && issnIdx < len(row) { doc.ISSN = row[issnIdx] }
-		if isbnIdx != -1 && isbnIdx < len(row) { doc.ISBN = row[isbnIdx] }
-		if publisherIdx != -1 && publisherIdx < len(row) { doc.Publisher = row[publisherIdx] }
-		if languageIdx != -1 && languageIdx < len(row) { doc.Language = row[languageIdx] }
-		if fundingIdx != -1 && fundingIdx < len(row) { doc.FundingDetails = row[fundingIdx] }
-		if citedByIdx != -1 && citedByIdx < len(row) { doc.CitedBy = row[citedByIdx] }
-		if confNameIdx != -1 && confNameIdx < len(row) { doc.ConferenceName = row[confNameIdx] }
-		if eidIdx != -1 && eidIdx < len(row) { doc.EID = row[eidIdx] }
-		if pubmedIdx != -1 && pubmedIdx < len(row) { doc.PubMedID = row[pubmedIdx] }
-		if referencesIdx != -1 && referencesIdx < len(row) { doc.References = row[referencesIdx] }
-		
+		if titleIdx != -1 && titleIdx < len(row) {
+			doc.Title = row[titleIdx]
+		}
+		if absIdx != -1 && absIdx < len(row) {
+			doc.Abstract = row[absIdx]
+		}
+		if doiIdx != -1 && doiIdx < len(row) {
+			doc.DOI = row[doiIdx]
+		}
+		if yearIdx != -1 && yearIdx < len(row) {
+			doc.Year = row[yearIdx]
+		}
+		if authIdx != -1 && authIdx < len(row) {
+			doc.Authors = row[authIdx]
+		}
+		if dbIdx != -1 && dbIdx < len(row) {
+			doc.Database = row[dbIdx]
+		}
+		if typeIdx != -1 && typeIdx < len(row) {
+			doc.DocumentType = row[typeIdx]
+		}
+		if journalIdx != -1 && journalIdx < len(row) {
+			doc.Journal = row[journalIdx]
+		}
+		if keywordsIdx != -1 && keywordsIdx < len(row) {
+			doc.Keywords = row[keywordsIdx]
+		}
+		if indexKwIdx != -1 && indexKwIdx < len(row) {
+			doc.IndexKeywords = row[indexKwIdx]
+		}
+		if affiliationsIdx != -1 && affiliationsIdx < len(row) {
+			doc.Affiliations = row[affiliationsIdx]
+		}
+		if volumeIdx != -1 && volumeIdx < len(row) {
+			doc.Volume = row[volumeIdx]
+		}
+		if issueIdx != -1 && issueIdx < len(row) {
+			doc.Issue = row[issueIdx]
+		}
+		if pageStartIdx != -1 && pageStartIdx < len(row) {
+			doc.PageStart = row[pageStartIdx]
+		}
+		if pageEndIdx != -1 && pageEndIdx < len(row) {
+			doc.PageEnd = row[pageEndIdx]
+		}
+		if issnIdx != -1 && issnIdx < len(row) {
+			doc.ISSN = row[issnIdx]
+		}
+		if isbnIdx != -1 && isbnIdx < len(row) {
+			doc.ISBN = row[isbnIdx]
+		}
+		if publisherIdx != -1 && publisherIdx < len(row) {
+			doc.Publisher = row[publisherIdx]
+		}
+		if languageIdx != -1 && languageIdx < len(row) {
+			doc.Language = row[languageIdx]
+		}
+		if fundingIdx != -1 && fundingIdx < len(row) {
+			doc.FundingDetails = row[fundingIdx]
+		}
+		if citedByIdx != -1 && citedByIdx < len(row) {
+			doc.CitedBy = row[citedByIdx]
+		}
+		if confNameIdx != -1 && confNameIdx < len(row) {
+			doc.ConferenceName = row[confNameIdx]
+		}
+		if eidIdx != -1 && eidIdx < len(row) {
+			doc.EID = row[eidIdx]
+		}
+		if pubmedIdx != -1 && pubmedIdx < len(row) {
+			doc.PubMedID = row[pubmedIdx]
+		}
+		if referencesIdx != -1 && referencesIdx < len(row) {
+			doc.References = row[referencesIdx]
+		}
+
 		// Heuristic to guess Database if empty
 		if doc.Database == "" {
 			if strings.Contains(strings.ToLower(doc.Title), "ieee") || getIdx(headerMap, "ieee terms") != -1 {
@@ -452,10 +529,10 @@ func parseNBIB(content []byte) ([]ParsedDocument, error) {
 	var lastTag string
 
 	// Accumulators for multi-value fields
-	var otVals []string  // OT = Author Keywords
-	var mhVals []string  // MH = MeSH Headings (Index Keywords)
-	var adVals []string  // AD = Affiliations
-	var grVals []string  // GR = Grants/Funding
+	var otVals []string // OT = Author Keywords
+	var mhVals []string // MH = MeSH Headings (Index Keywords)
+	var adVals []string // AD = Affiliations
+	var grVals []string // GR = Grants/Funding
 
 	flushAccumulators := func() {
 		if currentDoc == nil {
@@ -546,7 +623,7 @@ func parseNBIB(content []byte) ([]ParsedDocument, error) {
 		} else {
 			continue
 		}
-		
+
 		switch tag {
 		case "TI":
 			if currentDoc.Title != "" {
@@ -625,7 +702,7 @@ func parseNBIB(content []byte) ([]ParsedDocument, error) {
 			}
 		}
 	}
-	
+
 	if currentDoc != nil && currentDoc.Title != "" {
 		flushAccumulators()
 		docs = append(docs, *currentDoc)
