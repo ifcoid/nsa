@@ -3,6 +3,8 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +15,18 @@ import (
 	"nsa/internal/notify"
 	"nsa/internal/repository"
 )
+
+// pipelineTimeout adalah plafon waktu satu run worker background (ExecuteAsync). Default
+// GENEROUS 24 jam karena ekstraksi/QA ratusan paper (LLM per-paper + jeda rate-limit) bisa
+// memakan banyak jam. Bisa diubah tanpa redeploy via env PIPELINE_TIMEOUT_HOURS.
+func pipelineTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("PIPELINE_TIMEOUT_HOURS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return time.Duration(n) * time.Hour
+		}
+	}
+	return 24 * time.Hour
+}
 
 type SLRPipeline struct {
 	mongoRepo     *repository.MongoRepository
@@ -111,8 +125,8 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 
 	go func() {
 		// Gunakan background context baru agar tidak ter-cancel saat request HTTP selesai
-		// Beri timeout panjang karena panggilan LLM bisa memakan waktu
-		asyncCtx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
+		// Beri timeout panjang (configurable) karena panggilan LLM bisa memakan banyak jam
+		asyncCtx, cancel := context.WithTimeout(context.Background(), pipelineTimeout())
 		
 		p.mu.Lock()
 		p.activeCancelFuncs[sessionID] = cancel

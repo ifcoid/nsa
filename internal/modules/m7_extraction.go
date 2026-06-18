@@ -44,6 +44,10 @@ const extractionBatchSize = 6
 // ingestion full-text baru di Qdrant). Setiap rebuild di-log agar live log tak pernah gelap.
 const ftCacheTTL = 30 * time.Minute
 
+// spotVerifyCallTimeout membatasi satu panggilan verifier pada spot-check 20%. Cukup
+// longgar untuk model besar, tapi mencegah satu call nyangkut menahan langkah QA berjam-jam.
+const spotVerifyCallTimeout = 8 * time.Minute
+
 type ftCacheEntry struct {
 	index   map[string]string
 	builtAt time.Time
@@ -500,8 +504,13 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 
 	disagree, checked, ambiguous := 0, 0, 0
 	for i := 0; i < total; i++ {
+		// Spot-verify = QA sampling non-kritikal. Jika plafon waktu run tercapai (atau run
+		// di-stop), JANGAN jadikan fatal: hentikan verifikasi dgn rapi & lanjut ke approval —
+		// hasil ekstraksi sudah tersimpan. (Dulu di sini `return ctx.Err()` membuat SELURUH
+		// pipeline jadi _ERROR hanya karena satu langkah QA kehabisan waktu.)
 		if ctx.Err() != nil {
-			return ctx.Err()
+			logger.Logf(session.ID, "   [WARN] Verifikasi dihentikan di %d/%d (batas waktu run / stop). Lanjut ke approval dgn ekstraksi yang sudah tersimpan.\n", i, total)
+			break
 		}
 		p := all[i]
 		amb, _ := p["ambiguous"].(bson.A)
@@ -518,10 +527,14 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 		}
 		logger.Logf(session.ID, "      -> Verify [%d/%d] %s — memanggil verifier (%s)... ~4 dtk.\n", i+1, total, doi, verifierModel)
 		priorJSON, _ := json.Marshal(p["fields"])
-		res, e := verAg.VerifyExtraction(ctx, opDefs, getStr(p, "Title"), ft, string(priorJSON))
+		// Batasi tiap panggilan verifier: satu call yang nyangkut tak boleh menahan langkah QA
+		// berjam-jam (Generate sendiri retry 3×@60mnt). Timeout → di-skip, bukan fatal.
+		vctx, vcancel := context.WithTimeout(ctx, spotVerifyCallTimeout)
+		res, e := verAg.VerifyExtraction(vctx, opDefs, getStr(p, "Title"), ft, string(priorJSON))
+		vcancel()
 		checked++
 		if e != nil {
-			logger.Logf(session.ID, "         [!] verifikasi gagal: %v\n", e)
+			logger.Logf(session.ID, "         [!] verifikasi dilewati (gagal/timeout): %v\n", e)
 		} else if res != nil && res.Disagree {
 			disagree++
 			logger.Logf(session.ID, "         [≠] Disagreement — ditandai untuk ditinjau (HITL).\n")
@@ -594,7 +607,16 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d; disagreement %.1f%%; gagal/kosong %d.\n", total, checked, rate, failedCount)
 	m.invalidateFulltextCache(session.ID) // selesai: bebaskan indeks cached
 	session.Status = "M7_STEP2_WAITING_APPROVAL"
-	return m.deps.MongoRepo.UpdateSession(ctx, session)
+
+	// Pastikan transisi ke approval TETAP tersimpan walau plafon waktu run sudah tercapai
+	// (ctx kedaluwarsa). Tanpa ini, write gagal → pipeline jadi _ERROR padahal ekstraksi beres.
+	writeCtx := ctx
+	if ctx.Err() != nil {
+		var c context.CancelFunc
+		writeCtx, c = context.WithTimeout(context.Background(), 30*time.Second)
+		defer c()
+	}
+	return m.deps.MongoRepo.UpdateSession(writeCtx, session)
 }
 
 // ===== Helpers (dipakai L1-L4) =====
