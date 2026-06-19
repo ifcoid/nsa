@@ -61,8 +61,23 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M5_STEP1_APPROVED":
-		logger.Log(session.ID, "   [Langkah 5.1] Screener Briefing disetujui! Lanjut ke Kalibrasi Dual-Review...")
+		logger.Log(session.ID, "   [Langkah 5.1] Screener Briefing disetujui! Memeriksa kesiapan API Reviewer...")
+
+		// Pre-flight: Pastikan minimal R1 dan R2 bisa dimuat SEBELUM masuk kalibrasi.
+		// Ini mencegah masuk ke M5_STEP2_CALIBRATION dengan reviewer kosong.
+		if err := m.validateReviewerReadiness(ctx, session.ID); err != nil {
+			logger.Logf(session.ID, "   [BLOCK] API Reviewer belum siap: %v", err)
+			session.SystemError = fmt.Sprintf("⚠️ %v. Silakan buka halaman Pengaturan, konfigurasikan API Key, lalu klik Approve kembali.", err)
+			// Kembalikan ke M5_STEP1_WAITING_APPROVAL agar pipeline berhenti (loop stop) dan
+			// user melihat briefing + banner error di UI yang sudah ada.
+			session.Status = "M5_STEP1_WAITING_APPROVAL"
+			return m.deps.MongoRepo.UpdateSession(ctx, session)
+		}
+
+		// Semua reviewer siap — clear error lama (jika ada dari percobaan sebelumnya)
+		session.SystemError = ""
 		session.Status = "M5_STEP2_CALIBRATION"
+		logger.Log(session.ID, "   [OK] API Reviewer siap. Lanjut ke Kalibrasi Dual-Review...")
 		// Reset hasil screening sebelumnya saat pertama kali masuk kalibrasi
 		_ = m.deps.MongoRepo.ResetCalibrationScreenings(ctx, session.ID)
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
@@ -907,4 +922,30 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		logger.Logf(session.ID, "[Modul 5] Sub-status %s tidak dikenali atau belum diimplementasikan.", session.Status)
 		return nil
 	}
+}
+
+// validateReviewerReadiness memeriksa apakah API provider untuk Reviewer 1 dan Reviewer 2
+// bisa dimuat (API key valid, provider aktif). Dipanggil sebagai pre-flight check sebelum
+// transisi ke kalibrasi, agar user tidak terjebak di status kosong.
+func (m *M5Screening) validateReviewerReadiness(ctx context.Context, sessionID string) error {
+	roles := m.deps.LLMFactory.Roles(ctx)
+
+	// Cek Reviewer 1 (primary → fallback)
+	_, errR1 := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1)
+	if errR1 != nil {
+		logger.Logf(sessionID, "   [Pre-flight] R1 primary (%s) gagal: %v. Mencoba fallback (%s)...", roles.Reviewer1, errR1, roles.Reviewer1Fallback)
+		_, errR1fb := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
+		if errR1fb != nil {
+			return fmt.Errorf("Reviewer 1 (%s maupun fallback %s) belum dikonfigurasi", roles.Reviewer1, roles.Reviewer1Fallback)
+		}
+	}
+
+	// Cek Reviewer 2
+	_, errR2 := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2)
+	if errR2 != nil {
+		return fmt.Errorf("Reviewer 2 (%s) belum dikonfigurasi", roles.Reviewer2)
+	}
+
+	logger.Logf(sessionID, "   [Pre-flight] ✅ R1=%s, R2=%s — siap untuk kalibrasi.", roles.Reviewer1, roles.Reviewer2)
+	return nil
 }
