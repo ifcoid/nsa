@@ -35,13 +35,13 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if payload.Provider == "" || payload.APIKey == "" {
-		sendJSONError(w, http.StatusBadRequest, "Provider and APIKey are required")
+	if payload.Provider == "" {
+		sendJSONError(w, http.StatusBadRequest, "Provider is required")
 		return
 	}
 
 	ctx := context.Background()
-	
+
 	// Fetch existing config to update or create new
 	config, err := h.mongoRepo.GetLLMConfig(ctx, payload.Provider)
 	if err != nil {
@@ -53,8 +53,17 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	// Update fields
-	config.APIKey = payload.APIKey
+	// API key kosong + belum pernah ada -> provider baru wajib isi key.
+	if payload.APIKey == "" && config.APIKey == "" {
+		sendJSONError(w, http.StatusBadRequest, "API Key wajib diisi untuk provider baru")
+		return
+	}
+
+	// Update fields. API key kosong -> PERTAHANKAN yang lama (edit model/base_url tanpa
+	// ketik ulang key). Sama seperti GitHub/Embed config.
+	if payload.APIKey != "" {
+		config.APIKey = payload.APIKey
+	}
 	if payload.DefaultModel != "" {
 		config.DefaultModel = payload.DefaultModel
 	}
@@ -226,6 +235,17 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
+	}
+
+	// API key kosong -> pakai key tersimpan (agar bisa muat ulang model untuk provider yang
+	// sudah dikonfigurasi tanpa ketik ulang key). Base URL juga diisi dari config bila kosong.
+	if payload.APIKey == "" {
+		if cfg, err := h.mongoRepo.GetLLMConfig(context.Background(), provider); err == nil && cfg != nil {
+			payload.APIKey = cfg.APIKey
+			if payload.BaseURL == "" {
+				payload.BaseURL = cfg.BaseURL
+			}
+		}
 	}
 
 	if payload.APIKey == "" && provider != "claude" {
