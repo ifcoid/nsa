@@ -39,6 +39,11 @@ func (m *M7Extraction) Name() string { return "M7_EXTRACTION" }
 
 const extractionBatchSize = 6
 
+// maxConsecutiveExtractFails: bila extractor LLM gagal sebanyak ini BERUNTUN (apa pun
+// sebabnya: down, rate limit, API key salah, error server, stream kosong), anggap SISTEMIK
+// (bukan paper jelek) dan ABORT batch — daripada menggilas seluruh paper jadi ERROR.
+const maxConsecutiveExtractFails = 3
+
 // ftCacheTTL membatasi umur indeks full-text yang di-cache. Cukup panjang untuk menampung
 // banyak batch dalam satu run, tapi tetap di-rebuild bila run berjalan sangat lama (mis. ada
 // ingestion full-text baru di Qdrant). Setiap rebuild di-log agar live log tak pernah gelap.
@@ -376,6 +381,7 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 	// mentah "openai/openai/gpt-oss-120b" yang dobel-prefix & menyesatkan). Samakan dgn M7 L1/QA.
 	extractorModel := m.modelLabel(ctx, rp1)
 
+	consecutiveFails := 0 // gagal LLM beruntun -> sistemik -> abort (lihat maxConsecutiveExtractFails)
 	for i, p := range batch {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -407,17 +413,27 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 				return fmt.Errorf("Ekstraktor LLM role Reviewer 1 (%s) tidak bisa dihubungi: %v — server LLM mati atau base URL provider salah. Nyalakan server-nya / perbaiki provider Reviewer 1 di Pengaturan LLM, lalu Resume. (Paper belum ditandai ERROR; akan diekstrak ulang otomatis saat server hidup.)", extractorModel, e)
 			}
 			if e != nil {
-				logger.Logf(session.ID, "         [!] gagal extract: %v (ditandai ERROR)\n", e)
+				consecutiveFails++
+				// Gagal BERUNTUN (rate limit, API key salah, error server, stream kosong, dll)
+				// = kemungkinan SISTEMIK, bukan paper jelek. Abort sebelum menggilas sisa paper
+				// jadi ERROR. Paper ini & sisanya TIDAK ditulis ERROR -> re-extract bersih saat
+				// provider beres (Resume).
+				if consecutiveFails >= maxConsecutiveExtractFails {
+					return fmt.Errorf("Ekstraksi dihentikan: extractor LLM role Reviewer 1 (%s) gagal %d paper beruntun (terakhir: %v) — kemungkinan provider down / rate-limit / API key salah, bukan paper-nya. Perbaiki provider Reviewer 1 di Pengaturan LLM lalu Resume. (Sisa paper belum ditandai ERROR.)", extractorModel, consecutiveFails, e)
+				}
+				logger.Logf(session.ID, "         [!] gagal extract: %v (ditandai ERROR; %d/%d beruntun)\n", e, consecutiveFails, maxConsecutiveExtractFails)
 				update["coverage"] = "ERROR"
 				update["notes"] = "Ekstraksi gagal: " + e.Error()
 			} else if len(res.Fields) == 0 {
 				// Silent-empty: parse sukses tapi LLM tak mengembalikan satu field pun.
 				// JANGAN sembunyikan sbg "selesai" — tandai agar terlihat & bisa re-extract HITL.
+				consecutiveFails = 0 // LLM merespons (walau kosong) -> bukan kegagalan sistemik
 				logger.Logf(session.ID, "         [!] hasil kosong (0 field) — ditandai EMPTY_RESULT\n")
 				update["coverage"] = "EMPTY_RESULT"
 				update["notes"] = "LLM mengembalikan hasil kosong (0 field) walau full-text tersedia; perlu ekstraksi ulang."
 				update["model_extraction"] = extractorModel
 			} else {
+				consecutiveFails = 0
 				cov, covNote := agent.NormalizeCoverage(res.Coverage)
 				update["fields"] = res.Fields
 				update["key_findings"] = res.KeyFindings
