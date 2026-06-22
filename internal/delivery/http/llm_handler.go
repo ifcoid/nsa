@@ -162,6 +162,34 @@ func (h *LLMHandler) UpdateScopusConfig(w http.ResponseWriter, req *http.Request
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"message": "Scopus config updated"})
 }
 
+// ListConfigs mengembalikan ringkasan provider yang TELAH dikonfigurasi: provider id +
+// NAMA MODEL (default_model) + apakah API key sudah diisi + base_url. TANPA membocorkan
+// API key. Dipakai UI Model Routing agar user tahu MODEL apa (bukan cuma provider) yang
+// dipakai tiap role, dan provider mana yang belum dikonfigurasi.
+func (h *LLMHandler) ListConfigs(w http.ResponseWriter, req *http.Request) {
+	configs, err := h.mongoRepo.GetAllLLMConfigs(context.Background())
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch LLM configs")
+		return
+	}
+	type ConfigSummary struct {
+		Provider     string `json:"provider"`
+		DefaultModel string `json:"default_model"`
+		HasKey       bool   `json:"has_key"`
+		BaseURL      string `json:"base_url,omitempty"`
+	}
+	out := make([]ConfigSummary, 0, len(configs))
+	for _, c := range configs {
+		out = append(out, ConfigSummary{
+			Provider:     c.ID,
+			DefaultModel: c.DefaultModel,
+			HasKey:       c.APIKey != "",
+			BaseURL:      c.BaseURL,
+		})
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"configs": out})
+}
+
 // GetRoles mengembalikan pemetaan peran->provider (Model Routing).
 func (h *LLMHandler) GetRoles(w http.ResponseWriter, req *http.Request) {
 	roles := h.mongoRepo.GetLLMRoles(context.Background())

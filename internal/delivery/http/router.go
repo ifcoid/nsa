@@ -152,6 +152,7 @@ func (r *Router) registerRoutes() {
 	
 	// LLM config endpoints
 	protected.HandleFunc("GET /api/llm/health", r.llmHndlr.CheckHealth)
+	protected.HandleFunc("GET /api/llm/config", r.llmHndlr.ListConfigs)
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
 	protected.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
 
