@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // llm_attribution.go — xAI: seragamkan pesan error LLM agar SELALU menyebut role +
@@ -63,6 +64,26 @@ func (d *ModuleDeps) roleLabel(ctx context.Context, role string) string {
 		return lbl
 	}
 	return "belum dikonfigurasi"
+}
+
+// isLLMConnectivityError menandai error yang berarti endpoint LLM TAK TERJANGKAU (server
+// mati / base URL salah / DNS gagal / koneksi di-reset) — ini SISTEMIK, bukan kegagalan
+// konten per-item. Dipakai untuk fail-fast: percuma meneruskan item lain yang pasti gagal
+// identik (mis. seluruh batch ekstraksi saat server LLM mati).
+func isLLMConnectivityError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	for _, sig := range []string{
+		"connection refused", "actively refused", "dial tcp", "no such host",
+		"connection reset", "connectex", "network is unreachable", "no route to host",
+	} {
+		if strings.Contains(s, sig) {
+			return true
+		}
+	}
+	return false
 }
 
 // llmError membungkus error pemanggilan LLM dengan atribusi xAI yang konsisten:

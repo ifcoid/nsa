@@ -1,6 +1,37 @@
 package modules
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
+
+func TestIsLLMConnectivityError(t *testing.T) {
+	conn := []string{
+		`Post "http://localhost:8080/v1/chat/completions": dial tcp [::1]:8080: connectex: No connection could be made because the target machine actively refused it.`,
+		"dial tcp 127.0.0.1:8080: connect: connection refused",
+		"lookup api.example.com: no such host",
+		"read: connection reset by peer",
+	}
+	for _, m := range conn {
+		if !isLLMConnectivityError(errors.New(m)) {
+			t.Errorf("harus terdeteksi konektivitas: %q", m)
+		}
+	}
+	notConn := []string{
+		"invalid character 'S' looking for beginning of value",
+		"gagal parsing JSON dari LLM",
+		"rate limit exceeded (429)",
+		"",
+	}
+	for _, m := range notConn {
+		if isLLMConnectivityError(errors.New(m)) {
+			t.Errorf("BUKAN konektivitas tapi terdeteksi: %q", m)
+		}
+	}
+	if isLLMConnectivityError(nil) {
+		t.Error("nil bukan error konektivitas")
+	}
+}
 
 func TestRoleDisplay(t *testing.T) {
 	cases := map[string]string{

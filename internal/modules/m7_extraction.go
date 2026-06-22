@@ -399,6 +399,13 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 		} else {
 			logger.Logf(session.ID, "         [LLM] Memanggil extractor (%s)... bisa 10-60 dtk, mohon tunggu.\n", extractorModel)
 			res, e := leadAg.ExtractPaper(ctx, colsJSON, opDefs, title, ft)
+			if e != nil && isLLMConnectivityError(e) {
+				// Error KONEKTIVITAS = sistemik (server LLM mati / base URL salah). Percuma
+				// meneruskan 5 paper lain × 3 retry yang pasti gagal identik, dan menandai
+				// semua ERROR malah mengotori state. Abort batch dgn pesan actionable; paper
+				// ini TIDAK ditulis (tetap extracted=false) agar re-extract bersih saat hidup.
+				return fmt.Errorf("Ekstraktor LLM role Reviewer 1 (%s) tidak bisa dihubungi: %v — server LLM mati atau base URL provider salah. Nyalakan server-nya / perbaiki provider Reviewer 1 di Pengaturan LLM, lalu Resume. (Paper belum ditandai ERROR; akan diekstrak ulang otomatis saat server hidup.)", extractorModel, e)
+			}
 			if e != nil {
 				logger.Logf(session.ID, "         [!] gagal extract: %v (ditandai ERROR)\n", e)
 				update["coverage"] = "ERROR"
