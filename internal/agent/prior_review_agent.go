@@ -31,9 +31,11 @@ PENTING (anti-halusinasi + HITL):
 Aturan isi:
 1. "selisih" HANYA salah satu/kombinasi tag: BEDA POPULASI / BEDA METODE / BEDA PERIODE / BEDA FOKUS / BEDA FRAMEWORK.
 2. "synthesis_novelty" spesifik (150-200 kata): kaitkan kelemahan review tersebut dengan riset pengguna dan mengapa riset pengguna MENUTUP gap-nya.
+3. "search_guidance" WAJIB diisi: resep pencarian SIAP-PAKAI agar peneliti dapat MENEMUKAN & MEMVERIFIKASI sendiri prior-review nyata. Sertakan: (a) satu query Boolean Scopus berformat TITLE-ABS-KEY(...) yang diturunkan dari topik & gap, (b) saran filter (rentang tahun, document type = Review/Article), (c) database alternatif (Google Scholar scholar.google.com, Web of Science) + varian kata kunci. Tulis sebagai teks ringkas yang bisa langsung disalin ke scopus.com. Contoh format: "Scopus (scopus.com): TITLE-ABS-KEY(\"systematic review\" AND \"deep learning\" AND \"EEG\" AND emotion*) AND PUBYEAR > 2018, filter Document Type = Review. Alternatif: Google Scholar / Web of Science dengan kata kunci ...".
 
 Output HARUS JSON MURNI dengan struktur persis ini (tanpa markdown/teks di luar JSON):
 {
+  "search_guidance": "Scopus (scopus.com): TITLE-ABS-KEY(...) AND PUBYEAR > 20xx, Document Type = Review. Alternatif: Google Scholar / WoS dengan kata kunci ...",
   "reviews": [
     {
       "author_year": "Nama dkk. (Tahun)",
@@ -78,6 +80,12 @@ Output HARUS JSON MURNI dengan struktur persis ini (tanpa markdown/teks di luar 
 		if strings.TrimSpace(matrix.Reviews[i].Verification) == "" {
 			matrix.Reviews[i].Verification = "UNVERIFIED"
 		}
+	}
+
+	// Fallback panduan pencarian bila model lupa mengisi: minimal arahkan peneliti ke
+	// Scopus/Scholar untuk menemukan & memverifikasi sendiri.
+	if strings.TrimSpace(matrix.SearchGuidance) == "" {
+		matrix.SearchGuidance = "Cari & verifikasi prior-review di Scopus (scopus.com) atau Google Scholar (scholar.google.com)/Web of Science: gunakan TITLE-ABS-KEY(\"systematic review\" OR \"literature review\") DIGABUNG kata kunci inti topik & gap Anda, filter Document Type = Review dan rentang tahun 5-10 tahun terakhir."
 	}
 
 	return &matrix, nil

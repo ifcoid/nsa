@@ -51,6 +51,10 @@ type PriorReview struct {
 
 type PriorReviewsMatrix struct {
 	Reviews []PriorReview `bson:"reviews" json:"reviews"`
+	// SearchGuidance: resep pencarian siap-pakai (query Scopus/Scholar + database/filter)
+	// agar peneliti BISA menemukan & memverifikasi sendiri prior-review nyata. Diisi model
+	// karena role Brain tanpa web search (HITL: AI memberi arah, manusia mencari & verifikasi).
+	SearchGuidance string `bson:"search_guidance,omitempty" json:"search_guidance,omitempty"`
 }
 
 type OperationalDef struct {
