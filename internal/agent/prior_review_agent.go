@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"nsa/internal/llm"
 	"nsa/internal/model"
 )
@@ -49,9 +51,20 @@ Output HANYA JSON MURNI tanpa markdown tambahan atau teks di luar JSON.`
 	cleaned := CleanJSONResponse(response)
 
 	var matrix model.PriorReviewsMatrix
-	err = json.Unmarshal([]byte(cleaned), &matrix)
-	if err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON dari LLM (%w). Raw response: %s", err, response)
+	if err := json.Unmarshal([]byte(cleaned), &matrix); err != nil {
+		snippet := strings.TrimSpace(response)
+		if len(snippet) > 300 {
+			snippet = snippet[:300] + "…"
+		}
+		// Saat web search tak tersedia, model sering MEMBALAS PERCAKAPAN (menolak meng-
+		// hasilkan JSON agar tak hallucinate) alih-alih JSON murni. Beri pesan actionable
+		// yang menyebut model + akar masalah + remedi — bukan error parser mentah + dump
+		// raksasa yang membuat user bingung.
+		if !strings.HasPrefix(strings.TrimSpace(cleaned), "{") {
+			return nil, fmt.Errorf("Prior Reviews: model %s tidak mengembalikan JSON, kemungkinan menolak karena WEB SEARCH tidak tersedia (step ini menyuruh pencarian web real-time). Solusi: (a) pakai model Brain berkemampuan web search untuk step ini (mis. Gemini dengan GEMINI_GROUNDING=true), atau (b) isi matriks prior-review secara manual via revisi (HITL). Cuplikan respons: %q",
+				a.client.ModelName(), snippet)
+		}
+		return nil, fmt.Errorf("Prior Reviews: gagal parsing JSON dari model %s: %w. Cuplikan: %q", a.client.ModelName(), err, snippet)
 	}
 
 	return &matrix, nil
