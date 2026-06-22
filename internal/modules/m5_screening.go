@@ -34,11 +34,11 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		reasonCodesBytes, _ := json.MarshalIndent(session.ScreeningSetup.ReasonCodes, "", "  ")
 
 		llmBrain, err := m.deps.LLMFactory.BrainClient(ctx)
-		if err != nil { return err }
+		if err != nil { return m.deps.llmError(ctx, "brain", "Memuat client briefing M5", err) }
 
 		scAgent := agent.NewScreeningAgent(llmBrain)
 		briefing, err := scAgent.GenerateBriefing(ctx, string(picoBytes), string(reasonCodesBytes))
-		if err != nil { return err }
+		if err != nil { return m.deps.llmError(ctx, "brain", "Generate screener briefing", err) }
 
 		session.ScreenerBriefing = briefing
 		session.Status = "M5_STEP1_WAITING_APPROVAL"
@@ -89,17 +89,17 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		roles := m.deps.LLMFactory.Roles(ctx)
 		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1)
 		if err != nil { 
-			logger.Logf(session.ID, "   [INFO] Zhipu gagal dimuat (%v). Fallback awal ke Xiaomi MiMo...\n", err)
+			logger.Logf(session.ID, "   [INFO] Reviewer 1 primary gagal dimuat (%v). Fallback...\n", err)
 			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
 			if err != nil {
-				return fmt.Errorf("Reviewer 1 (Zhipu maupun Xiaomi) gagal dimuat. Harap konfigurasi API di Pengaturan")
+				return m.deps.llmError(ctx, "reviewer1", "Memuat Reviewer 1 M5 (screening)", err)
 			}
 		}
 		
 		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2)
 		if err != nil { 
-			logger.Logf(session.ID, "   [ERROR] LLM groq gagal dimuat (%v). Harap konfigurasi API groq terlebih dahulu di halaman Pengaturan!\n", err)
-			return fmt.Errorf("groq LLM configuration missing or invalid. Please configure the groq API key first")
+			logger.Logf(session.ID, "   [ERROR] Reviewer 2 gagal dimuat (%v). Konfigurasi provider Reviewer 2 di Pengaturan LLM.\n", err)
+			return m.deps.llmError(ctx, "reviewer2", "Memuat Reviewer 2 M5 (screening)", err)
 		}
 
 		scAgent1 := agent.NewScreeningAgent(llmR1)
@@ -189,15 +189,15 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 							time.Sleep(backoff)
 						}
 						if err1 != nil {
-							logger.Logf(session.ID, "      [!] R1 Fallback (Xiaomi) juga gagal: %v", err1)
+							logger.Logf(session.ID, "      [!] Reviewer 1 fallback juga gagal: %v", err1)
 						}
 					}
 				}
 
-				if res1 == nil || err1 != nil { 
-					return fmt.Errorf("Kalibrasi dibatalkan: R1 gagal merespons setelah fallback: %v", err1)
+				if res1 == nil || err1 != nil {
+					return fmt.Errorf("Kalibrasi dibatalkan: role Reviewer 1 (%s) gagal merespons setelah fallback: %w — periksa provider Reviewer 1 di Pengaturan LLM", m.deps.roleLabel(ctx, "reviewer1"), err1)
 				}
-				logger.Logf(session.ID, "      [RAW R1 Zhipu] %s", raw1)
+				logger.Logf(session.ID, "      [RAW R1] %s", raw1)
 				
 				// Jeda Antar Agen (Sequential Micro-Throttling) agar tidak burst request
 				time.Sleep(3 * time.Second)
@@ -216,10 +216,10 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 					logger.Logf(session.ID, "      [R2 Retry %d] Error LLM: %v. Menunggu %v sebelum mencoba lagi...", retry+1, err2, backoff)
 					time.Sleep(backoff)
 				}
-				if res2 == nil || err2 != nil { 
-					return fmt.Errorf("Kalibrasi dibatalkan: R2 (Groq) gagal merespons setelah 6x percobaan: %v", err2)
+				if res2 == nil || err2 != nil {
+					return fmt.Errorf("Kalibrasi dibatalkan: role Reviewer 2 (%s) gagal merespons setelah 6x percobaan: %w — periksa provider Reviewer 2 di Pengaturan LLM", m.deps.roleLabel(ctx, "reviewer2"), err2)
 				}
-				logger.Logf(session.ID, "      [RAW R2 Groq] %s", raw2)
+				logger.Logf(session.ID, "      [RAW R2] %s", raw2)
 			}
 
 			agreement := "DISAGREE"
@@ -436,17 +436,17 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		roles := m.deps.LLMFactory.Roles(ctx)
 		llmR1, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1)
 		if err != nil { 
-			logger.Logf(session.ID, "   [INFO] Zhipu gagal dimuat (%v). Fallback awal ke Xiaomi MiMo...\n", err)
+			logger.Logf(session.ID, "   [INFO] Reviewer 1 primary gagal dimuat (%v). Fallback...\n", err)
 			llmR1, err = m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
 			if err != nil {
-				return fmt.Errorf("Reviewer 1 (Zhipu maupun Xiaomi) gagal dimuat. Harap konfigurasi API di Pengaturan")
+				return m.deps.llmError(ctx, "reviewer1", "Memuat Reviewer 1 M5 (screening)", err)
 			}
 		}
 		
 		llmR2, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2)
 		if err != nil { 
-			logger.Logf(session.ID, "   [ERROR] LLM groq gagal dimuat (%v). Harap konfigurasi API groq terlebih dahulu di halaman Pengaturan!\n", err)
-			return fmt.Errorf("groq LLM configuration missing or invalid. Please configure the groq API key first")
+			logger.Logf(session.ID, "   [ERROR] Reviewer 2 gagal dimuat (%v). Konfigurasi provider Reviewer 2 di Pengaturan LLM.\n", err)
+			return m.deps.llmError(ctx, "reviewer2", "Memuat Reviewer 2 M5 (screening)", err)
 		}
 
 		var scAgentSupervisor *agent.ScreeningAgent
@@ -460,7 +460,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			logger.Logf(session.ID, "   [INFO] Supervisor %s gagal dimuat (%v). Fallback ke %s...\n", roles.Supervisor, err, roles.SupervisorFallback)
 			llmSupervisor, err = m.deps.LLMFactory.CreateClient(ctx, roles.SupervisorFallback)
 			if err != nil {
-				return fmt.Errorf("AI Supervisor (%s/%s) gagal dimuat. Harap konfigurasi API di Pengaturan", roles.Supervisor, roles.SupervisorFallback)
+				return m.deps.llmError(ctx, "supervisor", "Memuat AI Supervisor M5", err)
 			}
 			scAgentSupervisor = agent.NewScreeningAgent(llmSupervisor)
 			primarySupervisorName = roles.SupervisorFallback
@@ -540,13 +540,13 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 						time.Sleep(backoff)
 					}
 					if err1 != nil {
-						logger.Logf(session.ID, "      [!] R1 Fallback (Xiaomi) juga gagal: %v", err1)
+						logger.Logf(session.ID, "      [!] Reviewer 1 fallback juga gagal: %v", err1)
 					}
 				}
 			}
 
 			if res1 == nil || err1 != nil { 
-				return fmt.Errorf("API R1 gagal merespons setelah fallback (%v). Batch terhenti, %d paper berhasil disimpan.", err1, total)
+				return fmt.Errorf("role Reviewer 1 (%s) gagal merespons setelah fallback: %w. Batch terhenti, %d paper berhasil disimpan — periksa provider Reviewer 1 di Pengaturan LLM", m.deps.roleLabel(ctx, "reviewer1"), err1, total)
 			}
 			res1.PaperID = paperID
 			res1.Title = title
@@ -569,7 +569,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 				time.Sleep(backoff)
 			}
 			if res2 == nil || err2 != nil { 
-				return fmt.Errorf("API R2 gagal merespons setelah 6x percobaan (%v). Batch terhenti, %d paper berhasil disimpan.", err2, total)
+				return fmt.Errorf("role Reviewer 2 (%s) gagal merespons setelah 6x percobaan: %w. Batch terhenti, %d paper berhasil disimpan — periksa provider Reviewer 2 di Pengaturan LLM", m.deps.roleLabel(ctx, "reviewer2"), err2, total)
 			}
 			res2.PaperID = paperID
 			res2.Title = title
@@ -795,7 +795,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 			logger.Logf(session.ID, "      [!] Gagal membuat LLM client '%s': %v", provider, err)
 		}
 		if llmClient == nil {
-			return fmt.Errorf("[M5_STEP4] gagal membuat LLM client: semua provider gagal (supervisor=%s, fallback=%s, zhipu, groq, brain=%s)", roles.Supervisor, roles.SupervisorFallback, roles.Brain)
+			return fmt.Errorf("[M5_STEP4] Audit PICO gagal: semua provider LLM gagal dimuat (Supervisor=%s, Brain=%s) — periksa Pengaturan LLM (API key, nama model, kuota)", m.deps.roleLabel(ctx, "supervisor"), m.deps.roleLabel(ctx, "brain"))
 		}
 		scAgent := agent.NewScreeningAgent(llmClient)
 
@@ -936,14 +936,14 @@ func (m *M5Screening) validateReviewerReadiness(ctx context.Context, sessionID s
 		logger.Logf(sessionID, "   [Pre-flight] R1 primary (%s) gagal: %v. Mencoba fallback (%s)...", roles.Reviewer1, errR1, roles.Reviewer1Fallback)
 		_, errR1fb := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
 		if errR1fb != nil {
-			return fmt.Errorf("Reviewer 1 (%s maupun fallback %s) belum dikonfigurasi", roles.Reviewer1, roles.Reviewer1Fallback)
+			return fmt.Errorf("role Reviewer 1 (%s) — primary maupun fallback belum dikonfigurasi; atur provider Reviewer 1 di Pengaturan LLM", m.deps.roleLabel(ctx, "reviewer1"))
 		}
 	}
 
 	// Cek Reviewer 2
 	_, errR2 := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2)
 	if errR2 != nil {
-		return fmt.Errorf("Reviewer 2 (%s) belum dikonfigurasi", roles.Reviewer2)
+		return fmt.Errorf("role Reviewer 2 (%s) belum dikonfigurasi; atur provider Reviewer 2 di Pengaturan LLM", m.deps.roleLabel(ctx, "reviewer2"))
 	}
 
 	logger.Logf(sessionID, "   [Pre-flight] ✅ R1=%s, R2=%s — siap untuk kalibrasi.", roles.Reviewer1, roles.Reviewer2)

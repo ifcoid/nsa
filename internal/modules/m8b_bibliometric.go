@@ -242,7 +242,7 @@ func (m *M8bBibliometric) runThesaurusL1(ctx context.Context, session *model.SLR
 			logger.Logf(session.ID, "   [WARN] BuildThesaurus gagal: %v\n", e)
 		}
 	} else {
-		return fmt.Errorf("brain (M8b) gagal dimuat: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client thesaurus M8b", err)
 	}
 
 	mergedTerms := strings.Count(bd.ThesaurusKeywords, "\n")
@@ -261,7 +261,7 @@ func (m *M8bBibliometric) runParamsL2(ctx context.Context, session *model.SLRSes
 	logger.Log(session.ID, "   [Langkah 8b.2] Menyusun 9-parameter VOSviewer...")
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("brain (M8b params) gagal: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client parameter VOSviewer M8b", err)
 	}
 	records := 0
 	if session.BibliometricData != nil {
@@ -270,7 +270,7 @@ func (m *M8bBibliometric) runParamsL2(ctx context.Context, session *model.SLRSes
 	rqJSON, _ := json.Marshal(session.ResearchQuestions)
 	params, err := agent.NewBibliometricAgent(brain).GenerateVOSParams(ctx, string(rqJSON), records)
 	if err != nil {
-		return err
+		return m.deps.llmError(ctx, "brain", "Menyusun parameter VOSviewer", err)
 	}
 	session.VOSViewerParams = params
 	logger.Log(session.ID, "   [System] 9-parameter tersusun. Menunggu user menjalankan VOSviewer + paste hasil.")
@@ -289,11 +289,11 @@ func (m *M8bBibliometric) runInterpretL3(ctx context.Context, session *model.SLR
 	}
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("brain (M8b interpret) gagal: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client interpretasi cluster M8b", err)
 	}
 	ci, err := agent.NewBibliometricAgent(brain).InterpretClusters(ctx, session.BibliometricInput)
 	if err != nil {
-		return err
+		return m.deps.llmError(ctx, "brain", "Interpretasi cluster", err)
 	}
 	session.ClusterInterpretation = ci
 	session.Status = "M8B_STEP3_WAITING_APPROVAL"
@@ -306,7 +306,7 @@ func (m *M8bBibliometric) runIntegrationL4(ctx context.Context, session *model.S
 	logger.Log(session.ID, "   [Langkah 8b.4] SLNA integration + summary...")
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("brain (M8b integration) gagal: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client integrasi SLNA M8b", err)
 	}
 
 	clusterMd := ""

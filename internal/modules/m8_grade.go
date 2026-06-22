@@ -16,7 +16,7 @@ func (m *M8Synthesis) runGradeL3(ctx context.Context, session *model.SLRSession)
 	logger.Log(session.ID, "   [Langkah 8.3] GRADE evidence grading + robustness checks...")
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("brain (M8 grade) gagal dimuat: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client GRADE M8", err)
 	}
 
 	synthJSON, _ := json.Marshal(map[string]interface{}{
@@ -30,7 +30,7 @@ func (m *M8Synthesis) runGradeL3(ctx context.Context, session *model.SLRSession)
 
 	grade, err := agent.NewSynthesisAgent(brain).Grade(ctx, string(synthJSON), string(qaJSON))
 	if err != nil {
-		return err
+		return m.deps.llmError(ctx, "brain", "GRADE evidence grading", err)
 	}
 
 	// Capture model name for xAI transparency.
@@ -60,7 +60,7 @@ func (m *M8Synthesis) runInterpretationL4(ctx context.Context, session *model.SL
 	logger.Log(session.ID, "   [Langkah 8.4] Interpretation package + summary...")
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("brain (M8 interpretation) gagal dimuat: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client interpretasi M8", err)
 	}
 
 	rqJSON, _ := json.Marshal(session.ResearchQuestions)

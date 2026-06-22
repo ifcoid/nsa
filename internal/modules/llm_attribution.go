@@ -1,0 +1,76 @@
+package modules
+
+import (
+	"context"
+	"fmt"
+)
+
+// llm_attribution.go — xAI: seragamkan pesan error LLM agar SELALU menyebut role +
+// provider + NAMA MODEL asli + langkah perbaikan. Tanpa ini, error seperti "stream
+// kosong dari provider" tak memberi tahu user config mana (role apa) yang harus dibenahi.
+
+// roleDisplay menerjemahkan kunci role internal (mis. "reviewer1_fallback") menjadi nama
+// yang ramah untuk ditampilkan ke user.
+func roleDisplay(role string) string {
+	switch role {
+	case "brain":
+		return "Brain"
+	case "reviewer1":
+		return "Reviewer 1"
+	case "reviewer1_fallback":
+		return "Reviewer 1 (fallback)"
+	case "reviewer2":
+		return "Reviewer 2"
+	case "reviewer2_fallback":
+		return "Reviewer 2 (fallback)"
+	case "supervisor":
+		return "Supervisor"
+	case "supervisor_fallback":
+		return "Supervisor (fallback)"
+	case "auditor":
+		return "Auditor"
+	case "":
+		return "LLM"
+	default:
+		return role
+	}
+}
+
+// providerLabel mengembalikan "Provider (model)" untuk satu providerID, atau "" bila
+// providerID kosong. Sumber: konfigurasi LLM milik sesi/tenant (bukan hardcode).
+func (d *ModuleDeps) providerLabel(ctx context.Context, providerID string) string {
+	if providerID == "" {
+		return ""
+	}
+	if cfg, _ := d.MongoRepo.GetLLMConfig(ctx, providerID); cfg != nil {
+		lbl := cfg.ProviderName
+		if lbl == "" {
+			lbl = providerID
+		}
+		if cfg.DefaultModel != "" {
+			lbl += " (" + cfg.DefaultModel + ")"
+		}
+		return lbl
+	}
+	return providerID
+}
+
+// roleLabel mengembalikan label "Provider (model)" untuk PRIMARY provider sebuah role,
+// atau "belum dikonfigurasi" bila role tak punya provider.
+func (d *ModuleDeps) roleLabel(ctx context.Context, role string) string {
+	primary, _ := d.LLMFactory.RoleProviders(ctx, role)
+	if lbl := d.providerLabel(ctx, primary); lbl != "" {
+		return lbl
+	}
+	return "belum dikonfigurasi"
+}
+
+// llmError membungkus error pemanggilan LLM dengan atribusi xAI yang konsisten:
+// "<aksi> gagal via role <Role> (<provider (model)>): <err> — periksa provider <Role>
+// di Pengaturan LLM (API key, nama model, kuota/limit)". `role` adalah kunci role internal
+// (mis. "brain", "reviewer1"); `action` deskripsi singkat langkah (mis. "Rekomendasi framework").
+func (d *ModuleDeps) llmError(ctx context.Context, role, action string, err error) error {
+	disp := roleDisplay(role)
+	return fmt.Errorf("%s gagal via role %s (%s): %w — periksa provider %s di Pengaturan LLM (API key, nama model, kuota/limit)",
+		action, disp, d.roleLabel(ctx, role), err, disp)
+}

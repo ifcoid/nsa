@@ -230,7 +230,7 @@ func (m *M8Synthesis) runSynthesisL2(ctx context.Context, session *model.SLRSess
 	logger.Log(session.ID, "   [Langkah 8.2] Synthesis path decision + execution...")
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("brain (M8 synthesis) gagal dimuat: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client sintesis M8", err)
 	}
 	ag := agent.NewSynthesisAgent(brain)
 
@@ -246,7 +246,7 @@ func (m *M8Synthesis) runSynthesisL2(ctx context.Context, session *model.SLRSess
 
 	decision, err := ag.DecidePath(ctx, hetVerdict, prepJSON)
 	if err != nil {
-		return err
+		return m.deps.llmError(ctx, "brain", "Keputusan jalur sintesis", err)
 	}
 
 	// Capture model name for xAI transparency.
@@ -270,7 +270,7 @@ func (m *M8Synthesis) runSynthesisL2(ctx context.Context, session *model.SLRSess
 	if strings.Contains(strings.ToUpper(decision.Verdict), "JALUR B") {
 		scaf, err := ag.MetaScaffold(ctx, dataJSON)
 		if err != nil {
-			return err
+			return m.deps.llmError(ctx, "brain", "Meta-analysis scaffold", err)
 		}
 		session.SynthesisResults = &model.SynthesisResults{
 			Path:             decision.Verdict,
@@ -284,7 +284,7 @@ func (m *M8Synthesis) runSynthesisL2(ctx context.Context, session *model.SLRSess
 		framework := frameworkName(session)
 		md, err := ag.NarrativeSynthesis(ctx, framework, dataJSON, string(rqJSON))
 		if err != nil {
-			return err
+			return m.deps.llmError(ctx, "brain", "Sintesis naratif", err)
 		}
 		session.SynthesisResults = &model.SynthesisResults{
 			Path:         decision.Verdict,

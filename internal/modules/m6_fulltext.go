@@ -61,12 +61,12 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		logger.Logf(session.ID, "   [INFO] R1 %s gagal (%v). Fallback ke %s...\n", roles.Reviewer1, err, roles.Reviewer1Fallback)
 		llmR1, err = m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback)
 		if err != nil {
-			return fmt.Errorf("Reviewer 1 (%s/%s) gagal dimuat. Konfigurasi API dulu", roles.Reviewer1, roles.Reviewer1Fallback)
+			return m.deps.llmError(ctx, "reviewer1", "Memuat Reviewer 1 M6 (full-text screening)", err)
 		}
 	}
 	llmR2, err := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2)
 	if err != nil {
-		return fmt.Errorf("%s (Reviewer 2) belum dikonfigurasi: %w", roles.Reviewer2, err)
+		return m.deps.llmError(ctx, "reviewer2", "Memuat Reviewer 2 M6 (full-text screening)", err)
 	}
 	var supervisor *agent.ScreeningAgent
 	supName := roles.Supervisor
@@ -76,7 +76,7 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		supervisor = agent.NewScreeningAgent(llmSup)
 		supName = roles.SupervisorFallback
 	} else {
-		return fmt.Errorf("AI Supervisor (Xiaomi/OpenRouter) gagal dimuat")
+		return m.deps.llmError(ctx, "supervisor", "Memuat AI Supervisor M6", e)
 	}
 
 	scR1 := agent.NewScreeningAgent(llmR1)
@@ -191,7 +191,7 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 			}
 		}
 		if res1 == nil || err1 != nil {
-			return fmt.Errorf("R1 (%s/%s) gagal setelah retry panjang pada paper %s: %w. Batch DIJEDA — provider mungkin sedang down; Resume untuk lanjut paper yang sama (tak ada paper di-skip, progres tersimpan)", roles.Reviewer1, roles.Reviewer1Fallback, doi, err1)
+			return fmt.Errorf("role Reviewer 1 (%s) gagal setelah retry panjang pada paper %s: %w. Batch DIJEDA — provider mungkin sedang down; periksa provider Reviewer 1 di Pengaturan LLM lalu Resume untuk lanjut paper yang sama (tak ada paper di-skip, progres tersimpan)", m.deps.roleLabel(ctx, "reviewer1"), doi, err1)
 		}
 
 		time.Sleep(3 * time.Second)
@@ -207,7 +207,7 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 			}
 		}
 		if res2 == nil || err2 != nil {
-			return fmt.Errorf("R2 (%s/%s) gagal setelah retry panjang pada paper %s: %w. Batch DIJEDA — Resume untuk lanjut (tak ada paper di-skip, progres tersimpan)", roles.Reviewer2, roles.Reviewer2Fallback, doi, err2)
+			return fmt.Errorf("role Reviewer 2 (%s) gagal setelah retry panjang pada paper %s: %w. Batch DIJEDA — periksa provider Reviewer 2 di Pengaturan LLM lalu Resume untuk lanjut (tak ada paper di-skip, progres tersimpan)", m.deps.roleLabel(ctx, "reviewer2"), doi, err2)
 		}
 
 		agreement := "DISAGREE"
@@ -266,7 +266,7 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 					"Batch_Evaluated_Full":        false,
 				})
 
-				return fmt.Errorf("Supervisor (%s) gagal setelah 3 percobaan pada paper %s: %s. Batch DIJEDA — cek API key/koneksi Supervisor, lalu Resume", supName, doi, clipErr(errDetail))
+				return fmt.Errorf("role Supervisor (%s) gagal setelah 3 percobaan pada paper %s: %s. Batch DIJEDA — cek API key/model/koneksi Supervisor di Pengaturan LLM, lalu Resume", m.deps.providerLabel(ctx, supName), doi, clipErr(errDetail))
 			}
 		}
 

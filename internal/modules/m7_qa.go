@@ -152,11 +152,11 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 		logger.Log(session.ID, "   [Kalibrasi QA] Menghasilkan anchor examples (HIGH/MODERATE/LOW)...")
 		brain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil {
-			return fmt.Errorf("brain client for QA anchors: %w", err)
+			return m.deps.llmError(ctx, "brain", "Memuat client QA anchors", err)
 		}
 		anchors, err := agent.NewExtractionAgent(brain).GenerateQAAnchors(ctx, tool, cat, justification)
 		if err != nil {
-			return fmt.Errorf("GenerateQAAnchors: %w", err)
+			return m.deps.llmError(ctx, "brain", "Generate QA anchors", err)
 		}
 		cal.Anchors = anchors
 		logger.Logf(session.ID, "   [System] %d anchor examples dihasilkan.\n", len(anchors))
@@ -209,12 +209,12 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 	qp1, qf1 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
 	r1, err := m.agentWithFallback(ctx, qp1, qf1)
 	if err != nil {
-		return fmt.Errorf("QA Calibration Rater 1 (%s/%s): %w", qp1, qf1, err)
+		return m.deps.llmError(ctx, "reviewer1", "Memuat QA Calibration Rater 1", err)
 	}
 	qp2, qf2 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer2")
 	r2, err := m.agentWithFallback(ctx, qp2, qf2)
 	if err != nil {
-		return fmt.Errorf("QA Calibration Rater 2 (%s/%s): %w", qp2, qf2, err)
+		return m.deps.llmError(ctx, "reviewer2", "Memuat QA Calibration Rater 2", err)
 	}
 
 	// Get model names for transparency.
@@ -418,12 +418,12 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		logger.Log(session.ID, "   [Langkah 7.3] Tool selection + threshold justification...")
 		brain, err := m.deps.LLMFactory.BrainClient(ctx)
 		if err != nil {
-			return fmt.Errorf("gemini (brain QA) gagal: %w", err)
+			return m.deps.llmError(ctx, "brain", "Memuat client QA tool", err)
 		}
 		designBreakdown := m.designBreakdownFromExtraction(ctx, session)
 		qt, err := agent.NewExtractionAgent(brain).SelectQATool(ctx, designBreakdown, session.Feedback)
 		if err != nil {
-			return err
+			return m.deps.llmError(ctx, "brain", "Pemilihan QA tool", err)
 		}
 		session.QAThreshold = qt
 		session.Feedback = "" // Bersihkan feedback setelah dipakai
@@ -468,12 +468,12 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		qp1, qf1 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
 		r1, err := m.agentWithFallback(ctx, qp1, qf1)
 		if err != nil {
-			return fmt.Errorf("QA Rater 1 (%s/%s) gagal: %w", qp1, qf1, err)
+			return m.deps.llmError(ctx, "reviewer1", "Memuat QA Rater 1", err)
 		}
 		qp2, qf2 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer2")
 		r2, err := m.agentWithFallback(ctx, qp2, qf2)
 		if err != nil {
-			return fmt.Errorf("QA Rater 2 (%s/%s) gagal: %w", qp2, qf2, err)
+			return m.deps.llmError(ctx, "reviewer2", "Memuat QA Rater 2", err)
 		}
 
 		var r1Model, r2Model string
@@ -958,11 +958,11 @@ func (m *M7Extraction) runSynthesisL4(ctx context.Context, session *model.SLRSes
 
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("gemini (brain synthesis) gagal: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client persiapan sintesis M7", err)
 	}
 	sp, err := agent.NewExtractionAgent(brain).PrepareSynthesis(ctx, string(sumJSON))
 	if err != nil {
-		return err
+		return m.deps.llmError(ctx, "brain", "Persiapan sintesis", err)
 	}
 
 	// xAI transparency: record model used and system prompt.

@@ -251,18 +251,9 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [Langkah 7.1] Rekomendasi framework + template ekstraksi...")
 
-	// xAI: ketahui role + provider + model SEBELUM memanggil, agar pesan error menyebut
-	// dengan jelas LLM mana yang gagal & config mana yang dibenahi. Framework L1 = role Brain.
-	brainPrimary, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
-	brainLabel := m.modelLabel(ctx, brainPrimary)
-	if brainLabel == "" {
-		brainLabel = "belum dikonfigurasi"
-	}
-	roleAttr := fmt.Sprintf("role Brain (%s)", brainLabel)
-
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("LLM %s gagal dimuat: %w — periksa provider Brain di Pengaturan LLM (API key/model)", roleAttr, err)
+		return m.deps.llmError(ctx, "brain", "Memuat client framework M7", err)
 	}
 	ag := agent.NewExtractionAgent(brain)
 
@@ -285,13 +276,13 @@ func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSes
 	if err != nil {
 		// xAI: sebut role + provider + model + tindakan perbaikan, bukan error mentah
 		// "stream kosong dari provider" yang tak memberi tahu config mana yang salah.
-		return fmt.Errorf("Rekomendasi framework gagal via %s: %w — ganti/periksa provider Brain (API key, nama model, kuota/limit) di Pengaturan LLM lalu Coba Lagi", roleAttr, err)
+		return m.deps.llmError(ctx, "brain", "Rekomendasi framework", err)
 	}
 	session.FrameworkSelection = fw
 
-	// xAI: atribusi model untuk tampilan = provider + NAMA MODEL asli (label dihitung di atas).
-	if brainPrimary != "" {
-		fw.ModelUsed = brainLabel
+	// xAI: atribusi model untuk tampilan = provider + NAMA MODEL asli.
+	if lbl := m.deps.roleLabel(ctx, "brain"); lbl != "belum dikonfigurasi" {
+		fw.ModelUsed = lbl
 	}
 
 	// Pre-populate koleksi extraction (idempotent untuk sesi ini).
@@ -330,20 +321,7 @@ func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSes
 // suatu provider role, bukan ModelName() mentah (yg bisa dobel-prefix "openai/openai/...").
 // Fallback ke ID provider bila config tak ada. Dipakai konsisten di L1/L2/QA.
 func (m *M7Extraction) modelLabel(ctx context.Context, providerID string) string {
-	if providerID == "" {
-		return ""
-	}
-	if cfg, _ := m.deps.MongoRepo.GetLLMConfig(ctx, providerID); cfg != nil {
-		lbl := cfg.ProviderName
-		if lbl == "" {
-			lbl = providerID
-		}
-		if cfg.DefaultModel != "" {
-			lbl += " (" + cfg.DefaultModel + ")"
-		}
-		return lbl
-	}
-	return providerID
+	return m.deps.providerLabel(ctx, providerID)
 }
 
 func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSession) error {
@@ -392,7 +370,7 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 	rp1, rf1 := m.deps.LLMFactory.RoleProviders(ctx, "reviewer1")
 	leadAg, err := m.agentWithFallback(ctx, rp1, rf1)
 	if err != nil {
-		return fmt.Errorf("extractor utama (%s/%s) gagal: %w", rp1, rf1, err)
+		return m.deps.llmError(ctx, "reviewer1", "Memuat extractor utama", err)
 	}
 	// xAI: atribusi model konsisten = provider role + NAMA MODEL asli (bukan ModelName()
 	// mentah "openai/openai/gpt-oss-120b" yang dobel-prefix & menyesatkan). Samakan dgn M7 L1/QA.
@@ -499,7 +477,7 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 	vp, vf := m.deps.LLMFactory.RoleProviders(ctx, "reviewer2")
 	verAg, err := m.agentWithFallback(ctx, vp, vf)
 	if err != nil {
-		logger.Logf(session.ID, "   [WARN] Verifier (%s/%s) gagal: %v. Lewati verifikasi.\n", vp, vf, err)
+		logger.Logf(session.ID, "   [WARN] Verifier role Reviewer 2 (%s) gagal dimuat: %v. Lewati verifikasi.\n", m.modelLabel(ctx, vp), err)
 	}
 	verifierModel := m.modelLabel(ctx, vp)
 	logger.Logf(session.ID, "   [Info] Verifikasi ~%d dari %d paper (20%% sampel + semua AMBIGUOUS) via %s; ~4 dtk/paper.\n",
@@ -850,7 +828,7 @@ func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.
 
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("llm init: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client GraphRAG M7", err)
 	}
 
 	for _, p := range papers {
@@ -890,7 +868,7 @@ Jangan ada tambahan teks markdown (tanpa ` + "```json" + ` ... ` + "```" + `) at
 
 		respText, err := brain.Generate(ctx, sysPrompt, userPrompt)
 		if err != nil {
-			logger.Logf(session.ID, "      [!] Gagal memanggil LLM untuk paper %s: %v\n", title, err)
+			logger.Logf(session.ID, "      [!] Gagal memanggil LLM (role Brain, %s) untuk paper %s: %v\n", m.deps.roleLabel(ctx, "brain"), title, err)
 			continue
 		}
 

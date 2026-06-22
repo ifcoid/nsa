@@ -94,7 +94,7 @@ func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession
 	// 2. Coherence audit + PRISMA checklist (brain).
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("brain (M9 compile) gagal: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client kompilasi M9", err)
 	}
 	ag := agent.NewManuscriptAgent(brain)
 	allSections := m.allSectionsBundle(ms)

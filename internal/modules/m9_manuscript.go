@@ -195,7 +195,7 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 	}
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("brain (M9) gagal dimuat: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client manuskrip M9", err)
 	}
 	ag := agent.NewManuscriptAgent(brain)
 	if session.Manuscript == nil {
@@ -258,7 +258,7 @@ func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSes
 	}
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("brain (M9) gagal dimuat: %w", err)
+		return m.deps.llmError(ctx, "brain", "Memuat client manuskrip M9", err)
 	}
 	ag := agent.NewManuscriptAgent(brain)
 	ms := session.Manuscript
