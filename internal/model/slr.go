@@ -43,6 +43,10 @@ type PriorReview struct {
 	Limitations      string `bson:"limitations" json:"limitations"`
 	Selisih          string `bson:"selisih" json:"selisih"` // BEDA POPULASI, dll
 	SynthesisNovelty string `bson:"synthesis_novelty" json:"synthesis_novelty"`
+	// Verification: status verifikasi manusia. Karena role Brain tanpa web search
+	// mengusulkan dari pengetahuan model (bukan pencarian live), tiap usulan AI default
+	// "UNVERIFIED" dan WAJIB diverifikasi peneliti (HITL) sebelum approve. xAI/anti-halusinasi.
+	Verification string `bson:"verification,omitempty" json:"verification,omitempty"` // UNVERIFIED | VERIFIED
 }
 
 type PriorReviewsMatrix struct {
