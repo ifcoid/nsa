@@ -251,9 +251,18 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [Langkah 7.1] Rekomendasi framework + template ekstraksi...")
 
+	// xAI: ketahui role + provider + model SEBELUM memanggil, agar pesan error menyebut
+	// dengan jelas LLM mana yang gagal & config mana yang dibenahi. Framework L1 = role Brain.
+	brainPrimary, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
+	brainLabel := m.modelLabel(ctx, brainPrimary)
+	if brainLabel == "" {
+		brainLabel = "belum dikonfigurasi"
+	}
+	roleAttr := fmt.Sprintf("role Brain (%s)", brainLabel)
+
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)
 	if err != nil {
-		return fmt.Errorf("gemini (brain M7) gagal dimuat: %w", err)
+		return fmt.Errorf("LLM %s gagal dimuat: %w — periksa provider Brain di Pengaturan LLM (API key/model)", roleAttr, err)
 	}
 	ag := agent.NewExtractionAgent(brain)
 
@@ -274,21 +283,15 @@ func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSes
 
 	fw, err := ag.RecommendFramework(ctx, picoJSON, rqJSON, designBreakdown)
 	if err != nil {
-		return err
+		// xAI: sebut role + provider + model + tindakan perbaikan, bukan error mentah
+		// "stream kosong dari provider" yang tak memberi tahu config mana yang salah.
+		return fmt.Errorf("Rekomendasi framework gagal via %s: %w — ganti/periksa provider Brain (API key, nama model, kuota/limit) di Pengaturan LLM lalu Coba Lagi", roleAttr, err)
 	}
 	session.FrameworkSelection = fw
 
-	// xAI: atribusi model konsisten = provider + NAMA MODEL asli (bukan ModelName() mentah
-	// "openai/opus" yang menyesatkan — "openai/" hanya tipe adapter, bukan vendor). Samakan
-	// dengan langkah QA M7.
-	brainPrimary, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
-	if cfgBrain, _ := m.deps.MongoRepo.GetLLMConfig(ctx, brainPrimary); cfgBrain != nil {
-		fw.ModelUsed = cfgBrain.ProviderName
-		if cfgBrain.DefaultModel != "" {
-			fw.ModelUsed += " (" + cfgBrain.DefaultModel + ")"
-		}
-	} else if brainPrimary != "" {
-		fw.ModelUsed = brainPrimary
+	// xAI: atribusi model untuk tampilan = provider + NAMA MODEL asli (label dihitung di atas).
+	if brainPrimary != "" {
+		fw.ModelUsed = brainLabel
 	}
 
 	// Pre-populate koleksi extraction (idempotent untuk sesi ini).
