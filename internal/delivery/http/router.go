@@ -102,6 +102,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("POST /api/sessions/{id}/pico-audit/rerun", r.sessionHndlr.RerunPICOAudit)
 	protected.HandleFunc("POST /api/sessions/{id}/pico-audit/scope", r.sessionHndlr.SaveAuditScopeRules)
 	protected.HandleFunc("PUT /api/sessions/{id}/framework/columns", r.sessionHndlr.SaveFrameworkColumns)
+	protected.HandleFunc("PUT /api/sessions/{id}/prior-reviews", r.sessionHndlr.SavePriorReviews)
 	protected.HandleFunc("GET /api/sessions/{id}/extractions", r.sessionHndlr.GetExtractions)
 	protected.HandleFunc("GET /api/sessions/{id}/extractions/ambiguous", r.sessionHndlr.GetAmbiguousExtractions)
 	protected.HandleFunc("PUT /api/sessions/{id}/extractions/{ext_id}/resolve", r.sessionHndlr.ResolveExtractionManual)

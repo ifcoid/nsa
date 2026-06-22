@@ -933,6 +933,80 @@ func (h *SessionHandler) SaveFrameworkColumns(w http.ResponseWriter, req *http.R
 	})
 }
 
+// normalizePriorReviews merapikan matriks prior-review hasil edit manusia: trim, buang
+// baris kosong (author_year kosong), normalisasi verification ke VERIFIED/UNVERIFIED.
+// Murni (tanpa I/O) agar bisa diuji terpisah.
+func normalizePriorReviews(reviews []model.PriorReview) []model.PriorReview {
+	cleaned := make([]model.PriorReview, 0, len(reviews))
+	for _, r := range reviews {
+		r.AuthorYear = strings.TrimSpace(r.AuthorYear)
+		if r.AuthorYear == "" {
+			continue
+		}
+		r.Scope = strings.TrimSpace(r.Scope)
+		r.Methodology = strings.TrimSpace(r.Methodology)
+		r.KeyFindings = strings.TrimSpace(r.KeyFindings)
+		r.Limitations = strings.TrimSpace(r.Limitations)
+		r.Selisih = strings.TrimSpace(r.Selisih)
+		r.SynthesisNovelty = strings.TrimSpace(r.SynthesisNovelty)
+		if strings.EqualFold(strings.TrimSpace(r.Verification), "VERIFIED") {
+			r.Verification = "VERIFIED"
+		} else {
+			r.Verification = "UNVERIFIED"
+		}
+		cleaned = append(cleaned, r)
+	}
+	return cleaned
+}
+
+// SavePriorReviews menyimpan matriks prior-review yang DIEDIT/DIVERIFIKASI MANUSIA (HITL).
+// Karena usulan AI dibuat tanpa web search, peneliti memverifikasi/mengoreksi tiap entri
+// (set verification=VERIFIED) sebelum approve. Hanya di M2_STEP2_WAITING_APPROVAL; menyimpan
+// TIDAK memajukan pipeline — user tetap klik Approve. xAI/anti-halusinasi.
+func (h *SessionHandler) SavePriorReviews(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	var payload struct {
+		Reviews []model.PriorReview `json:"reviews"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	if session.Status != "M2_STEP2_WAITING_APPROVAL" {
+		sendJSONError(w, http.StatusBadRequest, "Edit matriks hanya tersedia saat meninjau Prior Reviews (M2_STEP2_WAITING_APPROVAL)")
+		return
+	}
+	cleaned := normalizePriorReviews(payload.Reviews)
+	if session.PriorReviewsMatrix == nil {
+		session.PriorReviewsMatrix = &model.PriorReviewsMatrix{}
+	}
+	session.PriorReviewsMatrix.Reviews = cleaned
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal menyimpan matriks: "+err.Error())
+		return
+	}
+	verified := 0
+	for _, r := range cleaned {
+		if r.Verification == "VERIFIED" {
+			verified++
+		}
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": fmt.Sprintf("%d review tersimpan (%d terverifikasi); klik Setuju untuk lanjut", len(cleaned), verified),
+		"reviews": cleaned,
+	})
+}
+
 // DeleteQdrantPaper menghapus vektor dari Qdrant berdasarkan DOI dan mereset status MongoDB
 func (h *SessionHandler) DeleteQdrantPaper(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
