@@ -15,7 +15,8 @@ import (
 	"unicode"
 )
 
-const maxFulltextChars = 24000 // batasi panjang konteks RAG per paper agar prompt aman
+const maxFulltextChars = 24000 // budget konteks RAG screening (top-k) per paper
+const maxExtractChars = 48000  // budget konteks EKSTRAKSI M7 (lebih besar: Results/Discussion wajib utuh)
 
 // normalizeDOIForRAG menormalkan DOI dengan aturan yang sama seperti SyncQdrant
 // (lowercase, strip prefix doi.org, normalisasi ligatur) agar pencocokan konsisten.
@@ -41,6 +42,7 @@ func NormalizeDOIForRAG(d string) string {
 type ragChunk struct {
 	idx     float64
 	content string
+	section string
 }
 
 // BuildFulltextIndex melakukan scroll seluruh collection Qdrant `scientific_articles`
@@ -62,9 +64,9 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 
 	var nextOffset string
 	for {
-		reqBody := `{"limit": 2000, "with_payload": ["doi", "title", "content", "chunk_index"]}`
+		reqBody := `{"limit": 2000, "with_payload": ["doi", "title", "content", "chunk_index", "section_header"]}`
 		if nextOffset != "" {
-			reqBody = fmt.Sprintf(`{"limit": 2000, "with_payload": ["doi", "title", "content", "chunk_index"], "offset": "%s"}`, nextOffset)
+			reqBody = fmt.Sprintf(`{"limit": 2000, "with_payload": ["doi", "title", "content", "chunk_index", "section_header"], "offset": "%s"}`, nextOffset)
 		}
 
 		req, e := http.NewRequestWithContext(ctx, "POST",
@@ -120,6 +122,7 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 			if content == "" {
 				continue
 			}
+			section, _ := payload["section_header"].(string)
 
 			var idx float64
 			if ci, ok := payload["chunk_index"].(float64); ok {
@@ -132,9 +135,9 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 					i = counter[nd]
 					counter[nd]++
 				}
-				raw[nd] = append(raw[nd], ragChunk{idx: i, content: content})
+				raw[nd] = append(raw[nd], ragChunk{idx: i, content: content, section: section})
 			}
-			
+
 			if nt != "" {
 				key := "title:" + nt
 				i := idx
@@ -142,7 +145,7 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 					i = counter[key]
 					counter[key]++
 				}
-				raw[key] = append(raw[key], ragChunk{idx: i, content: content})
+				raw[key] = append(raw[key], ragChunk{idx: i, content: content, section: section})
 			}
 		}
 
@@ -158,19 +161,94 @@ func BuildFulltextIndex(ctx context.Context) (index map[string]string, available
 
 	index = make(map[string]string, len(raw))
 	for doi, chunks := range raw {
-		sort.Slice(chunks, func(i, j int) bool { return chunks[i].idx < chunks[j].idx })
+		index[doi] = assembleFulltext(chunks, maxExtractChars)
+	}
+	return index, true, nil
+}
+
+// isHighValueExtract menandai section yang memuat data ekstraksi inti (metrik, hasil,
+// pembahasan, kesimpulan) — yang justru berada di EKOR dokumen dan paling rawan terbuang
+// kalau konteks dipotong dari belakang.
+func isHighValueExtract(section string) bool {
+	if isMethodResult(section) {
+		return true
+	}
+	s := strings.ToLower(section)
+	return strings.Contains(s, "discussion") || strings.Contains(s, "conclusion")
+}
+
+// assembleFulltext menggabung chunk satu paper jadi konteks ekstraksi. Jika seluruh paper
+// muat dalam budget → pakai semua (tanpa kehilangan apa pun). Jika MELEBIHI budget, JANGAN
+// potong dari ekor: Results/Discussion ada di akhir dokumen dan justru yang dibutuhkan. Maka
+// jamin pembuka (chunk pertama) + semua section bernilai-tinggi (Methods/Results/Discussion/
+// Conclusion) masuk lebih dulu, baru isi sisa budget dengan section lain urut dokumen. Output
+// tetap urut chunk_index agar runtut dibaca LLM. Fallback aman: bila section_header kosong
+// untuk semua chunk (data PEDE lama), berperilaku seperti pengisian urut-dokumen biasa.
+func assembleFulltext(chunks []ragChunk, maxChars int) string {
+	if len(chunks) == 0 {
+		return ""
+	}
+	if maxChars <= 0 {
+		maxChars = maxExtractChars
+	}
+	sort.Slice(chunks, func(i, j int) bool { return chunks[i].idx < chunks[j].idx })
+
+	// Seluruh paper muat → pakai semua chunk, tak ada yang hilang.
+	total := 0
+	for _, c := range chunks {
+		total += len(c.content) + 2
+	}
+	if total <= maxChars {
 		var sb strings.Builder
 		for _, c := range chunks {
-			if sb.Len()+len(c.content)+2 > maxFulltextChars {
-				sb.WriteString("\n\n[...teks dipotong untuk batas konteks...]")
-				break
-			}
 			sb.WriteString(c.content)
 			sb.WriteString("\n\n")
 		}
-		index[doi] = strings.TrimSpace(sb.String())
+		return strings.TrimSpace(sb.String())
 	}
-	return index, true, nil
+
+	// Melebihi budget: pilih section-aware.
+	picked := make([]bool, len(chunks))
+	used := 0
+	truncated := false
+
+	// 1) Pembuka (chunk pertama; biasanya Abstract/Intro).
+	picked[0] = true
+	used += len(chunks[0].content) + 2
+
+	// 2) Section bernilai-tinggi (Results/Discussion/Methods/Conclusion) lebih dulu.
+	// 3) Lalu sisa section, urut dokumen. Dua lintasan dengan prioritas berbeda.
+	for pass := 0; pass < 2; pass++ {
+		for i := range chunks {
+			if picked[i] {
+				continue
+			}
+			highValue := isHighValueExtract(chunks[i].section)
+			if (pass == 0) != highValue {
+				continue // lintasan 0: hanya high-value; lintasan 1: sisanya
+			}
+			c := len(chunks[i].content) + 2
+			if used+c > maxChars {
+				truncated = true
+				continue
+			}
+			picked[i] = true
+			used += c
+		}
+	}
+
+	// Output urut chunk_index.
+	var sb strings.Builder
+	for i := range chunks {
+		if picked[i] {
+			sb.WriteString(chunks[i].content)
+			sb.WriteString("\n\n")
+		}
+	}
+	if truncated {
+		sb.WriteString("[...sebagian section bernilai-rendah dipotong untuk batas konteks; Results/Discussion diprioritaskan...]")
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 // ── Top-k semantic RAG ──────────────────────────────────────────────────────
