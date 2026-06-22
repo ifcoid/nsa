@@ -855,6 +855,84 @@ func (h *SessionHandler) SaveAuditScopeRules(w http.ResponseWriter, req *http.Re
 	})
 }
 
+// normalizeFrameworkColumns memvalidasi & merapikan kolom framework hasil edit manusia:
+// trim spasi, buang baris berkey kosong, tolak duplikat key (case-insensitive), dan
+// pastikan minimal satu kolom tersisa. Murni (tanpa I/O) agar bisa diuji terpisah.
+func normalizeFrameworkColumns(cols []model.FrameworkColumn) ([]model.FrameworkColumn, error) {
+	cleaned := make([]model.FrameworkColumn, 0, len(cols))
+	seen := make(map[string]bool)
+	for _, c := range cols {
+		key := strings.TrimSpace(c.Key)
+		if key == "" {
+			continue
+		}
+		lk := strings.ToLower(key)
+		if seen[lk] {
+			return nil, fmt.Errorf("Key kolom duplikat: %s", key)
+		}
+		seen[lk] = true
+		cleaned = append(cleaned, model.FrameworkColumn{
+			Key:      key,
+			Category: strings.TrimSpace(c.Category),
+			Desc:     strings.TrimSpace(c.Desc),
+		})
+	}
+	if len(cleaned) == 0 {
+		return nil, fmt.Errorf("Framework harus punya minimal satu kolom")
+	}
+	return cleaned, nil
+}
+
+// SaveFrameworkColumns menyimpan daftar kolom framework ekstraksi M7 yang DIEDIT MANUSIA
+// (HITL sejati: user menambah/menghapus/mengedit kolom langsung, bukan menebak lewat
+// feedback ke LLM). Hanya tersedia di M7_STEP1_WAITING_APPROVAL; menyimpan kolom TIDAK
+// memajukan pipeline — user tetap harus klik Approve setelah puas. xAI/multi-tenant:
+// kolom berasal dari DATA sesi yang editable, tersimpan di FrameworkSelection.Columns.
+func (h *SessionHandler) SaveFrameworkColumns(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	var payload struct {
+		Columns []model.FrameworkColumn `json:"columns"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	if session.Status != "M7_STEP1_WAITING_APPROVAL" {
+		sendJSONError(w, http.StatusBadRequest, "Edit kolom hanya tersedia saat meninjau framework (M7_STEP1_WAITING_APPROVAL)")
+		return
+	}
+	if session.FrameworkSelection == nil {
+		sendJSONError(w, http.StatusBadRequest, "Framework belum tersedia untuk sesi ini")
+		return
+	}
+
+	cleaned, err := normalizeFrameworkColumns(payload.Columns)
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	session.FrameworkSelection.Columns = cleaned
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal menyimpan kolom framework: "+err.Error())
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": fmt.Sprintf("%d kolom framework tersimpan; klik Setuju untuk mulai ekstraksi", len(cleaned)),
+		"columns": cleaned,
+	})
+}
+
 // DeleteQdrantPaper menghapus vektor dari Qdrant berdasarkan DOI dan mereset status MongoDB
 func (h *SessionHandler) DeleteQdrantPaper(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
