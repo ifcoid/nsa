@@ -497,6 +497,7 @@ type SLRSession struct {
 	FinalPicoAuditOK      bool                   `bson:"final_pico_audit_ok" json:"final_pico_audit_ok,omitempty"`           // tanpa bson omitempty: false harus tersimpan
 	SkipReaudit           bool                   `bson:"skip_reaudit" json:"skip_reaudit,omitempty"`                         // sinyal: regen M6.3 pertahankan audit lama (re-code). tanpa bson omitempty
 	FrameworkSelection    *FrameworkSelection    `bson:"framework_selection,omitempty" json:"framework_selection,omitempty"`
+	ScreeningCorrections  []ScreeningCorrection  `bson:"screening_corrections,omitempty" json:"screening_corrections,omitempty"` // audit HITL: koreksi keputusan include/exclude full-text pasca-M6 (PRISMA/provenance)
 	ExtractionLog         *ExtractionLog         `bson:"extraction_log,omitempty" json:"extraction_log,omitempty"`
 	QAThreshold           *QAThresholdJustification `bson:"qa_threshold_justification,omitempty" json:"qa_threshold_justification,omitempty"`
 	QACalibration         *QACalibration         `bson:"qa_calibration,omitempty" json:"qa_calibration,omitempty"`
@@ -604,6 +605,19 @@ type FrameworkSelection struct {
 	SystemPrompt  string            `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 	UserPrompt    string            `bson:"user_prompt,omitempty" json:"user_prompt,omitempty"`
 	ModelUsed     string            `bson:"model_used,omitempty" json:"model_used,omitempty"`
+}
+
+// ScreeningCorrection = satu entri audit koreksi keputusan include/exclude full-text yang
+// dilakukan manusia SETELAH M6 selesai (mis. dari tahap M7). Untuk PRISMA/provenance: setiap
+// perubahan WAJIB membawa alasan. Protokol ekstraksi TIDAK berubah (lihat CLAUDE.md validitas).
+type ScreeningCorrection struct {
+	PaperID string `bson:"paper_id" json:"paper_id"`
+	DOI     string `bson:"doi" json:"doi"`
+	Title   string `bson:"title" json:"title"`
+	From    string `bson:"from" json:"from"` // keputusan sebelum koreksi
+	To      string `bson:"to" json:"to"`     // keputusan setelah koreksi (INCLUDE/EXCLUDE)
+	Reason  string `bson:"reason" json:"reason"`
+	At      string `bson:"at" json:"at"` // RFC3339 timestamp
 }
 
 // ExtractionLog = log L2 (progress + verifikasi spot-check).

@@ -1007,6 +1007,158 @@ func (h *SessionHandler) SavePriorReviews(w http.ResponseWriter, req *http.Reque
 	})
 }
 
+// gsStr ambil string pertama yang tak kosong dari beberapa key map paper.
+func gsStr(p map[string]interface{}, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := p[k].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// fullTextDecision: keputusan full-text final (mirror finalFullDecision di modul M6).
+func fullTextDecision(p map[string]interface{}) string {
+	if fd := gsStr(p, "Final_Decision_Full"); fd != "" {
+		return fd
+	}
+	d1, d2 := gsStr(p, "Screener_1_Decision_Full"), gsStr(p, "Screener_2_Decision_Full")
+	if d1 == "INCLUDE" && d2 == "INCLUDE" {
+		return "INCLUDE"
+	}
+	if d1 == "EXCLUDE" && d2 == "EXCLUDE" {
+		return "EXCLUDE"
+	}
+	return "UNCERTAIN"
+}
+
+func passedAbstractScreening(p map[string]interface{}) bool {
+	if gsStr(p, "Final_Decision") == "INCLUDE" {
+		return true
+	}
+	return gsStr(p, "Final_Decision") == "" && gsStr(p, "Screener_1_Decision") == "INCLUDE"
+}
+
+// ScreeningReview mengembalikan daftar paper yang LOLOS abstract screening beserta keputusan
+// full-text-nya, untuk panel "Koreksi Include/Exclude" (HITL) di M7. Read-only.
+func (h *SessionHandler) ScreeningReview(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	ctx := context.Background()
+	papers, err := h.mongoRepo.GetAllScreeningPapers(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal memuat papers")
+		return
+	}
+	type Row struct {
+		PaperID      string `json:"paper_id"`
+		Title        string `json:"title"`
+		DOI          string `json:"doi"`
+		Decision     string `json:"decision"`
+		Retrieved    bool   `json:"retrieved"`
+		Inaccessible bool   `json:"inaccessible"`
+	}
+	out := []Row{}
+	for _, p := range papers {
+		if !passedAbstractScreening(p) {
+			continue
+		}
+		paperID := ""
+		if oid, ok := p["_id"].(primitive.ObjectID); ok {
+			paperID = oid.Hex()
+		}
+		retrieved, _ := p["full_text_retrieved"].(bool)
+		inacc, _ := p["inaccessible"].(bool)
+		out = append(out, Row{
+			PaperID:      paperID,
+			Title:        gsStr(p, "Title", "title"),
+			DOI:          gsStr(p, "DOI", "doi"),
+			Decision:     fullTextDecision(p),
+			Retrieved:    retrieved,
+			Inaccessible: inacc,
+		})
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"papers": out})
+}
+
+// CorrectScreening menerapkan koreksi keputusan include/exclude full-text (HITL) + mencatat
+// ALASAN tiap perubahan (audit PRISMA/provenance). PROTOKOL ekstraksi TIDAK diubah (lihat
+// CLAUDE.md "Validitas metodologi"). Setelah koreksi -> re-enter M7_STEP1_FRAMEWORK; guard
+// preserve menyinkronkan set INCLUDE (paper baru masuk antrean, data lama dipertahankan).
+func (h *SessionHandler) CorrectScreening(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	var payload struct {
+		Corrections []struct {
+			PaperID  string `json:"paper_id"`
+			DOI      string `json:"doi"`
+			Title    string `json:"title"`
+			From     string `json:"from"`
+			Decision string `json:"decision"`
+			Reason   string `json:"reason"`
+		} `json:"corrections"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if len(payload.Corrections) == 0 {
+		sendJSONError(w, http.StatusBadRequest, "Tidak ada koreksi dikirim")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	applied := 0
+	for _, c := range payload.Corrections {
+		dec := strings.ToUpper(strings.TrimSpace(c.Decision))
+		if c.PaperID == "" || (dec != "INCLUDE" && dec != "EXCLUDE") {
+			continue
+		}
+		if strings.TrimSpace(c.Reason) == "" {
+			sendJSONError(w, http.StatusBadRequest, "Setiap koreksi WAJIB punya alasan (audit PRISMA)")
+			return
+		}
+		if err := h.mongoRepo.UpdateScreeningPaperResolutionFull(ctx, id, c.PaperID, dec, "Koreksi HITL ("+now+"): "+c.Reason); err != nil {
+			continue
+		}
+		session.ScreeningCorrections = append(session.ScreeningCorrections, model.ScreeningCorrection{
+			PaperID: c.PaperID, DOI: c.DOI, Title: c.Title, From: c.From, To: dec, Reason: strings.TrimSpace(c.Reason), At: now,
+		})
+		applied++
+	}
+	if applied == 0 {
+		sendJSONError(w, http.StatusBadRequest, "Tidak ada koreksi valid yang diterapkan")
+		return
+	}
+
+	// Downstream (sintesis/manuskrip/PRISMA) jadi stale; protokol + data ekstraksi DIPERTAHANKAN.
+	session.RescreenPending = true
+	session.Manuscript = nil
+	// Re-enter M7.1: guard PRESERVE sinkronkan set INCLUDE (paper baru -> antrean ekstraksi).
+	session.Status = "M7_STEP1_FRAMEWORK"
+	if err := h.mongoRepo.SaveSessionUnsetting(ctx, session, "manuscript"); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal menyimpan koreksi: "+err.Error())
+		return
+	}
+	h.pipeline.ExecuteAsync(ctx, session.ID)
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": fmt.Sprintf("%d koreksi diterapkan (protokol dipertahankan). Menyinkronkan set ekstraksi…", applied),
+		"applied": applied,
+	})
+}
+
 // DeleteQdrantPaper menghapus vektor dari Qdrant berdasarkan DOI dan mereset status MongoDB
 func (h *SessionHandler) DeleteQdrantPaper(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
