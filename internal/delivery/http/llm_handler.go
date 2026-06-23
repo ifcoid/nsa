@@ -208,7 +208,10 @@ func (h *LLMHandler) ListConfigs(w http.ResponseWriter, req *http.Request) {
 func (h *LLMHandler) TestModel(w http.ResponseWriter, req *http.Request) {
 	var payload struct {
 		Provider string `json:"provider"`
-		Role     string `json:"role,omitempty"` // alternatif: uji provider yang dipakai sebuah role
+		Role     string `json:"role,omitempty"`    // alternatif: uji provider yang dipakai sebuah role
+		APIKey   string `json:"api_key,omitempty"` // override (uji config BELUM disimpan)
+		BaseURL  string `json:"base_url,omitempty"`
+		Model    string `json:"model,omitempty"`
 	}
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
@@ -223,19 +226,61 @@ func (h *LLMHandler) TestModel(w http.ResponseWriter, req *http.Request) {
 		sendJSONError(w, http.StatusBadRequest, "provider atau role wajib diisi")
 		return
 	}
-	modelName := ""
-	if cfg, _ := h.mongoRepo.GetLLMConfig(context.Background(), provider); cfg != nil {
-		modelName = cfg.DefaultModel
-	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 	defer cancel()
-	client, err := factory.CreateClient(ctx, provider)
-	if err != nil {
-		sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-			"ok": false, "provider": provider, "model": modelName,
-			"message": "Gagal memuat client (cek API key/base URL): " + err.Error(),
-		})
-		return
+
+	saved, _ := h.mongoRepo.GetLLMConfig(context.Background(), provider)
+	var client llm.LLMClient
+	var modelName string
+
+	if payload.APIKey != "" || payload.Model != "" || payload.BaseURL != "" {
+		// Uji config BELUM DISIMPAN: bangun config sementara dari form + fallback ke tersimpan.
+		cfg := &model.LLMConfig{ID: provider, ProviderName: provider, IsActive: true}
+		if saved != nil {
+			*cfg = *saved
+			cfg.IsActive = true
+		}
+		if payload.APIKey != "" {
+			cfg.APIKey = payload.APIKey
+		}
+		if payload.Model != "" {
+			cfg.DefaultModel = payload.Model
+		}
+		if payload.BaseURL != "" {
+			cfg.BaseURL = payload.BaseURL
+		}
+		if cfg.BaseURL == "" { // isi default utk provider tanpa field base URL (groq/zhipu)
+			switch provider {
+			case "groq":
+				cfg.BaseURL = "https://api.groq.com/openai/v1"
+			case "zhipu", "z-ai":
+				cfg.BaseURL = "https://open.bigmodel.cn/api/paas/v4"
+			}
+		}
+		if cfg.APIKey == "" {
+			sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+				"ok": false, "provider": provider, "model": cfg.DefaultModel,
+				"message": "API Key kosong — isi API Key (atau simpan dulu) untuk menguji.",
+			})
+			return
+		}
+		modelName = cfg.DefaultModel
+		client = factory.ClientFromConfig(cfg)
+	} else {
+		// Uji config TERSIMPAN.
+		if saved != nil {
+			modelName = saved.DefaultModel
+		}
+		c, err := factory.CreateClient(ctx, provider)
+		if err != nil {
+			sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+				"ok": false, "provider": provider, "model": modelName,
+				"message": "Gagal memuat client (cek API key/base URL): " + err.Error(),
+			})
+			return
+		}
+		client = c
 	}
 	out, gerr := client.Generate(ctx, "Jawab satu kata: ok", "ok")
 	if gerr != nil {

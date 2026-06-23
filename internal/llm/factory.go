@@ -34,7 +34,13 @@ func (f *LLMFactory) CreateClient(ctx context.Context, providerID string) (LLMCl
 		return nil, fmt.Errorf("⚠️ API Key untuk provider '%s' belum diatur! Silakan ubah data pada MongoDB dari '%s' menjadi API Key asli Anda", providerID, config.APIKey)
 	}
 
-	// 2. Tentukan jenis adapter yang harus dibuat
+	return f.ClientFromConfig(config), nil
+}
+
+// ClientFromConfig membangun LLMClient dari config EKSPLISIT (tanpa baca DB), agar bisa
+// menguji konfigurasi yang BELUM disimpan (mis. tombol "Test Model" di UI). Membungkus
+// dengan xAI logging persis seperti jalur produksi.
+func (f *LLMFactory) ClientFromConfig(config *model.LLMConfig) LLMClient {
 	var client LLMClient
 	switch config.ProviderName {
 	case "gemini":
@@ -76,7 +82,7 @@ func (f *LLMFactory) CreateClient(ctx context.Context, providerID string) (LLMCl
 	}
 
 	// Wrap with xAI logging (transparently records every LLM call)
-	return NewXAILoggingClient(client, f.mongoRepo), nil
+	return NewXAILoggingClient(client, f.mongoRepo)
 }
 
 // Roles mengembalikan pemetaan peran->provider (config-driven, default bila kosong).
