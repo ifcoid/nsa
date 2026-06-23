@@ -1,6 +1,11 @@
 package modules
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"nsa/internal/model"
+)
 
 // makePapers builds a synthetic screening set reproducing the real scenario:
 // 289 screened = 161 excluded(T/A) + 8 uncertain(T/A) + 120 included(sought);
@@ -111,6 +116,22 @@ func TestPrismaFlow_TikzAndArtifactRender(t *testing.T) {
 	} {
 		if !contains(art, want) {
 			t.Errorf("artifact text missing %q", want)
+		}
+	}
+}
+
+func TestPrismaCorrectionsNote(t *testing.T) {
+	if s := prismaCorrectionsNote(nil); s != "" {
+		t.Fatalf("kosong harus '' , dapat %q", s)
+	}
+	cor := []model.ScreeningCorrection{
+		{Title: "Paper A", DOI: "10.1/a", From: "EXCLUDE", To: "INCLUDE", Reason: "salah eksklusi full-text"},
+		{Title: "Paper B", DOI: "10.1/b", From: "INCLUDE", To: "EXCLUDE", Reason: "ternyata duplikat"},
+	}
+	s := prismaCorrectionsNote(cor)
+	for _, want := range []string{"Total koreksi", "2 (", "1 di-INCLUDE", "1 di-EXCLUDE", "Paper A", "salah eksklusi full-text", "Protokol ekstraksi TIDAK berubah"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("catatan koreksi tak memuat %q:\n%s", want, s)
 		}
 	}
 }

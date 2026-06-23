@@ -75,7 +75,9 @@ func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession
 	// from ground-truth DB records; backs both the figure and the narrative numbers.
 	prismaTikz := ""
 	if pf, e := m.computePrismaFlow(ctx, session); e == nil {
-		ms.PrismaFlow = pf.artifactText()
+		// Sisipkan jejak koreksi include/exclude HITL (deviasi protokol terdokumentasi) ke
+		// konteks manuskrip — angka PRISMA sudah benar dari DB; ini melaporkan APA & MENGAPA.
+		ms.PrismaFlow = pf.artifactText() + prismaCorrectionsNote(session.ScreeningCorrections)
 		prismaTikz = pf.tikzFigure()
 		if len(pf.Warnings) > 0 {
 			logger.Logf(session.ID, "      [PRISMA][WARN] flow tidak menutup: %s", strings.Join(pf.Warnings, " | "))

@@ -117,7 +117,9 @@ func (m *M9Manuscript) prismaContext(ctx context.Context, session *model.SLRSess
 	if err != nil {
 		return ""
 	}
-	return pf.artifactText()
+	// Sertakan jejak koreksi include/exclude HITL agar narasi Methods/Results melaporkan
+	// deviasi protokol + audit (angka PRISMA sendiri sudah dihitung ulang dari DB).
+	return pf.artifactText() + prismaCorrectionsNote(session.ScreeningCorrections)
 }
 
 // validate records any arithmetic inconsistency so reviewers see it instead of a
@@ -206,6 +208,43 @@ func (pf *PrismaFlow) artifactText() string {
 		b.WriteString("CATATAN KONSISTENSI (jangan tulis di manuskrip, untuk reviewer): " + strings.Join(pf.Warnings, " | ") + "\n")
 	}
 	b.WriteString("== END PRISMA FLOW ==\n")
+	return b.String()
+}
+
+// prismaCorrectionsNote merangkai jejak koreksi include/exclude HITL pasca-screening menjadi
+// catatan deviasi-protokol untuk konteks manuskrip. PRISMA Figure 1 sudah mencerminkan
+// keputusan FINAL (dihitung ulang dari DB); catatan ini memastikan koreksinya TERLAPORKAN
+// (provenance/audit Q1: apa yang diubah + alasannya), bukan perubahan diam-diam. "" bila kosong.
+func prismaCorrectionsNote(cor []model.ScreeningCorrection) string {
+	if len(cor) == 0 {
+		return ""
+	}
+	reincluded, excluded := 0, 0
+	for _, c := range cor {
+		if c.To == "INCLUDE" {
+			reincluded++
+		} else if c.To == "EXCLUDE" {
+			excluded++
+		}
+	}
+	var b strings.Builder
+	b.WriteString("\n\n== KOREKSI SCREENING HITL (deviasi protokol — laporkan di Methods sebagai koreksi keputusan + audit; JANGAN diklaim sebagai perubahan kriteria) ==\n")
+	b.WriteString(fmt.Sprintf("- Total koreksi keputusan full-text pasca-screening: %d (%d di-INCLUDE-kan ulang dari EXCLUDE; %d di-EXCLUDE-kan dari INCLUDE).\n", len(cor), reincluded, excluded))
+	b.WriteString("- PRISMA Figure 1 & seluruh angka sudah mencerminkan keputusan FINAL. Protokol ekstraksi TIDAK berubah (koreksi keputusan, bukan amendemen protokol).\n")
+	b.WriteString("- Tiap koreksi membawa alasan eksplisit (justifikasi metodologis):\n")
+	const maxList = 15
+	for i, c := range cor {
+		if i >= maxList {
+			b.WriteString(fmt.Sprintf("  ... dan %d koreksi lain (lihat audit screening_corrections).\n", len(cor)-maxList))
+			break
+		}
+		title := c.Title
+		if title == "" {
+			title = c.DOI
+		}
+		b.WriteString(fmt.Sprintf("  - \"%s\" (%s): %s -> %s — %s\n", title, c.DOI, c.From, c.To, c.Reason))
+	}
+	b.WriteString("== END KOREKSI SCREENING HITL ==\n")
 	return b.String()
 }
 
