@@ -147,6 +147,11 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 		session.ExtractionLog = nil
 		session.Status = "M7_STEP2_EXTRACTION"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	case "M7_STEP2_REVERIFY":
+		// Ulangi HANYA spot-verification (mis. setelah memperbaiki provider Reviewer 2 yang
+		// 404/locked) TANPA re-ekstrak. Data ekstraksi dipertahankan.
+		logger.Log(session.ID, "   [Re-verify 7.2] Mengulang spot-verification (provider Reviewer 2 diperbaiki)...")
+		return m.spotVerifyL2(ctx, session)
 	case "M7_STEP2_APPROVED":
 		session.Status = "M7_STEP3_QA"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)

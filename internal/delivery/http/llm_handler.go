@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"nsa/internal/llm"
 	"nsa/internal/model"
 	"nsa/internal/repository"
 )
@@ -197,6 +198,59 @@ func (h *LLMHandler) ListConfigs(w http.ResponseWriter, req *http.Request) {
 		})
 	}
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"configs": out})
+}
+
+// TestModel menguji apakah MODEL yang dikonfigurasi untuk sebuah provider benar-benar BISA
+// DIPAKAI — bukan sekadar API key valid. Beda dari CheckHealth (/v1/models = cek key saja):
+// ini melakukan satu pemanggilan completion NYATA ke model default provider, sehingga
+// menangkap kasus "model terkunci / tak tersedia untuk akun" (mis. nvidia HTTP 404
+// "Function ... Not found for account") yang TAK terdeteksi health check biasa.
+func (h *LLMHandler) TestModel(w http.ResponseWriter, req *http.Request) {
+	var payload struct {
+		Provider string `json:"provider"`
+		Role     string `json:"role,omitempty"` // alternatif: uji provider yang dipakai sebuah role
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	factory := llm.NewLLMFactory(h.mongoRepo)
+	provider := strings.TrimSpace(payload.Provider)
+	if provider == "" && payload.Role != "" {
+		provider, _ = factory.RoleProviders(context.Background(), payload.Role)
+	}
+	if provider == "" {
+		sendJSONError(w, http.StatusBadRequest, "provider atau role wajib diisi")
+		return
+	}
+	modelName := ""
+	if cfg, _ := h.mongoRepo.GetLLMConfig(context.Background(), provider); cfg != nil {
+		modelName = cfg.DefaultModel
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+	defer cancel()
+	client, err := factory.CreateClient(ctx, provider)
+	if err != nil {
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+			"ok": false, "provider": provider, "model": modelName,
+			"message": "Gagal memuat client (cek API key/base URL): " + err.Error(),
+		})
+		return
+	}
+	out, gerr := client.Generate(ctx, "Jawab satu kata: ok", "ok")
+	if gerr != nil {
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+			"ok": false, "provider": provider, "model": modelName, "message": gerr.Error(),
+		})
+		return
+	}
+	sample := strings.TrimSpace(out)
+	if len(sample) > 120 {
+		sample = sample[:120]
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "provider": provider, "model": modelName, "sample": sample,
+	})
 }
 
 // GetRoles mengembalikan pemetaan peran->provider (Model Routing).

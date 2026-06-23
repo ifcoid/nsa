@@ -157,6 +157,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("GET /api/llm/config", r.llmHndlr.ListConfigs)
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
 	protected.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
+	protected.HandleFunc("POST /api/llm/test", r.llmHndlr.TestModel)
 
 	// MCP (Server-Sent Events) Endpoints (Publicly accessible for the agent)
 	r.mux.Handle("GET /api/mcp/sse", r.sseServer.SSEHandler())
