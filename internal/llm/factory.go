@@ -71,13 +71,6 @@ func (f *LLMFactory) CreateClient(ctx context.Context, providerID string) (LLMCl
 		}
 		client = NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel)
 
-	case "agentrouter":
-		baseURL := config.BaseURL
-		if baseURL == "" {
-			baseURL = "https://agentrouter.org/v1"
-		}
-		client = NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel)
-
 	default:
 		client = NewOpenAICompatibleClient(config.APIKey, config.BaseURL, config.DefaultModel)
 	}

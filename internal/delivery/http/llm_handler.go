@@ -358,8 +358,6 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 				baseURL = "https://integrate.api.nvidia.com/v1"
 			} else if provider == "unimodel" {
 				baseURL = "https://unimodel.ai/v1"
-			} else if provider == "agentrouter" {
-				baseURL = "https://agentrouter.org/v1"
 			} else if provider == "aerolink" {
 				baseURL = "https://capi.aerolink.lat/v1"
 			} else if strings.HasPrefix(provider, "rprompt") {
