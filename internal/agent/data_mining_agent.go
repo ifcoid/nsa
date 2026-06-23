@@ -45,7 +45,7 @@ Keluarkan HANYA JSON MURNI tanpa blok awalan/akhiran:
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.SanityCheckVerdict
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON SanityCheck (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON SanityCheck (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &result, nil
@@ -86,7 +86,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown blok awalan/akhiran:
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.PICOPreviewCheck
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON PICOPreview (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON PICOPreview (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &result, nil
@@ -143,7 +143,7 @@ Keluarkan HANYA JSON murni tanpa awalan/akhiran markdown blok:
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.Modul4Summary
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON Modul4Summary (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON Modul4Summary (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &result, nil

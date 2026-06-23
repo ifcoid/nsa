@@ -69,7 +69,7 @@ Keluarkan HANYA JSON MURNI (tanpa markdown blok):
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.ScreenerBriefing
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON ScreenerBriefing (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON ScreenerBriefing (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &result, nil
@@ -97,7 +97,7 @@ Gunakan feedback untuk memperbaiki instruksi. Keluarkan HANYA JSON MURNI (tanpa 
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.ScreenerBriefing
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON ScreenerBriefing revisi (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON ScreenerBriefing revisi (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &result, nil
@@ -144,7 +144,7 @@ Gunakan urutan berikut di mana perspektif berada di awal agar Anda dapat berpiki
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result ScreeningDecision
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, "", fmt.Errorf("gagal parsing JSON ReviewPaper (%w). Raw: %s", err, rawResponse)
+		return nil, "", fmt.Errorf("gagal parsing JSON ReviewPaper (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 	
 	result.Notes = fmt.Sprintf("<b>Perspektif Strict:</b> %s<br><br><b>Perspektif Liberal:</b> %s<br><br><b>Verdict-Aid:</b> %s", result.Strict, result.Liberal, result.VerdictAid)
@@ -179,7 +179,7 @@ Keluarkan HANYA JSON MURNI tanpa blok markdown dengan struktur berikut:
 	cleanJSON := CleanJSONResponse(rawResponse)
 	result, err := parseLooseScreeningPerspective([]byte(cleanJSON))
 	if err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON BatchReviewPaper (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON BatchReviewPaper (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 	return result, nil
 }
@@ -226,7 +226,7 @@ Keluarkan HANYA JSON MURNI tanpa blok markdown:
 	cleanJSON := CleanJSONResponse(rawResponse)
 	result, err := parseLooseScreeningPerspective([]byte(cleanJSON))
 	if err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON FullTextReviewPaper (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON FullTextReviewPaper (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 	return result, nil
 }
@@ -301,7 +301,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result ResolutionAdvice
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON ResolutionAdvice (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON ResolutionAdvice (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 	return &result, nil
 }

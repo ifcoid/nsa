@@ -85,7 +85,7 @@ Keluarkan HANYA JSON MURNI berformat persis seperti ini tanpa blok markdown atau
 	
 	var res FinerResult
 	if err := json.Unmarshal([]byte(cleanJSON), &res); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON FINER (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON FINER (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &res, nil

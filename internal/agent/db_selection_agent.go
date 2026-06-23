@@ -54,7 +54,7 @@ Format Output WAJIB berupa JSON MURNI tanpa markdown blok awalan/akhiran:
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.DatabaseSelection
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, "", fmt.Errorf("gagal parsing JSON DB Selection (%w). Raw: %s", err, rawResponse)
+		return nil, "", fmt.Errorf("gagal parsing JSON DB Selection (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	// Sisipkan referensi grounding ke UI via JustifikasiFinal

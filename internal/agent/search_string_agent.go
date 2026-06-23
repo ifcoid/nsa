@@ -69,7 +69,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown blok awalan/akhiran:
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.SearchStringData
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON SearchString (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON SearchString (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &result, nil

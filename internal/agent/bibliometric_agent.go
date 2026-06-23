@@ -52,7 +52,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	}
 	var res ThesaurusResult
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse ThesaurusResult (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse ThesaurusResult (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }
@@ -78,7 +78,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	}
 	var res model.VOSViewerParams
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse VOSViewerParams (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse VOSViewerParams (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }
@@ -103,7 +103,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	}
 	var res model.ClusterInterpretation
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse ClusterInterpretation (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse ClusterInterpretation (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }
@@ -126,7 +126,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	}
 	var res model.SLNAIntegration
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse SLNAIntegration (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse SLNAIntegration (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }

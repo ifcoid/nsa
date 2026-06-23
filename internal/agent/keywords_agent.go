@@ -75,7 +75,7 @@ Wajib menghasilkan JSON MURNI tanpa blok markdown awalan/akhiran:
 	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.KeywordsDevelopment
 	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON Keywords (%w). Raw: %s", err, rawResponse)
+		return nil, fmt.Errorf("gagal parsing JSON Keywords (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &result, nil

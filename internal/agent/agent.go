@@ -31,6 +31,17 @@ var jsonNoisePatterns = []string{
 // CleanJSONResponse adalah fungsi pembantu universal untuk membersihkan
 // bungkusan markdown (triple backticks) yang sering ikut keluar dari output LLM.
 // Fungsi ini diekspor (huruf kapital di awal) agar bisa dipakai oleh semua file di package agent.
+// ClipRaw memangkas raw response LLM untuk pesan error/log agar tidak membanjiri Live Log
+// (output ekstraksi bisa ribuan karakter). Cukup untuk diagnosa tanpa membuat log tak terbaca.
+func ClipRaw(s string) string {
+	s = strings.TrimSpace(s)
+	const max = 220
+	if len(s) > max {
+		return s[:max] + " …[dipotong " + fmt.Sprintf("%d", len(s)-max) + " char]"
+	}
+	return s
+}
+
 func CleanJSONResponse(rawResponse string) string {
 	rawResponse = strings.TrimSpace(rawResponse)
 

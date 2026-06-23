@@ -94,7 +94,7 @@ func (a *CriteriaAgent) callLLMAndParse(ctx context.Context, systemPrompt, userP
 	var result CriteriaResult
 	err = json.Unmarshal([]byte(cleanJSON), &result)
 	if err != nil {
-		return nil, fmt.Errorf("criteria_agent gagal unmarshal JSON. Raw: %s, Error: %w", rawResponse, err)
+		return nil, fmt.Errorf("criteria_agent gagal unmarshal JSON. Raw: %s, Error: %w", ClipRaw(rawResponse), err)
 	}
 
 	return &result, nil

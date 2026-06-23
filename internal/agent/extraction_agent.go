@@ -89,7 +89,7 @@ Contoh output yang diharapkan:
 	}
 	var res model.FrameworkSelection
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse FrameworkSelection (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse FrameworkSelection (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	res.SystemPrompt = systemPrompt
 	res.UserPrompt = userPrompt
@@ -176,7 +176,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 				return &ExtractionResult{Fields: fields, Coverage: "PARTIAL"}, nil
 			}
 		}
-		return nil, fmt.Errorf("parse ExtractionResult (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse ExtractionResult (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }
@@ -224,7 +224,7 @@ Keluarkan HANYA JSON MURNI:
 	}
 	var res VerifyResult
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse VerifyResult (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse VerifyResult (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }
@@ -262,7 +262,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown. Buka dengan '{' dan tutup dengan '}':
 	}
 	var res ExtractedField
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse AutoResolveField (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse AutoResolveField (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }
@@ -301,7 +301,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	}
 	var res []model.QAAnchorExample
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse QAAnchorExamples (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse QAAnchorExamples (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return res, nil
 }
@@ -386,7 +386,7 @@ CATATAN PENTING:
 	cleaned := CleanJSONResponse(raw)
 	var res model.QAThresholdJustification
 	if err := json.Unmarshal([]byte(cleaned), &res); err != nil {
-		return nil, fmt.Errorf("parse QAThreshold (err=%w). Raw: %s", err, cleaned)
+		return nil, fmt.Errorf("parse QAThreshold (err=%w). Raw: %s", err, ClipRaw(cleaned))
 	}
 
 	// Validasi tool yang dipilih sesuai dengan design breakdown (tambahan safety)
@@ -499,7 +499,7 @@ PENTING:
 	}
 	var res QAResult
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse QAResult (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse QAResult (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }
@@ -524,7 +524,7 @@ func (a *ExtractionAgent) PrepareSynthesis(ctx context.Context, extractionSummar
 		Markdown             string          `json:"markdown"`
 	}
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &p); err != nil {
-		return nil, fmt.Errorf("parse SynthesisPrep (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse SynthesisPrep (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &model.SynthesisPrep{
 		DescriptiveOverview:  p.DescriptiveOverview,

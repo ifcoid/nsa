@@ -81,7 +81,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 	}
 	var res HeterogeneityResult
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse Heterogeneity (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse Heterogeneity (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }
@@ -102,7 +102,7 @@ func (a *SynthesisAgent) DecidePath(ctx context.Context, heterogeneityVerdict, s
 		Rationale     string          `json:"rationale"`
 	}
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &p); err != nil {
-		return nil, fmt.Errorf("parse SynthesisPathDecision (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse SynthesisPathDecision (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &model.SynthesisPathDecision{Verdict: p.Verdict, CriteriaCheck: rawToString(p.CriteriaCheck), Rationale: p.Rationale}, nil
 }
@@ -134,7 +134,7 @@ func (a *SynthesisAgent) MetaScaffold(ctx context.Context, dataSummaryJSON strin
 	}
 	var res MetaScaffoldResult
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &res); err != nil {
-		return nil, fmt.Errorf("parse MetaScaffold (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse MetaScaffold (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &res, nil
 }
@@ -172,7 +172,7 @@ func (a *SynthesisAgent) Grade(ctx context.Context, synthesisJSON, qaJSON string
 		ConfidenceStatements json.RawMessage `json:"confidence_statements"`
 	}
 	if err := json.Unmarshal([]byte(CleanJSONResponse(raw)), &p); err != nil {
-		return nil, fmt.Errorf("parse GradeEvidence (%w). Raw: %s", err, raw)
+		return nil, fmt.Errorf("parse GradeEvidence (%w). Raw: %s", err, ClipRaw(raw))
 	}
 	return &model.GradeEvidence{
 		TableMarkdown:        rawToString(p.TableMarkdown),

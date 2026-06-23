@@ -58,7 +58,7 @@ Output WAJIB berupa JSON array dengan struktur:
 	var result []model.ResearchQuestion
 	err = json.Unmarshal([]byte(cleanJSON), &result)
 	if err != nil {
-		return nil, rawResponse, fmt.Errorf("gagal parsing JSON RQ (%w). Raw: %s", err, rawResponse)
+		return nil, rawResponse, fmt.Errorf("gagal parsing JSON RQ (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return result, rawResponse, nil

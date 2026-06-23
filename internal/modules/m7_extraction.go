@@ -506,7 +506,9 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 	logger.Logf(session.ID, "   [Info] Verifikasi ~%d dari %d paper (20%% sampel + semua AMBIGUOUS) via %s; ~4 dtk/paper.\n",
 		sample, total, verifierModel)
 
-	disagree, checked, ambiguous := 0, 0, 0
+	disagree, checked, ambiguous, verifyFails := 0, 0, 0, 0
+	consecVerifyFails := 0
+	var lastVerifyErr string
 	for i := 0; i < total; i++ {
 		// Spot-verify = QA sampling non-kritikal. Jika plafon waktu run tercapai (atau run
 		// di-stop), JANGAN jadikan fatal: hentikan verifikasi dgn rapi & lanjut ke approval —
@@ -538,23 +540,39 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 		vcancel()
 		checked++
 		if e != nil {
+			verifyFails++
+			consecVerifyFails++
+			lastVerifyErr = e.Error()
 			logger.Logf(session.ID, "         [!] verifikasi dilewati (gagal/timeout): %v\n", e)
+			// Gagal BERUNTUN tanpa satu pun sukses = verifier sistemik bermasalah (mis. model
+			// 404 / key salah). Stop verifikasi — percuma & jelas dari ringkasan akhir.
+			if consecVerifyFails >= maxConsecutiveExtractFails && (checked-verifyFails) == 0 {
+				logger.Logf(session.ID, "   [WARN] Verifier gagal %d kali beruntun tanpa satu pun sukses — verifikasi DIHENTIKAN. Periksa provider Reviewer 2 di Pengaturan LLM.\n", consecVerifyFails)
+				break
+			}
 		} else if res != nil && res.Disagree {
+			consecVerifyFails = 0
 			disagree++
 			logger.Logf(session.ID, "         [≠] Disagreement — ditandai untuk ditinjau (HITL).\n")
 			_, _ = coll.UpdateByID(ctx, p["_id"], bson.M{"$set": bson.M{"verify_disagree": true, "verify_notes": res.Notes}})
 		} else {
+			consecVerifyFails = 0
 			logger.Logf(session.ID, "         [✓] Sesuai (tidak ada disagreement).\n")
 		}
 		time.Sleep(4 * time.Second)
 	}
 
+	// Rate dihitung HANYA atas verifikasi yang BERHASIL (jangan campur kegagalan provider).
+	okChecked := checked - verifyFails
 	rate := 0.0
-	if checked > 0 {
-		rate = float64(disagree) / float64(checked) * 100
+	if okChecked > 0 {
+		rate = float64(disagree) / float64(okChecked) * 100
 	}
 	nrNote := "<5%: acceptable; dokumentasi Limitations."
-	if rate > 15 {
+	if okChecked == 0 && checked > 0 {
+		// JANGAN laporkan 0% palsu sebagai "acceptable" saat verifikasi gagal total.
+		nrNote = fmt.Sprintf("⚠ Spot-verification GAGAL TOTAL (0/%d berhasil): verifier role Reviewer 2 (%s) error — %s. QA dual-rater TIDAK berjalan; perbaiki provider Reviewer 2 di Pengaturan LLM, lalu re-verify.", checked, verifierModel, clipErr(lastVerifyErr))
+	} else if rate > 15 {
 		nrNote = ">15%: disarankan full dual-extraction untuk semua studi."
 	} else if rate >= 5 {
 		nrNote = "5-15%: refine protocol, re-do subset yang di-flag."
@@ -599,7 +617,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 
 	session.ExtractionLog = &model.ExtractionLog{
 		TotalExtracted:      total,
-		VerifiedSample:      checked,
+		VerifiedSample:      okChecked, // hanya verifikasi yang BERHASIL (bukan termasuk gagal)
 		DisagreementRate:    rate,
 		AmbiguousCount:      ambiguous,
 		NRNote:              nrNote,
@@ -608,7 +626,13 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 		ModelExtraction:     extractorModelLbl,
 		ModelRefineProtocol: refineModelLbl,
 	}
-	logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d; disagreement %.1f%%; gagal/kosong %d.\n", total, checked, rate, failedCount)
+	if verifyFails > 0 {
+		logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d BERHASIL / %d GAGAL; disagreement %.1f%% (atas yang berhasil); gagal/kosong %d.%s\n",
+			total, okChecked, verifyFails, rate, failedCount,
+			func() string { if okChecked == 0 { return " ⚠ QA dual-rater TIDAK berjalan — cek Reviewer 2." }; return "" }())
+	} else {
+		logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d; disagreement %.1f%%; gagal/kosong %d.\n", total, okChecked, rate, failedCount)
+	}
 	m.invalidateFulltextCache(session.ID) // selesai: bebaskan indeks cached
 	session.Status = "M7_STEP2_WAITING_APPROVAL"
 
