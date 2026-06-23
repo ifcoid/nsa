@@ -103,6 +103,33 @@ ekstraksi, sintesis, manuskrip) WAJIB memenuhi empat invariant ini:
   Sync). Dan jaga **invariant di SETIAP titik tulis**: bila dua field saling-eksklusif,
   set satu → **clear lawannya** (mis. `full_text_retrieved` vs `inaccessible`).
 
+## Validitas metodologi SLR (publikasi Q1): protokol STABIL, preserve ≠ reset
+
+SLR yang defensible (PRISMA + reproducibility) menuntut: **protokol ditetapkan a priori
+dan diterapkan SERAGAM ke semua studi.** Maka untuk navigasi-mundur / koreksi keputusan,
+DEFAULT adalah **PRESERVE**, bukan reset. Reset penuh justru **merusak validitas** kecuali
+itu amendemen protokol yang disengaja & terdokumentasi.
+
+- **Protokol ekstraksi (framework/data-items) WAJIB dipertahankan, JANGAN regenerate**
+  saat set paper berubah. Studi yang diekstrak sebelum vs sesudah dengan form berbeda =
+  inkonsisten = tidak valid; protokol yang berubah mengikuti data = HARKing (red flag Q1).
+  → `runFrameworkL1` TIDAK boleh memanggil `RecommendFramework` bila `FrameworkSelection`
+  sudah ada DAN tak ada feedback revisi framework eksplisit. Regenerasi diam-diam = BUG
+  metodologis, bukan fitur.
+- **Data ekstraksi yang sudah terkumpul WAJIB dipertahankan**; ekstrak HANYA paper yang
+  baru ter-include (LLM non-deterministik → re-ekstraksi paper tak berubah menggeser nilai
+  → merusak reproducibility). Filter `finalIncludedPapers` memang dinamis (baca keputusan
+  M6 live) — manfaatkan itu untuk ekstraksi inkremental, jangan wipe lalu re-ekstrak semua.
+- **`ResetModul7` (wipe penuh + regenerate) BUKAN tombol "balik sedikit".** Ia hanya untuk
+  **amendemen protokol yang disengaja** (tipe studi / data-item baru) dan saat itu WAJIB
+  re-ekstrak SEMUA studi uniform. Beri label + konfirmasi eksplisit yang membedakannya dari
+  koreksi biasa. Koreksi include/exclude biasa → jalur PRESERVE (protokol+data tetap).
+- **Catat ALASAN setiap perubahan include/exclude pasca-ekstraksi** ke audit trail
+  (provenance/xAI) + update hitungan PRISMA. "Terasa sedikit" BUKAN justifikasi — melonggarkan
+  kriteria post-hoc demi menggelembungkan N = selection bias. Bila kriteria memang direvisi,
+  itu amendemen terdokumentasi + **re-screening SIMETRIS** (terapkan ke SEMUA record), bukan
+  menambah beberapa paper yang kebetulan.
+
 ## UX WAJIB untuk operasi AI yang lama (progress, toast, atribusi model)
 
 Setiap aksi yang memanggil LLM dan butuh waktu (screening, audit, saran, sintesis) HARUS
