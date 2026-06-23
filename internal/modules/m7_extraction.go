@@ -100,14 +100,16 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 
 	// ---- L1: Framework selection + template + pre-populate extraction ----
 	case "M7_STEP1_FRAMEWORK":
-		return m.runFrameworkL1(ctx, session)
+		// Re-entry (mis. balik dari M6): PRESERVE protokol bila sudah ada.
+		return m.runFrameworkL1(ctx, session, false)
 	case "M7_STEP1_WAITING_APPROVAL":
 		logger.Log(session.ID, "   [System] Tinjau 'framework_selection' (framework + kolom template). Approve / revisi.")
 		return nil
 	case "M7_STEP1_NEEDS_REVISION":
+		// Revisi framework EKSPLISIT oleh manusia -> regenerate protokol (forceRegen=true).
 		logger.Logf(session.ID, "   [Revisi 7.1] Menyusun ulang framework (feedback: '%s')\n", session.Feedback)
 		session.Feedback = ""
-		return m.runFrameworkL1(ctx, session)
+		return m.runFrameworkL1(ctx, session, true)
 	case "M7_STEP1_APPROVED":
 		session.Status = "M7_STEP2_EXTRACTION"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
@@ -253,7 +255,53 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 
 // ===== L1 =====
 
-func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSession) error {
+func (m *M7Extraction) runFrameworkL1(ctx context.Context, session *model.SLRSession, forceRegen bool) error {
+	// VALIDITAS SLR (lihat CLAUDE.md): protokol ekstraksi ditetapkan a priori & diterapkan
+	// SERAGAM ke semua studi. Bila protokol SUDAH ADA dan ini BUKAN revisi framework eksplisit
+	// (forceRegen), JANGAN regenerate — protokol yang berubah mengikuti data = HARKing/
+	// inkonsisten. Pertahankan protokol + data ekstraksi lama; cukup sinkronkan set INCLUDE
+	// terbaru (mis. setelah koreksi include/exclude di M6) lalu ekstraksi inkremental hanya
+	// memproses paper baru.
+	if !forceRegen && session.FrameworkSelection != nil && len(session.FrameworkSelection.Columns) > 0 {
+		fwName := session.FrameworkSelection.Framework
+		logger.Logf(session.ID, "   [Langkah 7.1] Protokol ekstraksi DIPERTAHANKAN (framework '%s', %d kolom) — TIDAK di-regenerate (validitas SLR). Sinkron set INCLUDE terbaru...\n",
+			fwName, len(session.FrameworkSelection.Columns))
+		included := m.finalIncludedPapers(ctx, session)
+		m.enrichDocTypes(ctx, session.ID, included)
+		coll := m.deps.MongoRepo.GetExtractionCollection()
+		added := 0
+		for _, p := range included {
+			paperID := ""
+			if oid, ok := p["_id"].(interface{ Hex() string }); ok {
+				paperID = oid.Hex()
+			}
+			if paperID == "" {
+				continue
+			}
+			// Upsert: paper BARU -> insert (extracted=false, masuk antrean). Paper LAMA ->
+			// JANGAN disentuh ($setOnInsert): pertahankan data ekstraksinya (LLM non-deterministik,
+			// re-ekstraksi paper tak berubah merusak reproducibility).
+			res, _ := coll.UpdateOne(ctx,
+				bson.M{"session_id": session.ID, "paper_id": paperID},
+				bson.M{"$setOnInsert": bson.M{
+					"session_id": session.ID, "paper_id": paperID,
+					"Title":     getStr(p, "Title", "title"),
+					"Author":    getStr(p, "Authors", "authors"),
+					"Year":      getStr(p, "Year", "year"),
+					"Journal":   getStr(p, "Journal", "journal"),
+					"DOI":       getStr(p, "DOI", "doi"),
+					"extracted": false, "qa_rated": false,
+				}},
+				options.Update().SetUpsert(true))
+			if res != nil && res.UpsertedCount > 0 {
+				added++
+			}
+		}
+		logger.Logf(session.ID, "   [System] Protokol lama dipakai ulang; %d paper baru masuk antrean ekstraksi (paper lama + datanya dipertahankan). Menunggu persetujuan.\n", added)
+		session.Status = "M7_STEP1_WAITING_APPROVAL"
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	}
+
 	logger.Log(session.ID, "   [Langkah 7.1] Rekomendasi framework + template ekstraksi...")
 
 	brain, err := m.deps.LLMFactory.BrainClient(ctx)

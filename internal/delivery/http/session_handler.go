@@ -2247,6 +2247,11 @@ func (h *SessionHandler) ResetModul7(w http.ResponseWriter, req *http.Request) {
 	sessionColl := h.mongoRepo.GetSessionCollection()
 	_, err = sessionColl.UpdateOne(ctx, bson.M{"_id": id}, bson.M{
 		"$unset": bson.M{
+			// AMENDEMEN PROTOKOL (lihat CLAUDE.md "Validitas metodologi"): ResetModul7 adalah
+			// aksi sengaja untuk menyusun ULANG protokol. Unset framework_selection agar
+			// runFrameworkL1 me-regenerate (forceRegen tak relevan: framework nil -> generate).
+			// Bedakan dari jalur PRESERVE (re-entry biasa mempertahankan protokol).
+			"framework_selection":        "",
 			"extraction_framework":       "",
 			"extraction_log":             "",
 			"qa_threshold":               "",
