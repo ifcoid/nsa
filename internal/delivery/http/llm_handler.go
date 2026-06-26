@@ -2,6 +2,8 @@ package http
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,13 +22,51 @@ import (
 // salah/terkunci yang baru muncul 404 saat generate). Urutan = urutan tampil di UI.
 var preflightRoles = []string{"reviewer1", "reviewer2", "supervisor", "brain", "auditor"}
 
+// replayResult = hasil satu job replay LLM async (Reproducible Error). In-memory + TTL.
+// Field tak-ekspor (createdAt) tidak ikut JSON. Prompt besar bisa lama → JANGAN sinkron
+// (risiko timeout proxy fly.io); handler mulai job, frontend poll hasilnya.
+type replayResult struct {
+	Done          bool   `json:"done"`
+	OK            bool   `json:"ok"`
+	Provider      string `json:"provider"`
+	Model         string `json:"model"`
+	Response      string `json:"response,omitempty"`
+	Error         string `json:"error,omitempty"`
+	DurationMs    int64  `json:"duration_ms"`
+	PromptChars   int    `json:"prompt_chars"`
+	ResponseChars int    `json:"response_chars"`
+	createdAt     time.Time
+}
+
 type LLMHandler struct {
-	mongoRepo *repository.MongoRepository
+	mongoRepo  *repository.MongoRepository
+	replayJobs map[string]*replayResult
+	replayMu   sync.Mutex
 }
 
 func NewLLMHandler(mongoRepo *repository.MongoRepository) *LLMHandler {
 	return &LLMHandler{
-		mongoRepo: mongoRepo,
+		mongoRepo:  mongoRepo,
+		replayJobs: make(map[string]*replayResult),
+	}
+}
+
+// newJobID menghasilkan id job acak (hex). Fallback ke timestamp bila rand gagal.
+func newJobID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("job%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
+
+// sweepReplayJobs membuang job replay lama (>30 mnt) agar map tak bocor. Panggil di bawah lock.
+func (h *LLMHandler) sweepReplayJobs() {
+	cutoff := time.Now().Add(-30 * time.Minute)
+	for id, j := range h.replayJobs {
+		if j.createdAt.Before(cutoff) {
+			delete(h.replayJobs, id)
+		}
 	}
 }
 
@@ -829,27 +869,59 @@ func (h *LLMHandler) ReplayLLM(w http.ResponseWriter, req *http.Request) {
 		client = c
 	}
 
-	// Bounded: replay sinkron; prompt yang gagal karena context-overflow biasanya balik CEPAT
-	// (stream kosong langsung). 100s memberi ruang tanpa menabrak batas proxy terlalu jauh.
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
-	defer cancel()
-	start := time.Now()
-	out, gerr := client.Generate(ctx, payload.SystemPrompt, payload.UserPrompt)
-	durMs := time.Since(start).Milliseconds()
+	// ASYNC: prompt bisa SANGAT besar (full-text) → generasi lama. JANGAN sinkron (risiko
+	// timeout proxy fly.io / Cloudflare 524). Mulai job background, balas job_id segera;
+	// frontend poll GET /api/llm/replay/{id} sampai done. (Pola sama dgn ExecuteAsync.)
+	jobID := newJobID()
+	job := &replayResult{
+		Provider:    provider,
+		Model:       modelName,
+		PromptChars: len(payload.SystemPrompt) + len(payload.UserPrompt),
+		createdAt:   time.Now(),
+	}
+	h.replayMu.Lock()
+	h.sweepReplayJobs()
+	h.replayJobs[jobID] = job
+	h.replayMu.Unlock()
 
-	resp := map[string]interface{}{
-		"provider":       provider,
-		"model":          modelName,
-		"duration_ms":    durMs,
-		"prompt_chars":   len(payload.SystemPrompt) + len(payload.UserPrompt),
-		"response_chars": len(out),
+	sysP, usrP := payload.SystemPrompt, payload.UserPrompt
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		start := time.Now()
+		out, gerr := client.Generate(ctx, sysP, usrP)
+		durMs := time.Since(start).Milliseconds()
+		h.replayMu.Lock()
+		job.Done = true
+		job.DurationMs = durMs
+		job.ResponseChars = len(out)
+		if gerr != nil {
+			job.OK, job.Error = false, gerr.Error()
+		} else {
+			job.OK, job.Response = true, out
+		}
+		h.replayMu.Unlock()
+	}()
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"job_id": jobID})
+}
+
+// GetReplayResult mengembalikan hasil job replay (polling). done=false → masih jalan.
+func (h *LLMHandler) GetReplayResult(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	h.replayMu.Lock()
+	job := h.replayJobs[id]
+	var out replayResult
+	if job != nil {
+		out = *job
 	}
-	if gerr != nil {
-		resp["ok"] = false
-		resp["error"] = gerr.Error()
-	} else {
-		resp["ok"] = true
-		resp["response"] = out
+	h.replayMu.Unlock()
+	if job == nil {
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+			"done": true, "ok": false,
+			"error": "job replay tidak ditemukan / sudah kedaluwarsa — jalankan Uji Coba lagi.",
+		})
+		return
 	}
-	sendJSONResponse(w, http.StatusOK, resp)
+	sendJSONResponse(w, http.StatusOK, out)
 }
