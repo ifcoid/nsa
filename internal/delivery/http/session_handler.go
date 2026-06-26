@@ -25,6 +25,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type SessionHandler struct {
@@ -2721,6 +2722,77 @@ func (h *SessionHandler) GetLLMDebug(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"trace": trace})
+}
+
+// GetSessionDiagnostic mengembalikan SNAPSHOT state DB sesi yang TERSANITASI — untuk Reproducible
+// Error: laporan bug menyertakannya sehingga developer TAK perlu akses Mongo user (cocok backend
+// lokal per-user; tak membocorkan connection-string). TIDAK memuat rahasia (API key, mongo URI,
+// prompt penuh) — hanya status/error/flag/hitungan/role/log terakhir.
+func (h *SessionHandler) GetSessionDiagnostic(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	s, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+			"found": false, "session_id": id,
+			"note": "Sesi tidak ditemukan di DB backend ini (cek api_base / id benar).",
+		})
+		return
+	}
+
+	cnt := func(coll *mongo.Collection, f bson.M) int64 { n, _ := coll.CountDocuments(ctx, f); return n }
+	sc := h.mongoRepo.GetScreeningCollection()
+	ex := h.mongoRepo.GetExtractionCollection()
+	covAgg := map[string]int64{}
+	for _, c := range []string{"COMPLETE", "PARTIAL", "ERROR", "EMPTY_RESULT", "NO_FULLTEXT_RAG"} {
+		covAgg[c] = cnt(ex, bson.M{"session_id": id, "coverage": c})
+	}
+
+	// providers TERKONFIGURASI: hanya ID (JANGAN dump LLMConfig — memuat API key).
+	provIDs := []string{}
+	if configs, e := h.mongoRepo.GetAllLLMConfigs(ctx); e == nil {
+		for _, c := range configs {
+			provIDs = append(provIDs, c.ID)
+		}
+	}
+
+	hist := logger.History(id)
+	if len(hist) > 50 {
+		hist = hist[len(hist)-50:] // 50 baris log terakhir
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"found":        true,
+		"session_id":   id,
+		"status":       s.Status,
+		"updated_at":   s.UpdatedAt,
+		"system_error": s.SystemError,
+		"embed_error":  s.EmbedError,
+		"feedback":     s.Feedback,
+		"flags": map[string]bool{
+			"has_manuscript":          s.Manuscript != nil,
+			"has_framework_selection": s.FrameworkSelection != nil,
+			"has_pico":                s.PICODefinitions != nil,
+			"has_screening_setup":     s.ScreeningSetup != nil,
+			"rescreen_pending":        s.RescreenPending,
+		},
+		"counts": map[string]interface{}{
+			"screening_total": cnt(sc, bson.M{"session_id": id}),
+			"screening_included": cnt(sc, bson.M{"session_id": id, "$or": []bson.M{
+				{"Final_Decision": "INCLUDE"}, {"Final_Decision": "", "Screener_1_Decision": "INCLUDE"}}}),
+			"fulltext_retrieved":     cnt(sc, bson.M{"session_id": id, "full_text_retrieved": true}),
+			"extraction_total":       cnt(ex, bson.M{"session_id": id}),
+			"extraction_by_coverage": covAgg,
+		},
+		"llm_roles":            h.mongoRepo.GetLLMRoles(ctx), // role→provider id (tanpa key)
+		"providers_configured": provIDs,
+		"recent_log":           hist,
+	})
 }
 
 // EnrichMetadata triggers CrossRef metadata enrichment for extraction docs missing fields.

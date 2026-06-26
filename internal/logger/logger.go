@@ -100,3 +100,14 @@ func ClearHistory(sessionID string) {
 	defer mutex.Unlock()
 	delete(history, sessionID)
 }
+
+// History mengembalikan SALINAN ring-buffer log terakhir untuk sesi — dipakai endpoint
+// diagnostic agar laporan bug membawa konteks log tanpa perlu akses DB/log server.
+func History(sessionID string) []string {
+	mutex.Lock()
+	defer mutex.Unlock()
+	h := history[sessionID]
+	out := make([]string, len(h))
+	copy(out, h)
+	return out
+}

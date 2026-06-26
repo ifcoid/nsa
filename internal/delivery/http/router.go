@@ -142,6 +142,8 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("GET /api/sessions/{id}/xai-log", r.sessionHndlr.GetXAILog)
 	// Reproducible Error (xAI): jejak panggilan LLM gagal terakhir (utk tampil + replay)
 	protected.HandleFunc("GET /api/sessions/{id}/llm-debug", r.sessionHndlr.GetLLMDebug)
+	// Diagnostic state DB tersanitasi (disisipkan ke laporan bug → tak perlu akses Mongo user)
+	protected.HandleFunc("GET /api/sessions/{id}/diagnostic", r.sessionHndlr.GetSessionDiagnostic)
 
 	// Modul 8b (Bibliometric/SLNA)
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/vosviewer", r.sessionHndlr.SubmitVOSviewer)
