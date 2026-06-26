@@ -16,6 +16,26 @@ type XAIEntry struct {
 	DurationMs        int64     `bson:"duration_ms" json:"duration_ms"`
 }
 
+// BugReport = laporan bug yang dikirim user via tombol "Report Bug" (Reproducible Error).
+// Konteks (sesi/provider/model/error/prompt) DITANGKAP OTOMATIS — user tak perlu menambah
+// keterangan. ShortID dipakai sebagai payload deep-link Telegram (t.me/BugLaporBot?start=ID)
+// sehingga laporan masuk inbox bot (getUpdates) & detail penuh diambil dari koleksi ini.
+type BugReport struct {
+	ShortID      string    `bson:"short_id" json:"short_id"`
+	SessionID    string    `bson:"session_id,omitempty" json:"session_id,omitempty"`
+	Step         string    `bson:"step,omitempty" json:"step,omitempty"`
+	Provider     string    `bson:"provider,omitempty" json:"provider,omitempty"`
+	Model        string    `bson:"model,omitempty" json:"model,omitempty"`
+	ErrorText    string    `bson:"error_text,omitempty" json:"error_text,omitempty"`
+	SystemPrompt string    `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
+	UserPrompt   string    `bson:"user_prompt,omitempty" json:"user_prompt,omitempty"`
+	ReplayResult string    `bson:"replay_result,omitempty" json:"replay_result,omitempty"`
+	Note         string    `bson:"note,omitempty" json:"note,omitempty"`
+	AppVersion   string    `bson:"app_version,omitempty" json:"app_version,omitempty"`
+	Status       string    `bson:"status" json:"status"` // "new" (default) | "fixed"
+	CreatedAt    time.Time `bson:"created_at" json:"created_at"`
+}
+
 // LLMCallTrace = jejak LENGKAP satu panggilan LLM yang GAGAL — untuk Reproducible Error (xAI):
 // user bisa melihat prompt PERSIS + error, lalu me-REPLAY-nya dari UI ("Uji Coba") untuk
 // pinpoint "error sebelah mana". Disimpan di koleksi terpisah `llm_call_debug` (satu dokumen

@@ -769,6 +769,23 @@ func (r *MongoRepository) GetLLMCallTrace(ctx context.Context, sessionID string)
 	return &t, nil
 }
 
+// SaveBugReport menyimpan satu laporan bug (tombol "Report Bug") ke koleksi `bug_reports`.
+func (r *MongoRepository) SaveBugReport(ctx context.Context, b *model.BugReport) error {
+	coll := r.client.Database(r.dbName).Collection("bug_reports")
+	_, err := coll.InsertOne(ctx, b)
+	return err
+}
+
+// GetBugReport mengambil satu laporan bug by ShortID (untuk developer baca detail penuh).
+func (r *MongoRepository) GetBugReport(ctx context.Context, shortID string) (*model.BugReport, error) {
+	coll := r.client.Database(r.dbName).Collection("bug_reports")
+	var b model.BugReport
+	if err := coll.FindOne(ctx, bson.M{"short_id": shortID}).Decode(&b); err != nil {
+		return nil, err
+	}
+	return &b, nil
+}
+
 // GetXAILog fetches only the xai_log field from a session using projection,
 // avoiding loading the entire session document.
 func (r *MongoRepository) GetXAILog(ctx context.Context, sessionID string) ([]model.XAIEntry, error) {

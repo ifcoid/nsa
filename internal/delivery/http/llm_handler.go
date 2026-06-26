@@ -906,6 +906,54 @@ func (h *LLMHandler) ReplayLLM(w http.ResponseWriter, req *http.Request) {
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"job_id": jobID})
 }
 
+// ReportBug menyimpan laporan bug (konteks auto-capture) lalu mengembalikan deep-link Telegram
+// ke @BugLaporBot (t.me/BugLaporBot?start=<id>). User cukup tap "Start" → laporan masuk inbox
+// bot (getUpdates) sebagai /start <id>; developer membaca id itu lalu mengambil detail penuh
+// dari koleksi bug_reports. User TIDAK perlu menambah keterangan apa pun.
+func (h *LLMHandler) ReportBug(w http.ResponseWriter, req *http.Request) {
+	var p struct {
+		SessionID    string `json:"session_id"`
+		Step         string `json:"step"`
+		Provider     string `json:"provider"`
+		Model        string `json:"model"`
+		Error        string `json:"error"`
+		SystemPrompt string `json:"system_prompt"`
+		UserPrompt   string `json:"user_prompt"`
+		ReplayResult string `json:"replay_result"`
+		Note         string `json:"note"`
+		AppVersion   string `json:"app_version"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&p); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	id := newJobID() // 16 hex char — muat di payload deep-link ?start= (<=64, [A-Za-z0-9_-])
+	rep := &model.BugReport{
+		ShortID:      id,
+		SessionID:    p.SessionID,
+		Step:         p.Step,
+		Provider:     p.Provider,
+		Model:        p.Model,
+		ErrorText:    p.Error,
+		SystemPrompt: p.SystemPrompt,
+		UserPrompt:   p.UserPrompt,
+		ReplayResult: p.ReplayResult,
+		Note:         p.Note,
+		AppVersion:   p.AppVersion,
+		Status:       "new",
+		CreatedAt:    time.Now(),
+	}
+	if err := h.mongoRepo.SaveBugReport(context.Background(), rep); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal menyimpan laporan bug: "+err.Error())
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"ok":           true,
+		"id":           id,
+		"telegram_url": "https://t.me/BugLaporBot?start=" + id,
+	})
+}
+
 // GetReplayResult mengembalikan hasil job replay (polling). done=false → masih jalan.
 func (h *LLMHandler) GetReplayResult(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
