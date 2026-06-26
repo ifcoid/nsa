@@ -6,12 +6,19 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"nsa/internal/llm"
 	"nsa/internal/model"
 	"nsa/internal/repository"
 )
+
+// preflightRoles = daftar role yang BENAR-BENAR dipakai pipeline SLR (M1-M9). Pre-flight
+// menguji tiap role (primary + fallback) dengan panggilan generate NYATA — beda dari
+// CheckHealth yang hanya GET /models (cek konektivitas/kunci, TIDAK menangkap nama model
+// salah/terkunci yang baru muncul 404 saat generate). Urutan = urutan tampil di UI.
+var preflightRoles = []string{"reviewer1", "reviewer2", "supervisor", "brain", "auditor"}
 
 type LLMHandler struct {
 	mongoRepo *repository.MongoRepository
@@ -92,7 +99,7 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 	}
 
 	sendJSONResponse(w, http.StatusOK, map[string]string{
-		"message": "LLM config updated successfully",
+		"message":  "LLM config updated successfully",
 		"provider": payload.Provider,
 	})
 }
@@ -388,7 +395,7 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 		httpReq, _ := http.NewRequest("GET", url, nil)
 		httpReq.Header.Set("x-api-key", payload.APIKey)
 		httpReq.Header.Set("anthropic-version", "2023-06-01")
-		
+
 		resp, err := client.Do(httpReq)
 		if err != nil || resp.StatusCode != 200 {
 			sendJSONError(w, http.StatusInternalServerError, "Failed to fetch from Anthropic API")
@@ -412,7 +419,7 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 		httpReq, _ := http.NewRequest("GET", url, nil)
 		httpReq.Header.Set("Authorization", "Bearer "+payload.APIKey)
 		httpReq.Header.Set("Accept", "application/json")
-		
+
 		resp, err := client.Do(httpReq)
 		if err != nil || resp.StatusCode != 200 {
 			sendJSONError(w, http.StatusInternalServerError, "Failed to fetch from Cohere API")
@@ -466,17 +473,17 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 		}
-		
+
 		// Pastikan tidak berakhiran slash
 		baseURL = strings.TrimSuffix(baseURL, "/")
 		if provider == "aerolink" && !strings.HasSuffix(baseURL, "/v1") {
 			baseURL += "/v1"
 		}
 		url := baseURL + "/models"
-		
+
 		httpReq, _ := http.NewRequest("GET", url, nil)
 		httpReq.Header.Set("Authorization", "Bearer "+payload.APIKey)
-		
+
 		resp, err := client.Do(httpReq)
 		if err != nil {
 			sendJSONError(w, http.StatusInternalServerError, "Request failed: "+err.Error())
@@ -557,7 +564,7 @@ func (h *LLMHandler) CheckHealth(w http.ResponseWriter, req *http.Request) {
 	for i, cfg := range configs {
 		go func(idx int, c model.LLMConfig) {
 			res := HealthResult{Provider: c.ID, Status: "ERROR", Message: "Timeout or unknown error"}
-			
+
 			if c.APIKey == "" {
 				res.Status = "UNAUTHORIZED"
 				res.Message = "API Key kosong"
@@ -571,7 +578,7 @@ func (h *LLMHandler) CheckHealth(w http.ResponseWriter, req *http.Request) {
 			// Tentukan URL pengecekan (biasanya /v1/models)
 			var url string
 			reqMethod := "GET"
-			
+
 			if strings.HasPrefix(c.ProviderName, "gemini") || c.ProviderName == "gemini" {
 				url = fmt.Sprintf("%s/models?key=%s", c.BaseURL, c.APIKey)
 			} else if c.ProviderName == "claude" {
@@ -592,7 +599,7 @@ func (h *LLMHandler) CheckHealth(w http.ResponseWriter, req *http.Request) {
 			}
 
 			httpReq, _ := http.NewRequestWithContext(ctx, reqMethod, url, nil)
-			
+
 			// Set headers
 			if c.ProviderName == "claude" {
 				httpReq.Header.Set("x-api-key", c.APIKey)
@@ -642,3 +649,99 @@ func (h *LLMHandler) CheckHealth(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+// PreflightRoles menguji SEMUA role pipeline (primary + fallback) dengan generate NYATA,
+// di awal — agar provider rusak (404 model salah/terkunci, 401 key, 429 kuota) ketahuan
+// SEBELUM run panjang (ekstraksi/QA ratusan paper) terlanjur jalan. Tiap provider UNIK
+// diuji sekali saja (banyak role berbagi provider → hemat waktu & kuota), lalu hasil
+// dipetakan balik ke tiap role. Menguji config TERSIMPAN (yang dipakai pipeline).
+func (h *LLMHandler) PreflightRoles(w http.ResponseWriter, req *http.Request) {
+	factory := llm.NewLLMFactory(h.mongoRepo)
+	bg := context.Background()
+
+	// 1) Resolusi role → (primary, fallback) + kumpulkan himpunan provider unik.
+	roleProv := make(map[string][2]string, len(preflightRoles))
+	uniq := make(map[string]bool)
+	for _, role := range preflightRoles {
+		p, f := factory.RoleProviders(bg, role)
+		roleProv[role] = [2]string{p, f}
+		if p != "" {
+			uniq[p] = true
+		}
+		if f != "" {
+			uniq[f] = true
+		}
+	}
+
+	// 2) Smoke-test tiap provider unik secara paralel (satu generate kecil per provider).
+	type provResult struct {
+		ok    bool
+		model string
+		msg   string
+	}
+	provResults := make(map[string]provResult, len(uniq))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for prov := range uniq {
+		wg.Add(1)
+		go func(prov string) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(bg, 45*time.Second)
+			defer cancel()
+			pr := provResult{}
+			if cfg, _ := h.mongoRepo.GetLLMConfig(bg, prov); cfg != nil {
+				pr.model = cfg.DefaultModel
+			}
+			c, err := factory.CreateClient(ctx, prov)
+			if err != nil {
+				pr.ok, pr.msg = false, "Gagal memuat client (cek API key/base URL): "+err.Error()
+			} else if _, gerr := c.Generate(ctx, "Anda asisten uji koneksi.", "Jawab satu kata: ok"); gerr != nil {
+				pr.ok, pr.msg = false, gerr.Error()
+			} else {
+				pr.ok, pr.msg = true, "OK"
+			}
+			mu.Lock()
+			provResults[prov] = pr
+			mu.Unlock()
+		}(prov)
+	}
+	wg.Wait()
+
+	// 3) Susun hasil per-role: primary + fallback + apakah role bisa dipakai (salah satu OK).
+	type RolePreflight struct {
+		Role            string `json:"role"`
+		Primary         string `json:"primary"`
+		PrimaryModel    string `json:"primary_model"`
+		PrimaryOK       bool   `json:"primary_ok"`
+		PrimaryMessage  string `json:"primary_message"`
+		Fallback        string `json:"fallback"`
+		FallbackModel   string `json:"fallback_model"`
+		FallbackOK      bool   `json:"fallback_ok"`
+		FallbackMessage string `json:"fallback_message"`
+		Usable          bool   `json:"usable"`
+	}
+	out := make([]RolePreflight, 0, len(preflightRoles))
+	allUsable := true
+	for _, role := range preflightRoles {
+		pp, fp := roleProv[role][0], roleProv[role][1]
+		pr := provResults[pp]
+		fr := provResults[fp]
+		usable := pr.ok || (fp != "" && fr.ok)
+		if !usable {
+			allUsable = false
+		}
+		rp := RolePreflight{
+			Role:    role,
+			Primary: pp, PrimaryModel: pr.model, PrimaryOK: pr.ok, PrimaryMessage: pr.msg,
+			Usable: usable,
+		}
+		if fp != "" {
+			rp.Fallback, rp.FallbackModel, rp.FallbackOK, rp.FallbackMessage = fp, fr.model, fr.ok, fr.msg
+		}
+		out = append(out, rp)
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"all_usable": allUsable,
+		"roles":      out,
+	})
+}

@@ -4,20 +4,20 @@ import (
 	"encoding/json"
 	"net/http"
 
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"nsa/internal/delivery/http/middleware"
+	nsamcp "nsa/internal/delivery/mcp"
 	"nsa/internal/orchestrator"
 	"nsa/internal/repository"
-	nsamcp "nsa/internal/delivery/mcp"
-	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
 type Router struct {
-	mux            *http.ServeMux
-	sessionHndlr   *SessionHandler
-	llmHndlr       *LLMHandler
-	authHndlr      *AuthHandler
-	proposalHndlr  *ProposalHandler
-	sseServer      *mcpserver.SSEServer
+	mux           *http.ServeMux
+	sessionHndlr  *SessionHandler
+	llmHndlr      *LLMHandler
+	authHndlr     *AuthHandler
+	proposalHndlr *ProposalHandler
+	sseServer     *mcpserver.SSEServer
 }
 
 func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLRPipeline, proposalPipeline *orchestrator.ProposalPipeline) *Router {
@@ -53,8 +53,8 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// Daftar origin yang diizinkan (CORS Whitelist)
 	origin := req.Header.Get("Origin")
 	allowedOrigins := map[string]bool{
-		"https://www.if.co.id": true,
-		"https://if.co.id":     true,
+		"https://www.if.co.id":  true,
+		"https://if.co.id":      true,
 		"http://localhost:5173": true, // Untuk dev
 		"http://localhost:3000": true, // Untuk dev
 	}
@@ -79,14 +79,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func (r *Router) registerRoutes() {
 	// API Endpoints using Go 1.22+ routing syntax
-	
+
 	// Auth endpoints (Public)
 	r.mux.HandleFunc("POST /api/auth/login", r.authHndlr.Login)
 	r.mux.HandleFunc("POST /api/auth/register", r.authHndlr.Register)
-	
+
 	// Protected endpoints
 	protected := http.NewServeMux()
-	
+
 	// Session endpoints
 	protected.HandleFunc("POST /api/sessions", r.sessionHndlr.CreateSession)
 	protected.HandleFunc("POST /api/sessions/{id}/resume", r.sessionHndlr.ResumeSession)
@@ -152,9 +152,10 @@ func (r *Router) registerRoutes() {
 	// Modul 9 Manuscript downloads
 	protected.HandleFunc("GET /api/sessions/{id}/manuscript/download-tex", r.sessionHndlr.DownloadTex)
 	protected.HandleFunc("GET /api/sessions/{id}/manuscript/download-bib", r.sessionHndlr.DownloadBib)
-	
+
 	// LLM config endpoints
 	protected.HandleFunc("GET /api/llm/health", r.llmHndlr.CheckHealth)
+	protected.HandleFunc("GET /api/llm/preflight", r.llmHndlr.PreflightRoles)
 	protected.HandleFunc("GET /api/llm/config", r.llmHndlr.ListConfigs)
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
 	protected.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
@@ -182,7 +183,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("POST /api/proposal/sessions/{id}/resume", r.proposalHndlr.ResumeProposal)
 	protected.HandleFunc("GET /api/proposal/sessions/{id}/refs", r.proposalHndlr.GetProposalRefs)
 	protected.HandleFunc("GET /api/proposal/sessions/{id}/refs/missing-pdfs", r.proposalHndlr.GetMissingPDFRefs)
-	
+
 	// Apply Auth Middleware to all protected routes
 	r.mux.Handle("/api/sessions", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/sessions/", middleware.AuthMiddleware(protected))
@@ -192,7 +193,7 @@ func (r *Router) registerRoutes() {
 	r.mux.Handle("/api/scopus/", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/proposal/sessions", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/proposal/", middleware.AuthMiddleware(protected))
-	
+
 	// WebSocket endpoint untuk logs (Tidak diproteksi ketat karena via URL /ws/, jika butuh auth bisa pasang token di query)
 	r.mux.HandleFunc("GET /api/ws/logs/{id}", LogStreamHandler)
 }
