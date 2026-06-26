@@ -16,6 +16,24 @@ type XAIEntry struct {
 	DurationMs        int64     `bson:"duration_ms" json:"duration_ms"`
 }
 
+// LLMCallTrace = jejak LENGKAP satu panggilan LLM yang GAGAL — untuk Reproducible Error (xAI):
+// user bisa melihat prompt PERSIS + error, lalu me-REPLAY-nya dari UI ("Uji Coba") untuk
+// pinpoint "error sebelah mana". Disimpan di koleksi terpisah `llm_call_debug` (satu dokumen
+// TERAKHIR per sesi, di-upsert) agar tak menggemukkan xai_log. TIDAK menyimpan API key.
+type LLMCallTrace struct {
+	SessionID    string    `bson:"session_id" json:"session_id"`
+	Step         string    `bson:"step" json:"step"`
+	AgentFunc    string    `bson:"agent_func" json:"agent_func"`
+	Provider     string    `bson:"provider" json:"provider"`
+	Model        string    `bson:"model" json:"model"`
+	SystemPrompt string    `bson:"system_prompt" json:"system_prompt"`
+	UserPrompt   string    `bson:"user_prompt" json:"user_prompt"`
+	Error        string    `bson:"error" json:"error"`
+	DurationMs   int64     `bson:"duration_ms" json:"duration_ms"`
+	PromptChars  int       `bson:"prompt_chars" json:"prompt_chars"`
+	Timestamp    time.Time `bson:"timestamp" json:"timestamp"`
+}
+
 // FoundationBriefing = output Modul 1 (Fondasi Teori + Aturan Global).
 // Hybrid: bagian teori di-generate LLM (disesuaikan topik), sisanya kanonik statik.
 type FoundationBriefing struct {

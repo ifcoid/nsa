@@ -139,6 +139,8 @@ func (r *Router) registerRoutes() {
 
 	// xAI Audit Log
 	protected.HandleFunc("GET /api/sessions/{id}/xai-log", r.sessionHndlr.GetXAILog)
+	// Reproducible Error (xAI): jejak panggilan LLM gagal terakhir (utk tampil + replay)
+	protected.HandleFunc("GET /api/sessions/{id}/llm-debug", r.sessionHndlr.GetLLMDebug)
 
 	// Modul 8b (Bibliometric/SLNA)
 	protected.HandleFunc("POST /api/sessions/{id}/m8b/vosviewer", r.sessionHndlr.SubmitVOSviewer)
@@ -156,6 +158,7 @@ func (r *Router) registerRoutes() {
 	// LLM config endpoints
 	protected.HandleFunc("GET /api/llm/health", r.llmHndlr.CheckHealth)
 	protected.HandleFunc("GET /api/llm/preflight", r.llmHndlr.PreflightRoles)
+	protected.HandleFunc("POST /api/llm/replay", r.llmHndlr.ReplayLLM)
 	protected.HandleFunc("GET /api/llm/config", r.llmHndlr.ListConfigs)
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
 	protected.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)

@@ -402,7 +402,7 @@ func (h *SessionHandler) RequestReimport(w http.ResponseWriter, req *http.Reques
 
 	// Change status back to import
 	session.Status = "M4_STEP2_WAITING_IMPORT"
-	
+
 	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to set re-import status")
 		return
@@ -444,11 +444,11 @@ func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 
 	// Breakdown tracking
 	type fileBreakdown struct {
-		Filename string `json:"filename"`
-		Count    int    `json:"count"`
-		Database string `json:"database"`
-		MissingAbstract int `json:"missing_abstract"`
-		MissingDOI      int `json:"missing_doi"`
+		Filename        string `json:"filename"`
+		Count           int    `json:"count"`
+		Database        string `json:"database"`
+		MissingAbstract int    `json:"missing_abstract"`
+		MissingDOI      int    `json:"missing_doi"`
 	}
 	var perFileBreakdown []fileBreakdown
 	perDatabase := make(map[string]int)
@@ -645,8 +645,8 @@ func (h *SessionHandler) ResolveConflicts(w http.ResponseWriter, req *http.Reque
 	var payload struct {
 		Stage       string `json:"stage,omitempty"` // "" (abstrak/M5) atau "fulltext" (M6)
 		Resolutions []struct {
-			PaperID           string `json:"paper_id"`
-			FinalDecision     string `json:"final_decision"`
+			PaperID            string `json:"paper_id"`
+			FinalDecision      string `json:"final_decision"`
 			ConflictResolution string `json:"conflict_resolution"`
 		} `json:"resolutions"`
 	}
@@ -1226,7 +1226,7 @@ func (h *SessionHandler) DeleteQdrantPaper(w http.ResponseWriter, req *http.Requ
 	// 2. Update MongoDB slr_papers
 	ctx := context.Background()
 	collPapers := h.mongoRepo.GetPapersCollection()
-	
+
 	filter := bson.M{"session_id": id}
 	if payload.DOI != "" && payload.DOI != "-" {
 		// handle http and https doi as well
@@ -1362,7 +1362,7 @@ func (h *SessionHandler) ResolveExtractionManual(w http.ResponseWriter, req *htt
 
 	ctx := context.Background()
 	coll := h.mongoRepo.GetExtractionCollection()
-	
+
 	objID, err := primitive.ObjectIDFromHex(extID)
 	if err != nil {
 		sendJSONError(w, http.StatusBadRequest, "Invalid Ext ID format")
@@ -1372,14 +1372,14 @@ func (h *SessionHandler) ResolveExtractionManual(w http.ResponseWriter, req *htt
 	filter := bson.M{"_id": objID, "session_id": id, "fields.key": payload.FieldKey}
 	update := bson.M{
 		"$set": bson.M{
-			"fields.$.value": payload.ResolvedValue,
+			"fields.$.value":  payload.ResolvedValue,
 			"fields.$.status": "REPORTED",
 		},
 		"$pull": bson.M{
 			"ambiguous": payload.FieldKey,
 		},
 	}
-	
+
 	res, err := coll.UpdateOne(ctx, filter, update)
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to update extraction: "+err.Error())
@@ -1390,10 +1390,10 @@ func (h *SessionHandler) ResolveExtractionManual(w http.ResponseWriter, req *htt
 		updatePush := bson.M{
 			"$push": bson.M{
 				"fields": bson.M{
-					"key": payload.FieldKey,
-					"value": payload.ResolvedValue,
+					"key":      payload.FieldKey,
+					"value":    payload.ResolvedValue,
 					"evidence": "Manual Resolution",
-					"status": "REPORTED",
+					"status":   "REPORTED",
 				},
 			},
 			"$pull": bson.M{
@@ -1450,8 +1450,16 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 	}
 
 	var title, doi string
-	if t, ok := extDoc["Title"].(string); ok { title = t } else if t, ok := extDoc["title"].(string); ok { title = t }
-	if d, ok := extDoc["DOI"].(string); ok { doi = d } else if d, ok := extDoc["doi"].(string); ok { doi = d }
+	if t, ok := extDoc["Title"].(string); ok {
+		title = t
+	} else if t, ok := extDoc["title"].(string); ok {
+		title = t
+	}
+	if d, ok := extDoc["DOI"].(string); ok {
+		doi = d
+	} else if d, ok := extDoc["doi"].(string); ok {
+		doi = d
+	}
 
 	// Normalize DOI and get from FT index
 	doi = strings.TrimPrefix(doi, "https://doi.org/")
@@ -1488,7 +1496,7 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 		sendJSONError(w, http.StatusInternalServerError, "Gagal inisiasi LLM: "+errP.Error())
 		return
 	}
-	
+
 	// Create extraction agent
 	ag := agent.NewExtractionAgent(p) // simple no fallback for auto-resolve or just use primary
 
@@ -1502,15 +1510,15 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 	filter := bson.M{"_id": objID, "session_id": id, "fields.key": payload.FieldKey}
 	update := bson.M{
 		"$set": bson.M{
-			"fields.$.value": resField.Value,
+			"fields.$.value":    resField.Value,
 			"fields.$.evidence": resField.Evidence,
-			"fields.$.status": resField.Status,
+			"fields.$.status":   resField.Status,
 		},
 		"$pull": bson.M{
 			"ambiguous": payload.FieldKey,
 		},
 	}
-	
+
 	res, errUpdate := coll.UpdateOne(ctx, filter, update)
 	if errUpdate != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Gagal menyimpan resolusi ke DB: "+errUpdate.Error())
@@ -1522,10 +1530,10 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 		updatePush := bson.M{
 			"$push": bson.M{
 				"fields": bson.M{
-					"key": payload.FieldKey,
-					"value": resField.Value,
+					"key":      payload.FieldKey,
+					"value":    resField.Value,
 					"evidence": resField.Evidence,
-					"status": resField.Status,
+					"status":   resField.Status,
 				},
 			},
 			"$pull": bson.M{
@@ -1540,10 +1548,10 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 	}
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"message": "Field auto-resolve berhasil",
+		"message":        "Field auto-resolve berhasil",
 		"resolved_value": resField.Value,
-		"evidence": resField.Evidence,
-		"model_used": ag.ModelName(),
+		"evidence":       resField.Evidence,
+		"model_used":     ag.ModelName(),
 	})
 }
 
@@ -1641,7 +1649,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	}
 	var qdrantPapers []QdrantPaper
 	qdrantDOIs := make(map[string]bool)
-	
+
 	if qdrantURL != "mock-mode" {
 		client := &http.Client{Timeout: 30 * time.Second}
 
@@ -1651,20 +1659,20 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 			if nextOffset != "" {
 				reqBody = fmt.Sprintf(`{"limit": 5000, "with_payload": ["doi", "title"], "offset": "%s"}`, nextOffset)
 			}
-			
+
 			reqQdrant, err := http.NewRequest("POST", fmt.Sprintf("%s/collections/scientific_articles/points/scroll", qdrantURL), strings.NewReader(reqBody))
 			if err != nil {
-				sendJSONError(w, http.StatusInternalServerError, "Gagal membuat request ke Qdrant: " + err.Error())
+				sendJSONError(w, http.StatusInternalServerError, "Gagal membuat request ke Qdrant: "+err.Error())
 				return
 			}
 			reqQdrant.Header.Set("Content-Type", "application/json")
 			if qdrantKey != "" {
 				reqQdrant.Header.Set("api-key", qdrantKey)
 			}
-			
+
 			resp, err := client.Do(reqQdrant)
 			if err != nil {
-				sendJSONError(w, http.StatusInternalServerError, "Gagal terhubung ke Qdrant: " + err.Error())
+				sendJSONError(w, http.StatusInternalServerError, "Gagal terhubung ke Qdrant: "+err.Error())
 				return
 			}
 
@@ -1679,7 +1687,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 			var qdrantResp map[string]interface{}
 			json.NewDecoder(resp.Body).Decode(&qdrantResp)
 			resp.Body.Close()
-				
+
 			if result, ok := qdrantResp["result"].(map[string]interface{}); ok {
 				if points, ok := result["points"].([]interface{}); ok {
 					for _, pt := range points {
@@ -1689,7 +1697,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 								if t, ok := payload["title"].(string); ok {
 									qTitle = t
 								}
-								
+
 								var qDOI string
 								if d, ok := payload["doi"].(string); ok && d != "" {
 									d = strings.TrimPrefix(d, "https://doi.org/")
@@ -1705,14 +1713,14 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 									qdrantDOIs[d] = true
 									qDOI = d
 								}
-								
+
 								// Always add to qdrantPapers so title similarity can work even if DOI is empty
 								qdrantPapers = append(qdrantPapers, QdrantPaper{DOI: qDOI, Title: qTitle})
 							}
 						}
 					}
 				}
-				
+
 				if offsetVal, hasOffset := result["next_page_offset"]; hasOffset && offsetVal != nil {
 					nextOffset = offsetVal.(string)
 				} else {
@@ -1727,13 +1735,13 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 		for _, p := range papers {
 			var doi string
 			var title string
-			
+
 			if val, ok := p["doi"].(string); ok && val != "" {
 				doi = val
 			} else if val, ok := p["DOI"].(string); ok && val != "" {
 				doi = val
 			}
-			
+
 			if val, ok := p["title"].(string); ok && val != "" {
 				title = val
 			} else if val, ok := p["Title"].(string); ok && val != "" {
@@ -1754,12 +1762,12 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 				doi = strings.ReplaceAll(doi, "\ufb04", "ffl")
 				doi = strings.ReplaceAll(doi, "\ufb05", "ft")
 				doi = strings.ReplaceAll(doi, "\ufb06", "st")
-				
+
 				if qdrantDOIs[doi] {
 					matched = true
 				}
 			}
-			
+
 			// Fallback: Match by title similarity if DOI didn't match
 			if !matched && title != "" {
 				for _, qp := range qdrantPapers {
@@ -1803,7 +1811,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	}
 	// Lakukan kalkulasi ulang AcquisitionLog secara sinkron agar UI langsung ter-update
 	h.recalculateAcquisitionLogSync(ctx, session)
-	
+
 	// Collect debug info
 	qDOIs := []string{}
 	for k := range qdrantDOIs {
@@ -1830,13 +1838,13 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":      "success",
-		"synced_count": syncedCount,
+		"message":             "success",
+		"synced_count":        syncedCount,
 		"debug_qdrant_unique": len(qdrantDOIs),
-		"debug_mongo_papers": len(papers),
+		"debug_mongo_papers":  len(papers),
 		"debug_qdrant_sample": qDOIs,
-		"debug_mongo_sample": mDOIs,
-		"version": "v4",
+		"debug_mongo_sample":  mDOIs,
+		"version":             "v4",
 	})
 }
 
@@ -1860,7 +1868,7 @@ func (h *SessionHandler) MarkInaccessible(w http.ResponseWriter, req *http.Reque
 
 	ctx := context.Background()
 	coll := h.mongoRepo.GetScreeningCollection()
-	
+
 	objID, _ := primitive.ObjectIDFromHex(payload.PaperID)
 	update := bson.M{
 		"$set": bson.M{
@@ -1883,7 +1891,7 @@ func (h *SessionHandler) MarkInaccessible(w http.ResponseWriter, req *http.Reque
 	if errSession == nil {
 		h.recalculateAcquisitionLogSync(ctx, session)
 	}
-	
+
 	sendJSONResponse(w, http.StatusOK, map[string]string{
 		"message": "Dokumen ditandai Inaccessible",
 	})
@@ -1920,32 +1928,42 @@ func (h *SessionHandler) ExportM6Links(w http.ResponseWriter, req *http.Request)
 	fmt.Fprintf(w, "Title,Authors,DOI,Publisher,Journal,Article_Type,Location,Download_URL,Retrieved,Inaccessible\n")
 	for _, p := range papers {
 		title, _ := p["title"].(string)
-		if title == "" { title, _ = p["Title"].(string) }
-		
+		if title == "" {
+			title, _ = p["Title"].(string)
+		}
+
 		authors, _ := p["authors"].(string)
-		if authors == "" { authors, _ = p["Authors"].(string) }
+		if authors == "" {
+			authors, _ = p["Authors"].(string)
+		}
 
 		doi, _ := p["doi"].(string)
-		if doi == "" { doi, _ = p["DOI"].(string) }
-		
+		if doi == "" {
+			doi, _ = p["DOI"].(string)
+		}
+
 		journal, _ := p["journal"].(string)
-		if journal == "" { journal, _ = p["Journal"].(string) }
-		
+		if journal == "" {
+			journal, _ = p["Journal"].(string)
+		}
+
 		articleType, _ := p["document_type"].(string)
-		if articleType == "" { articleType, _ = p["Article_Type"].(string) }
-		
+		if articleType == "" {
+			articleType, _ = p["Article_Type"].(string)
+		}
+
 		loc, _ := p["full_text_location"].(string)
 		url, _ := p["download_url"].(string)
 		retrieved, _ := p["full_text_retrieved"].(bool)
 		inacc, _ := p["inaccessible"].(bool)
-		
+
 		publisher := getPublisherFromDOI(doi)
-		
+
 		title = strings.ReplaceAll(title, "\"", "\"\"")
 		authors = strings.ReplaceAll(authors, "\"", "\"\"")
 		journal = strings.ReplaceAll(journal, "\"", "\"\"")
 		articleType = strings.ReplaceAll(articleType, "\"", "\"\"")
-		
+
 		if doi != "" && !strings.HasPrefix(doi, "http") {
 			doi = "https://doi.org/" + doi
 		}
@@ -1966,7 +1984,7 @@ func getPublisherFromDOI(doi string) string {
 			prefix = "10." + parts[1]
 		}
 	}
-	
+
 	if strings.HasPrefix(prefix, "10.1109") {
 		return "IEEE"
 	} else if strings.HasPrefix(prefix, "10.1016") {
@@ -1988,7 +2006,7 @@ func getPublisherFromDOI(doi string) string {
 	} else if strings.HasPrefix(prefix, "10.48550") || strings.Contains(strings.ToLower(doi), "arxiv") {
 		return "arXiv"
 	}
-	
+
 	return "Other"
 }
 
@@ -2304,16 +2322,16 @@ func (h *SessionHandler) GetM6Papers(w http.ResponseWriter, req *http.Request) {
 		url, _ := p["download_url"].(string)
 		retrieved, _ := p["full_text_retrieved"].(bool)
 		inacc, _ := p["inaccessible"].(bool)
-		
+
 		if doi != "" && !strings.HasPrefix(doi, "http") {
 			doi = "https://doi.org/" + doi
 		}
-		
+
 		publisher := getPublisherFromDOI(doi)
 		if loc == "arxiv" {
 			publisher = "arXiv"
 		}
-		
+
 		// Map `_id` to string safely
 		paperID := ""
 		if oid, ok := p["_id"].(primitive.ObjectID); ok {
@@ -2321,22 +2339,22 @@ func (h *SessionHandler) GetM6Papers(w http.ResponseWriter, req *http.Request) {
 		}
 
 		result = append(result, map[string]interface{}{
-			"id": paperID,
-			"title": title,
-			"doi": doi,
-			"journal": journal,
+			"id":           paperID,
+			"title":        title,
+			"doi":          doi,
+			"journal":      journal,
 			"article_type": articleType,
-			"location": loc,
+			"location":     loc,
 			"download_url": url,
-			"retrieved": retrieved,
+			"retrieved":    retrieved,
 			"inaccessible": inacc,
-			"publisher": publisher,
+			"publisher":    publisher,
 		})
 	}
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"papers": result,
-		"total": len(result),
+		"total":  len(result),
 	})
 }
 
@@ -2476,10 +2494,14 @@ func levenshtein(s1, s2 string) int {
 			min1 := matrix[i-1][j] + 1
 			min2 := matrix[i][j-1] + 1
 			min3 := matrix[i-1][j-1] + cost
-			
+
 			min := min1
-			if min2 < min { min = min2 }
-			if min3 < min { min = min3 }
+			if min2 < min {
+				min = min2
+			}
+			if min3 < min {
+				min = min3
+			}
 			matrix[i][j] = min
 		}
 	}
@@ -2490,11 +2512,15 @@ func similarityRatio(s1, s2 string) float64 {
 	// Normalize strings for comparison
 	clean1 := strings.ToLower(strings.TrimSpace(s1))
 	clean2 := strings.ToLower(strings.TrimSpace(s2))
-	
+
 	dist := levenshtein(clean1, clean2)
 	maxLen := len(clean1)
-	if len(clean2) > maxLen { maxLen = len(clean2) }
-	if maxLen == 0 { return 1.0 }
+	if len(clean2) > maxLen {
+		maxLen = len(clean2)
+	}
+	if maxLen == 0 {
+		return 1.0
+	}
 	return 1.0 - float64(dist)/float64(maxLen)
 }
 
@@ -2636,6 +2662,24 @@ func (h *SessionHandler) GetXAILog(w http.ResponseWriter, req *http.Request) {
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"xai_log": entries,
 	})
+}
+
+// GetLLMDebug mengembalikan jejak panggilan LLM GAGAL terakhir untuk sesi (Reproducible Error
+// xAI): prompt LENGKAP + error + provider/model, agar bisa ditampilkan & di-REPLAY dari UI.
+// API key tidak pernah tersimpan di jejak ini. `trace: null` bila belum ada error tercatat.
+func (h *SessionHandler) GetLLMDebug(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+	trace, err := h.mongoRepo.GetLLMCallTrace(context.Background(), id)
+	if err != nil {
+		// Tidak ada jejak = belum ada panggilan LLM yang gagal tercatat. Bukan error.
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{"trace": nil})
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"trace": trace})
 }
 
 // EnrichMetadata triggers CrossRef metadata enrichment for extraction docs missing fields.

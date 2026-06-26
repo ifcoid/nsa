@@ -751,3 +751,105 @@ func (h *LLMHandler) PreflightRoles(w http.ResponseWriter, req *http.Request) {
 		"roles":      out,
 	})
 }
+
+// ReplayLLM mengirim ULANG sebuah prompt (system+user) ke provider lalu mengembalikan respons
+// MENTAH / error apa adanya + timing — inti Reproducible Error (xAI): user/developer bisa
+// menguji "prompt apa, jawaban/error provider apa" untuk pinpoint error. Prompt boleh diedit
+// (mis. full-text dipotong) utk menguji hipotesis context-overflow. API key TIDAK pernah
+// dikembalikan. Pakai config TERSIMPAN, atau override (api_key/model/base_url) bila diisi.
+func (h *LLMHandler) ReplayLLM(w http.ResponseWriter, req *http.Request) {
+	var payload struct {
+		Provider     string `json:"provider"`
+		Role         string `json:"role,omitempty"`
+		Model        string `json:"model,omitempty"`
+		BaseURL      string `json:"base_url,omitempty"`
+		APIKey       string `json:"api_key,omitempty"`
+		SystemPrompt string `json:"system_prompt"`
+		UserPrompt   string `json:"user_prompt"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if strings.TrimSpace(payload.SystemPrompt) == "" && strings.TrimSpace(payload.UserPrompt) == "" {
+		sendJSONError(w, http.StatusBadRequest, "system_prompt / user_prompt wajib diisi")
+		return
+	}
+
+	factory := llm.NewLLMFactory(h.mongoRepo)
+	provider := strings.TrimSpace(payload.Provider)
+	if provider == "" && payload.Role != "" {
+		provider, _ = factory.RoleProviders(context.Background(), payload.Role)
+	}
+	if provider == "" {
+		sendJSONError(w, http.StatusBadRequest, "provider atau role wajib diisi")
+		return
+	}
+
+	saved, _ := h.mongoRepo.GetLLMConfig(context.Background(), provider)
+	var client llm.LLMClient
+	var modelName string
+	if payload.APIKey != "" || payload.Model != "" || payload.BaseURL != "" {
+		// Override (config BELUM disimpan) — bangun config sementara dari form + fallback tersimpan.
+		cfg := &model.LLMConfig{ID: provider, ProviderName: provider, IsActive: true}
+		if saved != nil {
+			*cfg = *saved
+			cfg.IsActive = true
+		}
+		if payload.APIKey != "" {
+			cfg.APIKey = payload.APIKey
+		}
+		if payload.Model != "" {
+			cfg.DefaultModel = payload.Model
+		}
+		if payload.BaseURL != "" {
+			cfg.BaseURL = payload.BaseURL
+		}
+		if cfg.APIKey == "" {
+			sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+				"ok": false, "provider": provider, "model": cfg.DefaultModel,
+				"error": "API Key kosong — isi API Key (atau simpan dulu) untuk replay.",
+			})
+			return
+		}
+		modelName = cfg.DefaultModel
+		client = factory.ClientFromConfig(cfg)
+	} else {
+		if saved != nil {
+			modelName = saved.DefaultModel
+		}
+		c, err := factory.CreateClient(context.Background(), provider)
+		if err != nil {
+			sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+				"ok": false, "provider": provider, "model": modelName,
+				"error": "Gagal memuat client (cek API key/base URL): " + err.Error(),
+			})
+			return
+		}
+		client = c
+	}
+
+	// Bounded: replay sinkron; prompt yang gagal karena context-overflow biasanya balik CEPAT
+	// (stream kosong langsung). 100s memberi ruang tanpa menabrak batas proxy terlalu jauh.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	defer cancel()
+	start := time.Now()
+	out, gerr := client.Generate(ctx, payload.SystemPrompt, payload.UserPrompt)
+	durMs := time.Since(start).Milliseconds()
+
+	resp := map[string]interface{}{
+		"provider":       provider,
+		"model":          modelName,
+		"duration_ms":    durMs,
+		"prompt_chars":   len(payload.SystemPrompt) + len(payload.UserPrompt),
+		"response_chars": len(out),
+	}
+	if gerr != nil {
+		resp["ok"] = false
+		resp["error"] = gerr.Error()
+	} else {
+		resp["ok"] = true
+		resp["response"] = out
+	}
+	sendJSONResponse(w, http.StatusOK, resp)
+}

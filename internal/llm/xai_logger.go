@@ -25,17 +25,19 @@ func displayModelName(raw string) string {
 // xaiLoggingClient wraps an LLMClient and logs every Generate call to MongoDB
 // as an xAI audit entry (non-blocking).
 type xaiLoggingClient struct {
-	inner LLMClient
-	repo  *repository.MongoRepository
+	inner      LLMClient
+	repo       *repository.MongoRepository
+	providerID string // id provider (mis. "groq") agar jejak error bisa di-REPLAY ke provider yang sama
 }
 
 // NewXAILoggingClient creates a logging wrapper that transparently records every LLM
-// interaction to the session's xai_log field in MongoDB.
-func NewXAILoggingClient(inner LLMClient, repo *repository.MongoRepository) LLMClient {
+// interaction to the session's xai_log field in MongoDB. providerID dipakai utk Reproducible
+// Error (xAI): jejak call yang GAGAL menyimpan provider agar bisa di-replay dari UI.
+func NewXAILoggingClient(inner LLMClient, repo *repository.MongoRepository, providerID string) LLMClient {
 	if repo == nil {
 		return inner
 	}
-	return &xaiLoggingClient{inner: inner, repo: repo}
+	return &xaiLoggingClient{inner: inner, repo: repo, providerID: providerID}
 }
 
 func (c *xaiLoggingClient) ModelName() string {
@@ -78,6 +80,32 @@ func (c *xaiLoggingClient) Generate(ctx context.Context, systemPrompt, userPromp
 			log.Printf("[xAI] failed to append entry for session %s: %v", xaiCtx.SessionID, appendErr)
 		}
 	}()
+
+	// Reproducible Error (xAI): saat GAGAL, simpan jejak LENGKAP (prompt persis + error +
+	// provider/model) agar user bisa me-REPLAY-nya dari UI ("Uji Coba") untuk pinpoint error.
+	// Hanya call gagal yang disimpan (hemat storage; full-text prompt besar). API key TIDAK ikut.
+	if err != nil {
+		trace := &model.LLMCallTrace{
+			SessionID:    xaiCtx.SessionID,
+			Step:         xaiCtx.Step,
+			AgentFunc:    xaiCtx.AgentFunc,
+			Provider:     c.providerID,
+			Model:        displayModelName(c.inner.ModelName()),
+			SystemPrompt: systemPrompt,
+			UserPrompt:   userPrompt,
+			Error:        err.Error(),
+			DurationMs:   duration,
+			PromptChars:  len(systemPrompt) + len(userPrompt),
+			Timestamp:    time.Now(),
+		}
+		go func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if saveErr := c.repo.SaveLLMCallTrace(bgCtx, trace); saveErr != nil {
+				log.Printf("[xAI] failed to save LLM call trace for session %s: %v", xaiCtx.SessionID, saveErr)
+			}
+		}()
+	}
 
 	return result, err
 }

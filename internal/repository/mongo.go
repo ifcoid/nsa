@@ -151,19 +151,19 @@ func (r *MongoRepository) GetPostDedupCollection() *mongo.Collection {
 
 func (r *MongoRepository) ClearAndInsertPapers(ctx context.Context, sessionID string, papers []interface{}) error {
 	coll := r.GetPapersCollection()
-	
+
 	// Delete old papers for this session
 	_, err := coll.DeleteMany(ctx, bson.M{"session_id": sessionID})
 	if err != nil {
 		return err
 	}
-	
+
 	// Insert new papers
 	if len(papers) > 0 {
 		_, err = coll.InsertMany(ctx, papers)
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -256,9 +256,9 @@ func (r *MongoRepository) GetUnscreenedPapers(ctx context.Context, sessionID str
 
 func (r *MongoRepository) GetUnevaluatedPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
 	filter := bson.M{
-		"session_id": sessionID,
+		"session_id":          sessionID,
 		"Screener_1_Decision": bson.M{"$ne": ""},
-		"Batch_Evaluated": bson.M{"$ne": true},
+		"Batch_Evaluated":     bson.M{"$ne": true},
 	}
 	cursor, err := r.GetScreeningCollection().Find(ctx, filter)
 	if err != nil {
@@ -393,17 +393,17 @@ func (r *MongoRepository) UpdateScreeningPaperResolutionFull(ctx context.Context
 
 func (r *MongoRepository) GetScreeningProgress(ctx context.Context, sessionID string) (total int64, screened int64, err error) {
 	coll := r.GetScreeningCollection()
-	
+
 	total, err = coll.CountDocuments(ctx, bson.M{"session_id": sessionID})
 	if err != nil {
 		return 0, 0, err
 	}
-	
+
 	screened, err = coll.CountDocuments(ctx, bson.M{
-		"session_id": sessionID,
+		"session_id":          sessionID,
 		"Screener_1_Decision": bson.M{"$ne": ""},
 	})
-	
+
 	return total, screened, err
 }
 
@@ -430,7 +430,7 @@ func (r *MongoRepository) UpdateScreeningPaperResolution(ctx context.Context, se
 	}
 	filter := bson.M{"_id": objID, "session_id": sessionID}
 	update := bson.M{"$set": bson.M{
-		"Final_Decision": finalDecision,
+		"Final_Decision":      finalDecision,
 		"Conflict_Resolution": notes,
 	}}
 	_, err = r.GetScreeningCollection().UpdateOne(ctx, filter, update)
@@ -474,19 +474,19 @@ func (r *MongoRepository) RecodeFullTextExclusion(ctx context.Context, sessionID
 // ResetCalibrationScreenings membersihkan field keputusan sebelumnya untuk persiapan re-run kalibrasi.
 func (r *MongoRepository) ResetCalibrationScreenings(ctx context.Context, sessionID string) error {
 	filter := bson.M{
-		"session_id": sessionID,
+		"session_id":     sessionID,
 		"Final_Decision": "", // Hanya reset yang belum di-resolve secara final
 	}
 	update := bson.M{
 		"$set": bson.M{
-			"Screener_1_Decision": "",
+			"Screener_1_Decision":    "",
 			"Screener_1_Reason_Code": "",
-			"Screener_1_Notes": "",
-			"Screener_2_Decision": "",
+			"Screener_1_Notes":       "",
+			"Screener_2_Decision":    "",
 			"Screener_2_Reason_Code": "",
-			"Screener_2_Notes": "",
-			"Agreement": "",
-			"Conflict_Resolution": nil,
+			"Screener_2_Notes":       "",
+			"Agreement":              "",
+			"Conflict_Resolution":    nil,
 		},
 	}
 	_, err := r.GetScreeningCollection().UpdateMany(ctx, filter, update)
@@ -496,8 +496,8 @@ func (r *MongoRepository) ResetCalibrationScreenings(ctx context.Context, sessio
 // GetDisagreedPapers mengambil paper yang mengalami konflik antar reviewer (Agreement = DISAGREE)
 func (r *MongoRepository) GetDisagreedPapers(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
 	filter := bson.M{
-		"session_id": sessionID,
-		"Agreement":  "DISAGREE",
+		"session_id":     sessionID,
+		"Agreement":      "DISAGREE",
 		"Final_Decision": "",
 	}
 	cursor, err := r.GetScreeningCollection().Find(ctx, filter)
@@ -751,6 +751,24 @@ func (r *MongoRepository) AppendXAIEntry(ctx context.Context, sessionID string, 
 	return err
 }
 
+// SaveLLMCallTrace menyimpan jejak panggilan LLM GAGAL terakhir per sesi (upsert) untuk
+// Reproducible Error (xAI). Satu dokumen per sesi — yang terbaru menimpa yang lama.
+func (r *MongoRepository) SaveLLMCallTrace(ctx context.Context, t *model.LLMCallTrace) error {
+	coll := r.client.Database(r.dbName).Collection("llm_call_debug")
+	_, err := coll.ReplaceOne(ctx, bson.M{"session_id": t.SessionID}, t, options.Replace().SetUpsert(true))
+	return err
+}
+
+// GetLLMCallTrace mengambil jejak panggilan LLM gagal TERAKHIR untuk sebuah sesi (utk replay).
+func (r *MongoRepository) GetLLMCallTrace(ctx context.Context, sessionID string) (*model.LLMCallTrace, error) {
+	coll := r.client.Database(r.dbName).Collection("llm_call_debug")
+	var t model.LLMCallTrace
+	if err := coll.FindOne(ctx, bson.M{"session_id": sessionID}).Decode(&t); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
 // GetXAILog fetches only the xai_log field from a session using projection,
 // avoiding loading the entire session document.
 func (r *MongoRepository) GetXAILog(ctx context.Context, sessionID string) ([]model.XAIEntry, error) {
@@ -769,7 +787,7 @@ func (r *MongoRepository) GetXAILog(ctx context.Context, sessionID string) ([]mo
 // ResetQAErrors mereset status qa_rated menjadi false untuk dokumen yang error agar dievaluasi ulang
 func (r *MongoRepository) ResetQAErrors(ctx context.Context, sessionID string) error {
 	filter := bson.M{
-		"session_id": sessionID,
+		"session_id":        sessionID,
 		"qa_final_category": bson.M{"$in": []string{"ERROR", "UNRATED"}},
 	}
 	update := bson.M{

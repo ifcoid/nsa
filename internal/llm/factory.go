@@ -88,8 +88,9 @@ func (f *LLMFactory) ClientFromConfig(config *model.LLMConfig) LLMClient {
 		client = NewOpenAICompatibleClient(config.APIKey, config.BaseURL, config.DefaultModel)
 	}
 
-	// Wrap with xAI logging (transparently records every LLM call)
-	return NewXAILoggingClient(client, f.mongoRepo)
+	// Wrap with xAI logging (transparently records every LLM call). config.ID (provider) ikut
+	// agar jejak call GAGAL bisa di-replay ke provider yang sama (Reproducible Error / xAI).
+	return NewXAILoggingClient(client, f.mongoRepo, config.ID)
 }
 
 // Roles mengembalikan pemetaan peran->provider (config-driven, default bila kosong).
