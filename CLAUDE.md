@@ -44,10 +44,20 @@ Kredensial untuk verifikasi langsung (read-only, JANGAN bocorkan) ada di `/home/
   **`github.com/ifcoid/slr`** (GitHub Pages). `notify.yml` mengirim Telegram saat Pages deploy
   sukses. CATATAN: `apiBaseURL` default frontend = `http://localhost:50607/api` → user yang
   pakai backend lokal, frontend if.co.id/slr menunjuk ke localhost-nya sendiri.
-- **Verifikasi sebelum klaim "sudah live"** (JANGAN cukup "build hijau"): cek Pages build via
-  API — `GET /repos/ifcoid/download/pages/builds/latest` & `…/ifcoid/slr/pages/builds/latest`
-  (status `built`, `error:null`), pastikan commit-nya match commit terbaru sumber, lalu `curl`
+- **WAJIB diverifikasi SEBELUM MEMBALAS pelapor bug** (atau mengklaim fix "sudah live") — JANGAN
+  cukup "build hijau" di repo sumber. Untuk **backend (`if.co.id/download`)**, pastikan ketiganya:
+  1. binary = **commit TERBARU `ifcoid/download`** —
+     `GET /repos/ifcoid/download/commits?per_page=1`;
+  2. **GitHub Pages build SUKSES** untuk commit itu —
+     `GET /repos/ifcoid/download/pages/builds/latest` → `status:"built"`, `error:null`, dan
+     `.commit` == SHA commit terbaru download;
+  3. **pesan commit `ifcoid/download` memuat SHA `nsa` TERBARU** (format
+     `Update SLR backend binaries (commit: <nsa-sha>)`) → artinya binary yang disajikan benar
+     hasil build commit nsa terbaru. Bandingkan dgn `git -C nsa rev-parse HEAD` /
+     `GET /repos/ifcoid/nsa/commits?per_page=1`.
+  Untuk **frontend (`if.co.id/slr`)**: `…/ifcoid/slr/pages/builds/latest` `status:built` + `curl`
   file live (mis. `if.co.id/slr/js/...`) dan grep string dari commit terbaru. Auth pakai `GHPAT`.
+  Kalau belum hijau/match → **JANGAN balas**; tunggu workflow build + Pages selesai dulu.
 - **Implikasi untuk user backend-lokal:** push `nsa` saja TIDAK cukup — mereka harus **unduh
   ulang binary** dari if.co.id/download (tunggu workflow build + Pages selesai). Push `slr` →
   frontend live di if.co.id/slr (cukup user Ctrl+F5).
@@ -177,7 +187,10 @@ satunya = bot Telegram **@BugLaporBot**. Konten laporan DIBAWA lewat pesan/FILE 
   ringkas ke `bugbot/inbox.jsonl`, (4) majukan `bugbot/offset`. Lalu BACA `inbox.jsonl` + file
   di `files/` → perbaiki. (Real-time opsional: user sendiri pasang cron `* * * * * .../poll.sh`.)
 - **Balas pelapor:** `bash /home/adb/awangga/bugbot/reply.sh <chat_id|last> "<pesan>"` (kirim via
-  @BugLaporBot; `last` = pengirim laporan TERAKHIR di inbox.jsonl). CATATAN: mengirim pesan ke
+  @BugLaporBot; `last` = pengirim laporan TERAKHIR di inbox.jsonl). **SEBELUM membalas (bila pesan
+  mengklaim fix sudah live): WAJIB verifikasi deploy** dulu — binary `if.co.id/download` = commit
+  terbaru + Pages SUKSES + pesan commit download memuat SHA `nsa` terbaru (lihat seksi "Deploy &
+  distribusi"). Jangan janjikan fix yang belum benar-benar ter-deploy. CATATAN: mengirim pesan ke
   USER NYATA adalah aksi yang butuh OTORISASI manusia — assistant tak boleh kirim sendiri tanpa
   izin eksplisit; sodorkan perintahnya agar user yang menjalankan (atau user menambah permission).
 - Poller + reply + log + token ada di folder `awangga` (DI LUAR repo `nsa`/`slr`), tidak di-commit.
