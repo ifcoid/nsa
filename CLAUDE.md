@@ -138,10 +138,14 @@ satunya = bot Telegram **@BugLaporBot**. Konten laporan DIBAWA lewat pesan/FILE 
 - Bug tampilan/UX: user isi **Keterangan**. Error LLM: detail prompt+error terisi otomatis
   (dari koleksi `llm_call_debug`, di-tangkap `xaiLoggingClient` saat call gagal) + bisa
   **Uji Coba** (replay ASYNC: `POST /api/llm/replay` → poll `GET /api/llm/replay/{id}`).
-- **State ditangkap OTOMATIS** (session, modul/step dari `display-status`, url, viewport,
-  userAgent). Klik **Report Bug** → unduh **file .txt LENGKAP** (tak terpotong) → buka
-  `t.me/BugLaporBot` → user **lampirkan file** & kirim. (Sengaja pakai FILE, BUKAN deep-link
-  `?text=`, agar prompt full-text besar tetap utuh — lewat limit pesan Telegram 4096 char.)
+- **State ditangkap OTOMATIS** (session, modul/step dari `display-status`, **`api_base`**=
+  backend yang dipakai, url, viewport, userAgent). Klik **Report Bug** → frontend fetch
+  `GET /sessions/{id}/diagnostic` dan **menyisipkan SNAPSHOT STATE DB** (status/error/flags/
+  counts/roles/log terakhir, TANPA rahasia) ke file → unduh **file .txt LENGKAP** → buka
+  `t.me/BugLaporBot` → user **lampirkan file** & kirim. (FILE, bukan deep-link `?text=`, agar
+  utuh.) **Laporan jadi swasembada: developer TAK perlu akses Mongo user** (krusial karena
+  backend bisa lokal per-user → connection-string tak boleh & tak perlu dibocorkan). `api_base`
+  memberi tahu backend mana bila perlu hit endpoint langsung.
 - Bot **auto-reply "✅ diterima"** lewat poller di bawah.
 
 ### Cara DEVELOPER/Claude baca laporan
