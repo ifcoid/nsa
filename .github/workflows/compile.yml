@@ -39,7 +39,7 @@ jobs:
       - name: Compile Binary
         run: |
           mkdir -p dist
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} garble -literals -tiny build -o dist/if-slr-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/app
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} garble -literals -tiny build -ldflags "-X 'nsa/internal/version.Commit=${{ github.sha }}'" -o dist/if-slr-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/app 
 
       - name: Upload Binary
         uses: actions/upload-artifact@v4
