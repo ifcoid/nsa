@@ -229,6 +229,17 @@ Keluarkan HANYA JSON MURNI:
 	return &res, nil
 }
 
+// SmokeTest melakukan SATU panggilan kecil ke provider untuk memastikan agent ini benar-benar
+// bisa dipakai (mendeteksi 404 nama model salah / 401 API key salah / 429 kuota LEBIH AWAL,
+// sebelum loop verifikasi yang panjang). Error dikembalikan APA ADANYA (tidak dipotong) agar
+// bisa ditampilkan utuh ke user untuk diperbaiki. Dipakai sbg pre-flight Reviewer 2 di M7 L2.
+func (a *ExtractionAgent) SmokeTest(ctx context.Context) error {
+	if _, err := a.client.Generate(ctx, "Anda asisten uji koneksi.", "Jawab satu kata: ok"); err != nil {
+		return err
+	}
+	return nil
+}
+
 // AutoResolveField = LLM membaca ulang fulltext untuk menyimpulkan SATU field yang spesifik secara konklusif.
 func (a *ExtractionAgent) AutoResolveField(ctx context.Context, opDefs, title, fulltext, fieldKey string) (*ExtractedField, error) {
 	systemPrompt := fmt.Sprintf(`Anda AI Penengah Resolusi Ambiguitas untuk Systematic Literature Review.

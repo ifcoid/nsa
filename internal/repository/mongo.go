@@ -87,7 +87,7 @@ func isResumableStatus(status string) bool {
 	if status == "" || status == "INIT" || status == "COMPLETED" {
 		return false
 	}
-	for _, terminal := range []string{"WAITING", "NEEDS_REVISION", "ERROR", "DONE"} {
+	for _, terminal := range []string{"WAITING", "NEEDS_REVISION", "ERROR", "DONE", "BLOCKED"} {
 		if strings.Contains(status, terminal) {
 			return false
 		}

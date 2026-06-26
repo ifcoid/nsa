@@ -53,6 +53,11 @@ const ftCacheTTL = 30 * time.Minute
 // longgar untuk model besar, tapi mencegah satu call nyangkut menahan langkah QA berjam-jam.
 const spotVerifyCallTimeout = 8 * time.Minute
 
+// verifierSmokeTimeout membatasi pre-flight smoke-test Reviewer 2 (satu call kecil "ok").
+// Pendek: tujuannya mendeteksi provider rusak (404/401/kuota) CEPAT lalu menjeda pipeline,
+// bukan menunggu lama. Bila provider sehat, balasan datang dalam beberapa detik.
+const verifierSmokeTimeout = 90 * time.Second
+
 type ftCacheEntry struct {
 	index   map[string]string
 	builtAt time.Time
@@ -149,9 +154,21 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	case "M7_STEP2_REVERIFY":
 		// Ulangi HANYA spot-verification (mis. setelah memperbaiki provider Reviewer 2 yang
-		// 404/locked) TANPA re-ekstrak. Data ekstraksi dipertahankan.
+		// 404/locked) TANPA re-ekstrak. Data ekstraksi dipertahankan. Pre-flight smoke-test akan
+		// menjeda lagi bila provider masih rusak — jadi user dapat umpan-balik cepat.
 		logger.Log(session.ID, "   [Re-verify 7.2] Mengulang spot-verification (provider Reviewer 2 diperbaiki)...")
-		return m.spotVerifyL2(ctx, session)
+		return m.spotVerifyL2(ctx, session, false)
+	case "M7_STEP2_VERIFY_BLOCKED":
+		// Gerbang HITL: pipeline dijeda karena provider Reviewer 2 tak bisa dipakai. Tahan di
+		// sini sampai user memperbaiki provider lalu 'Ulangi Verifikasi' (M7_STEP2_REVERIFY) —
+		// atau memilih lanjut tanpa QA (M7_STEP2_VERIFY_SKIP). Lihat 'system_error' utk detail.
+		logger.Log(session.ID, "   [System] ⛔ QA Reviewer 2 terblokir. Perbaiki provider di Pengaturan LLM lalu 'Ulangi Verifikasi', atau pilih 'Lanjut tanpa verifikasi'.")
+		return nil
+	case "M7_STEP2_VERIFY_SKIP":
+		// User SADAR memilih lanjut tanpa QA dual-rater (provider Reviewer 2 tak tersedia).
+		// Lewati verifikasi; didokumentasikan sebagai limitation. Data ekstraksi dipertahankan.
+		logger.Log(session.ID, "   [System] Lanjut TANPA QA Reviewer 2 atas keputusan user (didokumentasikan sebagai limitation).")
+		return m.spotVerifyL2(ctx, session, true)
 	case "M7_STEP2_APPROVED":
 		session.Status = "M7_STEP3_QA"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
@@ -405,7 +422,7 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 	// Semua sudah diekstrak -> spot-verify (20%) lalu approval.
 	if len(batch) == 0 {
 		if session.ExtractionLog == nil {
-			return m.spotVerifyL2(ctx, session)
+			return m.spotVerifyL2(ctx, session, false)
 		}
 		m.invalidateFulltextCache(session.ID) // ekstraksi tuntas: bebaskan indeks cached
 		session.Status = "M7_STEP2_WAITING_APPROVAL"
@@ -532,7 +549,7 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 }
 
 // spotVerifyL2 memverifikasi 20% sampel + field AMBIGUOUS (extractor 2).
-func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSession) error {
+func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSession, skipVerification bool) error {
 	logger.Log(session.ID, "   [Langkah 7.2] Spot-verification 20% (extractor 2)...")
 	coll := m.deps.MongoRepo.GetExtractionCollection()
 
@@ -549,70 +566,92 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 	}
 
 	opDefs := m.opDefs(session)
-	ftIndex := m.fulltextIndexCached(ctx, session.ID)
 	vp, vf := m.deps.LLMFactory.RoleProviders(ctx, "reviewer2")
-	verAg, err := m.agentWithFallback(ctx, vp, vf)
-	if err != nil {
-		logger.Logf(session.ID, "   [WARN] Verifier role Reviewer 2 (%s) gagal dimuat: %v. Lewati verifikasi.\n", m.modelLabel(ctx, vp), err)
-	}
 	verifierModel := m.modelLabel(ctx, vp)
-	logger.Logf(session.ID, "   [Info] Verifikasi ~%d dari %d paper (20%% sampel + semua AMBIGUOUS) via %s; ~4 dtk/paper.\n",
-		sample, total, verifierModel)
 
 	disagree, checked, ambiguous, verifyFails := 0, 0, 0, 0
 	consecVerifyFails := 0
 	var lastVerifyErr string
-	for i := 0; i < total; i++ {
-		// Spot-verify = QA sampling non-kritikal. Jika plafon waktu run tercapai (atau run
-		// di-stop), JANGAN jadikan fatal: hentikan verifikasi dgn rapi & lanjut ke approval —
-		// hasil ekstraksi sudah tersimpan. (Dulu di sini `return ctx.Err()` membuat SELURUH
-		// pipeline jadi _ERROR hanya karena satu langkah QA kehabisan waktu.)
-		if ctx.Err() != nil {
-			logger.Logf(session.ID, "   [WARN] Verifikasi dihentikan di %d/%d (batas waktu run / stop). Lanjut ke approval dgn ekstraksi yang sudah tersimpan.\n", i, total)
-			break
+
+	if skipVerification {
+		// User SADAR memilih lanjut tanpa QA dual-rater (provider Reviewer 2 tak tersedia).
+		// Verifikasi dilewati; di tail dicatat sbg LIMITATION metodologis (bukan "acceptable").
+		logger.Logf(session.ID, "   [Langkah 7.2] User memilih LANJUT tanpa QA Reviewer 2 — verifikasi DILEWATI (didokumentasikan sebagai limitation).\n")
+	} else {
+		// PRE-FLIGHT (peringatan awal): pastikan provider Reviewer 2 BENAR-BENAR bisa dipanggil
+		// SEBELUM memulai loop ~4 dtk × N paper. Bila 404/401/kuota → JEDA pipeline di gerbang
+		// khusus & beri user waktu memperbaiki provider, alih-alih memanggil verifier yang pasti
+		// gagal lalu menampilkan "0 diverifikasi" yang menyesatkan di akhir.
+		verAg, loadErr := m.agentWithFallback(ctx, vp, vf)
+		smokeErr := loadErr
+		if verAg != nil && smokeErr == nil {
+			logger.Logf(session.ID, "   [Pre-flight 7.2] Menguji koneksi nyata ke Reviewer 2 (%s)... ~beberapa detik.\n", verifierModel)
+			sctx, scancel := context.WithTimeout(ctx, verifierSmokeTimeout)
+			smokeErr = verAg.SmokeTest(sctx)
+			scancel()
 		}
-		p := all[i]
-		amb, _ := p["ambiguous"].(bson.A)
-		isAmbiguous := len(amb) > 0
-		ambiguous += len(amb)
-		if verAg == nil || (i >= sample && !isAmbiguous) {
-			continue
+		if smokeErr != nil {
+			return m.blockVerifier(ctx, session, total, verifierModel, smokeErr)
 		}
-		doi := normalizeDOIForRAG(getStr(p, "DOI", "doi"))
-		ft := ftIndex[doi]
-		if ft == "" {
-			logger.Logf(session.ID, "      -> Verify [%d/%d] %s — full-text tak ada di RAG, dilewati.\n", i+1, total, doi)
-			continue
-		}
-		logger.Logf(session.ID, "      -> Verify [%d/%d] %s — memanggil verifier (%s)... ~4 dtk.\n", i+1, total, doi, verifierModel)
-		priorJSON, _ := json.Marshal(p["fields"])
-		// Batasi tiap panggilan verifier: satu call yang nyangkut tak boleh menahan langkah QA
-		// berjam-jam (Generate sendiri retry 3×@60mnt). Timeout → di-skip, bukan fatal.
-		vctx, vcancel := context.WithTimeout(ctx, spotVerifyCallTimeout)
-		res, e := verAg.VerifyExtraction(vctx, opDefs, getStr(p, "Title"), ft, string(priorJSON))
-		vcancel()
-		checked++
-		if e != nil {
-			verifyFails++
-			consecVerifyFails++
-			lastVerifyErr = e.Error()
-			logger.Logf(session.ID, "         [!] verifikasi dilewati (gagal/timeout): %v\n", e)
-			// Gagal BERUNTUN tanpa satu pun sukses = verifier sistemik bermasalah (mis. model
-			// 404 / key salah). Stop verifikasi — percuma & jelas dari ringkasan akhir.
-			if consecVerifyFails >= maxConsecutiveExtractFails && (checked-verifyFails) == 0 {
-				logger.Logf(session.ID, "   [WARN] Verifier gagal %d kali beruntun tanpa satu pun sukses — verifikasi DIHENTIKAN. Periksa provider Reviewer 2 di Pengaturan LLM.\n", consecVerifyFails)
+		logger.Logf(session.ID, "   [Pre-flight 7.2] ✅ Reviewer 2 (%s) siap. Verifikasi ~%d dari %d paper (20%% sampel + semua AMBIGUOUS); ~4 dtk/paper.\n",
+			verifierModel, sample, total)
+
+		ftIndex := m.fulltextIndexCached(ctx, session.ID)
+		for i := 0; i < total; i++ {
+			// Spot-verify = QA sampling non-kritikal. Jika plafon waktu run tercapai (atau run
+			// di-stop), JANGAN jadikan fatal: hentikan verifikasi dgn rapi & lanjut ke approval —
+			// hasil ekstraksi sudah tersimpan. (Dulu di sini `return ctx.Err()` membuat SELURUH
+			// pipeline jadi _ERROR hanya karena satu langkah QA kehabisan waktu.)
+			if ctx.Err() != nil {
+				logger.Logf(session.ID, "   [WARN] Verifikasi dihentikan di %d/%d (batas waktu run / stop). Lanjut ke approval dgn ekstraksi yang sudah tersimpan.\n", i, total)
 				break
 			}
-		} else if res != nil && res.Disagree {
-			consecVerifyFails = 0
-			disagree++
-			logger.Logf(session.ID, "         [≠] Disagreement — ditandai untuk ditinjau (HITL).\n")
-			_, _ = coll.UpdateByID(ctx, p["_id"], bson.M{"$set": bson.M{"verify_disagree": true, "verify_notes": res.Notes}})
-		} else {
-			consecVerifyFails = 0
-			logger.Logf(session.ID, "         [✓] Sesuai (tidak ada disagreement).\n")
+			p := all[i]
+			amb, _ := p["ambiguous"].(bson.A)
+			isAmbiguous := len(amb) > 0
+			ambiguous += len(amb)
+			if i >= sample && !isAmbiguous {
+				continue
+			}
+			doi := normalizeDOIForRAG(getStr(p, "DOI", "doi"))
+			ft := ftIndex[doi]
+			if ft == "" {
+				logger.Logf(session.ID, "      -> Verify [%d/%d] %s — full-text tak ada di RAG, dilewati.\n", i+1, total, doi)
+				continue
+			}
+			logger.Logf(session.ID, "      -> Verify [%d/%d] %s — memanggil verifier (%s)... ~4 dtk.\n", i+1, total, doi, verifierModel)
+			priorJSON, _ := json.Marshal(p["fields"])
+			// Batasi tiap panggilan verifier: satu call yang nyangkut tak boleh menahan langkah QA
+			// berjam-jam (Generate sendiri retry 3×@60mnt). Timeout → di-skip, bukan fatal.
+			vctx, vcancel := context.WithTimeout(ctx, spotVerifyCallTimeout)
+			res, e := verAg.VerifyExtraction(vctx, opDefs, getStr(p, "Title"), ft, string(priorJSON))
+			vcancel()
+			checked++
+			if e != nil {
+				verifyFails++
+				consecVerifyFails++
+				lastVerifyErr = e.Error()
+				logger.Logf(session.ID, "         [!] verifikasi dilewati (gagal/timeout): %v\n", e)
+				// Gagal BERUNTUN tanpa satu pun sukses = verifier sistemik bermasalah (mis. model
+				// 404 / key salah / kuota habis MID-RUN setelah lolos pre-flight). JEDA pipeline di
+				// gerbang khusus dgn error PENUH — beri user kesempatan memperbaiki provider, bukan
+				// lanjut ke approval dengan QA yang menyesatkan (0 berhasil).
+				if consecVerifyFails >= maxConsecutiveExtractFails && (checked-verifyFails) == 0 {
+					logger.Logf(session.ID, "   [WARN] Verifier gagal %d kali beruntun tanpa satu pun sukses — JEDA pipeline. Periksa provider Reviewer 2 di Pengaturan LLM.\n", consecVerifyFails)
+					return m.blockVerifier(ctx, session, total, verifierModel,
+						fmt.Errorf("verifier gagal %d kali beruntun tanpa satu pun sukses; error terakhir: %s", consecVerifyFails, lastVerifyErr))
+				}
+			} else if res != nil && res.Disagree {
+				consecVerifyFails = 0
+				disagree++
+				logger.Logf(session.ID, "         [≠] Disagreement — ditandai untuk ditinjau (HITL).\n")
+				_, _ = coll.UpdateByID(ctx, p["_id"], bson.M{"$set": bson.M{"verify_disagree": true, "verify_notes": res.Notes}})
+			} else {
+				consecVerifyFails = 0
+				logger.Logf(session.ID, "         [✓] Sesuai (tidak ada disagreement).\n")
+			}
+			time.Sleep(4 * time.Second)
 		}
-		time.Sleep(4 * time.Second)
 	}
 
 	// Rate dihitung HANYA atas verifikasi yang BERHASIL (jangan campur kegagalan provider).
@@ -622,7 +661,11 @@ func (m *M7Extraction) spotVerifyL2(ctx context.Context, session *model.SLRSessi
 		rate = float64(disagree) / float64(okChecked) * 100
 	}
 	nrNote := "<5%: acceptable; dokumentasi Limitations."
-	if okChecked == 0 && checked > 0 {
+	if skipVerification {
+		// User memilih lewati QA dual-rater (provider Reviewer 2 tak tersedia). Ini LIMITATION
+		// metodologis yang HARUS didokumentasikan, BUKAN "acceptable".
+		nrNote = "⚠ QA dual-rater (Reviewer 2) DILEWATI atas keputusan user (provider tak tersedia). Dokumentasikan sebagai LIMITATION metodologis di manuskrip (PRISMA: tidak ada verifikasi silang ekstraksi)."
+	} else if okChecked == 0 && checked > 0 {
 		// JANGAN laporkan 0% palsu sebagai "acceptable" saat verifikasi gagal total.
 		nrNote = fmt.Sprintf("⚠ Spot-verification GAGAL TOTAL (0/%d berhasil): verifier role Reviewer 2 (%s) error — %s. QA dual-rater TIDAK berjalan; perbaiki provider Reviewer 2 di Pengaturan LLM, lalu re-verify.", checked, verifierModel, clipErr(lastVerifyErr))
 	} else if rate > 15 {
@@ -679,18 +722,58 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 		ModelExtraction:     extractorModelLbl,
 		ModelRefineProtocol: refineModelLbl,
 	}
-	if verifyFails > 0 {
+	if skipVerification {
+		logger.Logf(session.ID, "   [System] Ekstraksi %d paper; QA Reviewer 2 DILEWATI atas keputusan user (limitation); gagal/kosong %d.\n", total, failedCount)
+	} else if verifyFails > 0 {
 		logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d BERHASIL / %d GAGAL; disagreement %.1f%% (atas yang berhasil); gagal/kosong %d.%s\n",
 			total, okChecked, verifyFails, rate, failedCount,
-			func() string { if okChecked == 0 { return " ⚠ QA dual-rater TIDAK berjalan — cek Reviewer 2." }; return "" }())
+			func() string {
+				if okChecked == 0 {
+					return " ⚠ QA dual-rater TIDAK berjalan — cek Reviewer 2."
+				}
+				return ""
+			}())
 	} else {
 		logger.Logf(session.ID, "   [System] Ekstraksi %d paper; verifikasi %d; disagreement %.1f%%; gagal/kosong %d.\n", total, okChecked, rate, failedCount)
 	}
 	m.invalidateFulltextCache(session.ID) // selesai: bebaskan indeks cached
+	// Sampai sini = pre-flight LULUS (atau user pilih skip) → bersihkan error blokir Reviewer 2
+	// yang lama agar gerbang/titik-merah tidak nyangkut. (system_error tanpa omitempty → ""
+	// benar-benar meng-clear di $set.)
+	session.SystemError = ""
 	session.Status = "M7_STEP2_WAITING_APPROVAL"
 
 	// Pastikan transisi ke approval TETAP tersimpan walau plafon waktu run sudah tercapai
 	// (ctx kedaluwarsa). Tanpa ini, write gagal → pipeline jadi _ERROR padahal ekstraksi beres.
+	writeCtx := ctx
+	if ctx.Err() != nil {
+		var c context.CancelFunc
+		writeCtx, c = context.WithTimeout(context.Background(), 30*time.Second)
+		defer c()
+	}
+	return m.deps.MongoRepo.UpdateSession(writeCtx, session)
+}
+
+// blockVerifier MENJEDA pipeline di gerbang M7_STEP2_VERIFY_BLOCKED saat provider Reviewer 2
+// tak bisa dipakai (pre-flight gagal atau gagal sistemik mid-run). Menyimpan error PENUH
+// (tak dipotong) + instruksi solusi agar user tahu PERSIS apa yang harus diperbaiki di
+// Pengaturan LLM, lalu menekan "Ulangi Verifikasi". Data ekstraksi yang sudah tersimpan TIDAK
+// disentuh (preserve) — gerbang ini hanya menahan kemajuan sampai keputusan/perbaikan manusia.
+func (m *M7Extraction) blockVerifier(ctx context.Context, session *model.SLRSession, total int, verifierModel string, cause error) error {
+	full := cause.Error()
+	logger.Logf(session.ID, "   [BLOCK 7.2] ⛔ QA Reviewer 2 (%s) tidak bisa dijalankan: %v\n", verifierModel, full)
+	logger.Log(session.ID, "   [BLOCK 7.2] Pipeline DIJEDA — perbaiki provider Reviewer 2 di Pengaturan LLM (Test Model sampai ✓), lalu klik 'Ulangi Verifikasi'. Ekstraksi sudah tersimpan & AMAN.")
+	session.SystemError = fmt.Sprintf("⛔ QA silang Reviewer 2 (%s) tidak bisa dijalankan — pipeline DIJEDA agar Anda sempat memperbaikinya.\n\nDETAIL ERROR: %s\n\nYANG HARUS DIPERBAIKI: buka Pengaturan LLM → role 'Reviewer 2', perbaiki API key / nama model / base URL (klik 'Test Model' sampai ✓ hijau). Penyebab umum: nama model salah/terkunci (404), API key salah (401), atau kuota habis (429).\n\nLALU: klik 'Ulangi Verifikasi (tanpa re-ekstrak)'. Data ekstraksi %d paper sudah TERSIMPAN & AMAN — tidak akan hilang.", verifierModel, full, total)
+	// Simpan konteks di extraction_log (verified=0 + error PENUH) agar gerbang UI bisa
+	// menampilkan apa yang gagal & nama modelnya, bukan hanya banner generik.
+	session.ExtractionLog = &model.ExtractionLog{
+		TotalExtracted:      total,
+		VerifiedSample:      0,
+		VerifierError:       full,
+		NRNote:              "QA dual-rater DIJEDA: provider Reviewer 2 error. Perbaiki di Pengaturan LLM lalu Ulangi Verifikasi.",
+		ModelRefineProtocol: verifierModel,
+	}
+	session.Status = "M7_STEP2_VERIFY_BLOCKED"
 	writeCtx := ctx
 	if ctx.Err() != nil {
 		var c context.CancelFunc
@@ -882,9 +965,9 @@ func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.
 
 	collExt := m.deps.MongoRepo.GetExtractionCollection()
 	filter := bson.M{
-		"session_id": session.ID,
-		"extracted":  true,
-		"qa_rated":   true,
+		"session_id":      session.ID,
+		"extracted":       true,
+		"qa_rated":        true,
 		"graph_extracted": bson.M{"$ne": true},
 	}
 	opts := options.Find().SetLimit(int64(extractionBatchSize))
@@ -941,9 +1024,9 @@ func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.
 		if doi == "" {
 			doi, _ = p["doi"].(string)
 		}
-		
+
 		fields, _ := json.Marshal(p["m7_fields"])
-		
+
 		sysPrompt := `Anda adalah ahli neuro-symbolic AI yang bertugas membangun Knowledge Graph dari literatur ilmiah.
 Tugas Anda adalah membaca hasil ekstraksi sebuah paper, dan mengubahnya menjadi Nodes (simpul) dan Edges (relasi).
 ATURAN NODES:

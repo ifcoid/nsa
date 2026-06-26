@@ -26,10 +26,10 @@ type FoundationBriefing struct {
 }
 
 type SuggestedTopic struct {
-	Name       string `bson:"name" json:"name"`
-	Gap        string `bson:"gap" json:"gap"`
-	Type       string `bson:"type" json:"type"` // A, B, atau C
-	TypeReason string `bson:"type_reason" json:"type_reason"`
+	Name       string   `bson:"name" json:"name"`
+	Gap        string   `bson:"gap" json:"gap"`
+	Type       string   `bson:"type" json:"type"` // A, B, atau C
+	TypeReason string   `bson:"type_reason" json:"type_reason"`
 	Evidence   string   `bson:"evidence" json:"evidence"` // DOI / URL
 	Importance string   `bson:"importance" json:"importance"`
 	References []string `bson:"references" json:"references"`
@@ -325,13 +325,13 @@ type BasicQualityAudit struct {
 }
 
 type DedupBreakdown struct {
-	PrimaryMatch       int            `bson:"primary_match" json:"primary_match"`
-	SecondaryMatch     int            `bson:"secondary_match" json:"secondary_match"`
-	TotalDuplicates    int            `bson:"total_duplicates" json:"total_duplicates"`
-	TotalUnique        int            `bson:"total_unique" json:"total_unique"`
-	PerDatabaseTotal   map[string]int `bson:"per_database_total" json:"per_database_total"`
-	PerDatabaseUnique  map[string]int `bson:"per_database_unique" json:"per_database_unique"`
-	PerDatabaseDups    map[string]int `bson:"per_database_dups" json:"per_database_dups"`
+	PrimaryMatch      int            `bson:"primary_match" json:"primary_match"`
+	SecondaryMatch    int            `bson:"secondary_match" json:"secondary_match"`
+	TotalDuplicates   int            `bson:"total_duplicates" json:"total_duplicates"`
+	TotalUnique       int            `bson:"total_unique" json:"total_unique"`
+	PerDatabaseTotal  map[string]int `bson:"per_database_total" json:"per_database_total"`
+	PerDatabaseUnique map[string]int `bson:"per_database_unique" json:"per_database_unique"`
+	PerDatabaseDups   map[string]int `bson:"per_database_dups" json:"per_database_dups"`
 }
 
 type PICOPreviewItem struct {
@@ -458,89 +458,89 @@ type DataMiningLog struct {
 }
 
 type SLRSession struct {
-	ID                  string               `bson:"_id,omitempty" json:"id"`
-	Topic               string               `bson:"topic" json:"topic"`
-	Foundation          *FoundationBriefing  `bson:"foundation,omitempty" json:"foundation,omitempty"`
-	SuggestedTopics     []SuggestedTopic     `bson:"suggested_topics,omitempty" json:"suggested_topics,omitempty"`
-	SelectedTopic       *SuggestedTopic      `bson:"selected_topic,omitempty" json:"selected_topic,omitempty"`
-	PriorReviewsMatrix  *PriorReviewsMatrix  `bson:"prior_reviews_matrix,omitempty" json:"prior_reviews_matrix,omitempty"`
-	PICODefinitions     *PICODefinitions     `bson:"pico_definitions,omitempty" json:"pico_definitions,omitempty"`
-	ScopeFilters        *ScopeFilters        `bson:"scope_filters,omitempty" json:"scope_filters,omitempty"`
-	ScopeJustifications []ScopeJustification `bson:"scope_justifications,omitempty" json:"scope_justifications,omitempty"`
-	ResearchQuestions   []ResearchQuestion   `bson:"research_questions,omitempty" json:"research_questions,omitempty"`
-	FinerNoveltyCheck   *FinerNoveltyCheck   `bson:"finer_novelty_check,omitempty" json:"finer_novelty_check,omitempty"`
-	Modul2Summary       *Modul2Summary       `bson:"modul2_summary,omitempty" json:"modul2_summary,omitempty"`
-	DatabaseSelection   *DatabaseSelection   `bson:"database_selection,omitempty" json:"database_selection,omitempty"`
-	Keywords            *KeywordsDevelopment `bson:"keywords,omitempty" json:"keywords,omitempty"`
-	SearchString        *SearchStringData    `bson:"search_string,omitempty" json:"search_string,omitempty"`
-	SearchLog           *SearchLog           `bson:"search_log,omitempty" json:"search_log,omitempty"`
-	Modul3Summary       *Modul3Summary       `bson:"modul3_summary,omitempty" json:"modul3_summary,omitempty"`
-	DataMiningLog       *DataMiningLog       `bson:"data_mining_log,omitempty" json:"data_mining_log,omitempty"`
-	ScreeningSetup        *ScreeningSetup        `bson:"screening_setup,omitempty" json:"screening_setup,omitempty"`
-	Modul4Summary         *Modul4Summary         `bson:"modul4_summary,omitempty" json:"modul4_summary,omitempty"`
-	ScreenerBriefing      *ScreenerBriefing      `bson:"screener_briefing,omitempty" json:"screener_briefing,omitempty"`
-	KalibrasiLog          []KalibrasiIteration   `bson:"kalibrasi_log,omitempty" json:"kalibrasi_log,omitempty"`
-	Reviewer1Perspectives []ScreeningPerspective `bson:"reviewer1_perspectives,omitempty" json:"reviewer1_perspectives,omitempty"`
-	Reviewer2Perspectives []ScreeningPerspective `bson:"reviewer2_perspectives,omitempty" json:"reviewer2_perspectives,omitempty"`
-	ScreeningResultsLog   []ScreeningResultsLog  `bson:"screening_results_log,omitempty" json:"screening_results_log,omitempty"`
-	ExclusionTable        *ExclusionTable        `bson:"exclusion_table,omitempty" json:"exclusion_table,omitempty"`
-	PICOAuditLog          *PICOAuditLog          `bson:"pico_audit_log,omitempty" json:"pico_audit_log,omitempty"`
-	AuditScopeRules       string                 `bson:"audit_scope_rules,omitempty" json:"audit_scope_rules,omitempty"` // klarifikasi batas/scope PICO yang diedit peneliti (HITL) untuk audit konsistensi; diterapkan seragam ke seluruh INCLUDE
-	Modul5Summary         *Modul5Summary         `bson:"modul5_summary,omitempty" json:"modul5_summary,omitempty"`
-	AcquisitionLog        *AcquisitionLog        `bson:"acquisition_log,omitempty" json:"acquisition_log,omitempty"`
-	FulltextScreeningLog  []ScreeningResultsLog  `bson:"fulltext_screening_log,omitempty" json:"fulltext_screening_log,omitempty"`
-	FulltextKappa         float64                `bson:"fulltext_kappa,omitempty" json:"fulltext_kappa,omitempty"`
-	InaccessibleImpact    *InaccessibleImpact    `bson:"inaccessible_impact,omitempty" json:"inaccessible_impact,omitempty"`
-	ExtractionReadiness   *ExtractionReadiness   `bson:"extraction_readiness,omitempty" json:"extraction_readiness,omitempty"`
-	Modul6Summary         *Modul6Summary         `bson:"modul6_summary,omitempty" json:"modul6_summary,omitempty"`
-	FinalPicoAuditMD      string                 `bson:"final_pico_audit_md,omitempty" json:"final_pico_audit_md,omitempty"` // hasil audit PICO final M6.3 (untuk dipertahankan saat regen non-audit, mis. re-code)
-	FinalPicoAuditOK      bool                   `bson:"final_pico_audit_ok" json:"final_pico_audit_ok,omitempty"`           // tanpa bson omitempty: false harus tersimpan
-	SkipReaudit           bool                   `bson:"skip_reaudit" json:"skip_reaudit,omitempty"`                         // sinyal: regen M6.3 pertahankan audit lama (re-code). tanpa bson omitempty
-	FrameworkSelection    *FrameworkSelection    `bson:"framework_selection,omitempty" json:"framework_selection,omitempty"`
-	ScreeningCorrections  []ScreeningCorrection  `bson:"screening_corrections,omitempty" json:"screening_corrections,omitempty"` // audit HITL: koreksi keputusan include/exclude full-text pasca-M6 (PRISMA/provenance)
-	ExtractionLog         *ExtractionLog         `bson:"extraction_log,omitempty" json:"extraction_log,omitempty"`
-	QAThreshold           *QAThresholdJustification `bson:"qa_threshold_justification,omitempty" json:"qa_threshold_justification,omitempty"`
-	QACalibration         *QACalibration         `bson:"qa_calibration,omitempty" json:"qa_calibration,omitempty"`
-	SensitivityAnalysis   *SensitivityAnalysis   `bson:"sensitivity_analysis,omitempty" json:"sensitivity_analysis,omitempty"`
-	SynthesisPrep         *SynthesisPrep         `bson:"synthesis_prep,omitempty" json:"synthesis_prep,omitempty"`
-	GraphExtractionSummary *GraphExtractionSummary `bson:"graph_extraction_summary,omitempty" json:"graph_extraction_summary,omitempty"`
-	Modul7Summary         *Modul7Summary         `bson:"modul7_summary,omitempty" json:"modul7_summary,omitempty"`
-	DescriptiveAnalysis   *DescriptiveAnalysis   `bson:"descriptive_analysis,omitempty" json:"descriptive_analysis,omitempty"`
-	SynthesisPathDecision *SynthesisPathDecision `bson:"synthesis_path_decision,omitempty" json:"synthesis_path_decision,omitempty"`
-	SynthesisResults      *SynthesisResults      `bson:"synthesis_results,omitempty" json:"synthesis_results,omitempty"`
-	GradeEvidence         *GradeEvidence         `bson:"grade_evidence_table,omitempty" json:"grade_evidence_table,omitempty"`
-	InterpretationPackage *InterpretationPackage `bson:"interpretation_package,omitempty" json:"interpretation_package,omitempty"`
-	Modul8Summary         *Modul8Summary         `bson:"modul8_summary,omitempty" json:"modul8_summary,omitempty"`
-	BibliometricData      *BibliometricData      `bson:"bibliometric_data,omitempty" json:"bibliometric_data,omitempty"`
-	VOSViewerParams       *VOSViewerParams       `bson:"vosviewer_parameters,omitempty" json:"vosviewer_parameters,omitempty"`
-	BibliometricInput     string                 `bson:"bibliometric_input,omitempty" json:"bibliometric_input,omitempty"`
-	ClusterInterpretation *ClusterInterpretation `bson:"cluster_interpretation,omitempty" json:"cluster_interpretation,omitempty"`
-	SLNAIntegration       *SLNAIntegration       `bson:"slna_integration,omitempty" json:"slna_integration,omitempty"`
+	ID                       string                    `bson:"_id,omitempty" json:"id"`
+	Topic                    string                    `bson:"topic" json:"topic"`
+	Foundation               *FoundationBriefing       `bson:"foundation,omitempty" json:"foundation,omitempty"`
+	SuggestedTopics          []SuggestedTopic          `bson:"suggested_topics,omitempty" json:"suggested_topics,omitempty"`
+	SelectedTopic            *SuggestedTopic           `bson:"selected_topic,omitempty" json:"selected_topic,omitempty"`
+	PriorReviewsMatrix       *PriorReviewsMatrix       `bson:"prior_reviews_matrix,omitempty" json:"prior_reviews_matrix,omitempty"`
+	PICODefinitions          *PICODefinitions          `bson:"pico_definitions,omitempty" json:"pico_definitions,omitempty"`
+	ScopeFilters             *ScopeFilters             `bson:"scope_filters,omitempty" json:"scope_filters,omitempty"`
+	ScopeJustifications      []ScopeJustification      `bson:"scope_justifications,omitempty" json:"scope_justifications,omitempty"`
+	ResearchQuestions        []ResearchQuestion        `bson:"research_questions,omitempty" json:"research_questions,omitempty"`
+	FinerNoveltyCheck        *FinerNoveltyCheck        `bson:"finer_novelty_check,omitempty" json:"finer_novelty_check,omitempty"`
+	Modul2Summary            *Modul2Summary            `bson:"modul2_summary,omitempty" json:"modul2_summary,omitempty"`
+	DatabaseSelection        *DatabaseSelection        `bson:"database_selection,omitempty" json:"database_selection,omitempty"`
+	Keywords                 *KeywordsDevelopment      `bson:"keywords,omitempty" json:"keywords,omitempty"`
+	SearchString             *SearchStringData         `bson:"search_string,omitempty" json:"search_string,omitempty"`
+	SearchLog                *SearchLog                `bson:"search_log,omitempty" json:"search_log,omitempty"`
+	Modul3Summary            *Modul3Summary            `bson:"modul3_summary,omitempty" json:"modul3_summary,omitempty"`
+	DataMiningLog            *DataMiningLog            `bson:"data_mining_log,omitempty" json:"data_mining_log,omitempty"`
+	ScreeningSetup           *ScreeningSetup           `bson:"screening_setup,omitempty" json:"screening_setup,omitempty"`
+	Modul4Summary            *Modul4Summary            `bson:"modul4_summary,omitempty" json:"modul4_summary,omitempty"`
+	ScreenerBriefing         *ScreenerBriefing         `bson:"screener_briefing,omitempty" json:"screener_briefing,omitempty"`
+	KalibrasiLog             []KalibrasiIteration      `bson:"kalibrasi_log,omitempty" json:"kalibrasi_log,omitempty"`
+	Reviewer1Perspectives    []ScreeningPerspective    `bson:"reviewer1_perspectives,omitempty" json:"reviewer1_perspectives,omitempty"`
+	Reviewer2Perspectives    []ScreeningPerspective    `bson:"reviewer2_perspectives,omitempty" json:"reviewer2_perspectives,omitempty"`
+	ScreeningResultsLog      []ScreeningResultsLog     `bson:"screening_results_log,omitempty" json:"screening_results_log,omitempty"`
+	ExclusionTable           *ExclusionTable           `bson:"exclusion_table,omitempty" json:"exclusion_table,omitempty"`
+	PICOAuditLog             *PICOAuditLog             `bson:"pico_audit_log,omitempty" json:"pico_audit_log,omitempty"`
+	AuditScopeRules          string                    `bson:"audit_scope_rules,omitempty" json:"audit_scope_rules,omitempty"` // klarifikasi batas/scope PICO yang diedit peneliti (HITL) untuk audit konsistensi; diterapkan seragam ke seluruh INCLUDE
+	Modul5Summary            *Modul5Summary            `bson:"modul5_summary,omitempty" json:"modul5_summary,omitempty"`
+	AcquisitionLog           *AcquisitionLog           `bson:"acquisition_log,omitempty" json:"acquisition_log,omitempty"`
+	FulltextScreeningLog     []ScreeningResultsLog     `bson:"fulltext_screening_log,omitempty" json:"fulltext_screening_log,omitempty"`
+	FulltextKappa            float64                   `bson:"fulltext_kappa,omitempty" json:"fulltext_kappa,omitempty"`
+	InaccessibleImpact       *InaccessibleImpact       `bson:"inaccessible_impact,omitempty" json:"inaccessible_impact,omitempty"`
+	ExtractionReadiness      *ExtractionReadiness      `bson:"extraction_readiness,omitempty" json:"extraction_readiness,omitempty"`
+	Modul6Summary            *Modul6Summary            `bson:"modul6_summary,omitempty" json:"modul6_summary,omitempty"`
+	FinalPicoAuditMD         string                    `bson:"final_pico_audit_md,omitempty" json:"final_pico_audit_md,omitempty"` // hasil audit PICO final M6.3 (untuk dipertahankan saat regen non-audit, mis. re-code)
+	FinalPicoAuditOK         bool                      `bson:"final_pico_audit_ok" json:"final_pico_audit_ok,omitempty"`           // tanpa bson omitempty: false harus tersimpan
+	SkipReaudit              bool                      `bson:"skip_reaudit" json:"skip_reaudit,omitempty"`                         // sinyal: regen M6.3 pertahankan audit lama (re-code). tanpa bson omitempty
+	FrameworkSelection       *FrameworkSelection       `bson:"framework_selection,omitempty" json:"framework_selection,omitempty"`
+	ScreeningCorrections     []ScreeningCorrection     `bson:"screening_corrections,omitempty" json:"screening_corrections,omitempty"` // audit HITL: koreksi keputusan include/exclude full-text pasca-M6 (PRISMA/provenance)
+	ExtractionLog            *ExtractionLog            `bson:"extraction_log,omitempty" json:"extraction_log,omitempty"`
+	QAThreshold              *QAThresholdJustification `bson:"qa_threshold_justification,omitempty" json:"qa_threshold_justification,omitempty"`
+	QACalibration            *QACalibration            `bson:"qa_calibration,omitempty" json:"qa_calibration,omitempty"`
+	SensitivityAnalysis      *SensitivityAnalysis      `bson:"sensitivity_analysis,omitempty" json:"sensitivity_analysis,omitempty"`
+	SynthesisPrep            *SynthesisPrep            `bson:"synthesis_prep,omitempty" json:"synthesis_prep,omitempty"`
+	GraphExtractionSummary   *GraphExtractionSummary   `bson:"graph_extraction_summary,omitempty" json:"graph_extraction_summary,omitempty"`
+	Modul7Summary            *Modul7Summary            `bson:"modul7_summary,omitempty" json:"modul7_summary,omitempty"`
+	DescriptiveAnalysis      *DescriptiveAnalysis      `bson:"descriptive_analysis,omitempty" json:"descriptive_analysis,omitempty"`
+	SynthesisPathDecision    *SynthesisPathDecision    `bson:"synthesis_path_decision,omitempty" json:"synthesis_path_decision,omitempty"`
+	SynthesisResults         *SynthesisResults         `bson:"synthesis_results,omitempty" json:"synthesis_results,omitempty"`
+	GradeEvidence            *GradeEvidence            `bson:"grade_evidence_table,omitempty" json:"grade_evidence_table,omitempty"`
+	InterpretationPackage    *InterpretationPackage    `bson:"interpretation_package,omitempty" json:"interpretation_package,omitempty"`
+	Modul8Summary            *Modul8Summary            `bson:"modul8_summary,omitempty" json:"modul8_summary,omitempty"`
+	BibliometricData         *BibliometricData         `bson:"bibliometric_data,omitempty" json:"bibliometric_data,omitempty"`
+	VOSViewerParams          *VOSViewerParams          `bson:"vosviewer_parameters,omitempty" json:"vosviewer_parameters,omitempty"`
+	BibliometricInput        string                    `bson:"bibliometric_input,omitempty" json:"bibliometric_input,omitempty"`
+	ClusterInterpretation    *ClusterInterpretation    `bson:"cluster_interpretation,omitempty" json:"cluster_interpretation,omitempty"`
+	SLNAIntegration          *SLNAIntegration          `bson:"slna_integration,omitempty" json:"slna_integration,omitempty"`
 	ModulBibliometricSummary *ModulBibliometricSummary `bson:"modul_bibliometric_summary,omitempty" json:"modul_bibliometric_summary,omitempty"`
-	Manuscript            *Manuscript            `bson:"manuscript,omitempty" json:"manuscript,omitempty"`
-	ManuscriptLang        string                 `bson:"manuscript_lang,omitempty" json:"manuscript_lang,omitempty"` // "id" (default, draft) atau "en" (submission)
-	InclusionCriteria     []string               `bson:"inclusion_criteria" json:"inclusion_criteria"`
-	ExclusionCriteria []string          `bson:"exclusion_criteria" json:"exclusion_criteria"`
-	Status            string            `bson:"status" json:"status"`   // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
-	Feedback          string            `bson:"feedback" json:"feedback"` // Catatan dari manusia jika butuh revisi
-	SystemError       string            `bson:"system_error" json:"system_error"` // Pesan error dari mesin/pipeline
-	EmbedError        string            `bson:"embed_error,omitempty" json:"embed_error,omitempty"` // alasan pause di M6_STEP2_WAITING_EMBED (endpoint embedding mati)
-	RescreenPending   bool              `bson:"rescreen_pending" json:"rescreen_pending,omitempty"` // true setelah mundur ke M5: artefak M6-M9 stale & harus diregenerasi. NB: tanpa bson omitempty agar nilai false benar-benar tersimpan (lihat ClearPICOAudit/ClearManuscript).
-	XAILog            []XAIEntry        `bson:"xai_log,omitempty" json:"xai_log,omitempty"`
-	UpdatedAt         time.Time         `bson:"updated_at" json:"updated_at"`
+	Manuscript               *Manuscript               `bson:"manuscript,omitempty" json:"manuscript,omitempty"`
+	ManuscriptLang           string                    `bson:"manuscript_lang,omitempty" json:"manuscript_lang,omitempty"` // "id" (default, draft) atau "en" (submission)
+	InclusionCriteria        []string                  `bson:"inclusion_criteria" json:"inclusion_criteria"`
+	ExclusionCriteria        []string                  `bson:"exclusion_criteria" json:"exclusion_criteria"`
+	Status                   string                    `bson:"status" json:"status"`                               // "INIT", "WAITING_APPROVAL", "APPROVED", "NEEDS_REVISION", "REJECTED"
+	Feedback                 string                    `bson:"feedback" json:"feedback"`                           // Catatan dari manusia jika butuh revisi
+	SystemError              string                    `bson:"system_error" json:"system_error"`                   // Pesan error dari mesin/pipeline
+	EmbedError               string                    `bson:"embed_error,omitempty" json:"embed_error,omitempty"` // alasan pause di M6_STEP2_WAITING_EMBED (endpoint embedding mati)
+	RescreenPending          bool                      `bson:"rescreen_pending" json:"rescreen_pending,omitempty"` // true setelah mundur ke M5: artefak M6-M9 stale & harus diregenerasi. NB: tanpa bson omitempty agar nilai false benar-benar tersimpan (lihat ClearPICOAudit/ClearManuscript).
+	XAILog                   []XAIEntry                `bson:"xai_log,omitempty" json:"xai_log,omitempty"`
+	UpdatedAt                time.Time                 `bson:"updated_at" json:"updated_at"`
 }
 
 type Paper struct {
-	ID           string `bson:"_id,omitempty" json:"id"`
-	SessionID    string `bson:"session_id" json:"session_id"`
-	Title        string `bson:"title" json:"title"`
-	Abstract     string `bson:"abstract" json:"abstract"`
-	DOI          string `bson:"doi" json:"doi"`
-	Year         string `bson:"year" json:"year"`
-	Authors      string `bson:"authors" json:"authors"`
-	Database     string `bson:"database" json:"database"` // e.g. "Scopus", "IEEE", "PubMed"
-	Journal      string `bson:"journal" json:"journal"`
-	DocumentType string `bson:"document_type" json:"document_type"`
+	ID             string `bson:"_id,omitempty" json:"id"`
+	SessionID      string `bson:"session_id" json:"session_id"`
+	Title          string `bson:"title" json:"title"`
+	Abstract       string `bson:"abstract" json:"abstract"`
+	DOI            string `bson:"doi" json:"doi"`
+	Year           string `bson:"year" json:"year"`
+	Authors        string `bson:"authors" json:"authors"`
+	Database       string `bson:"database" json:"database"` // e.g. "Scopus", "IEEE", "PubMed"
+	Journal        string `bson:"journal" json:"journal"`
+	DocumentType   string `bson:"document_type" json:"document_type"`
 	Keywords       string `bson:"keywords,omitempty" json:"keywords,omitempty"`
 	IndexKeywords  string `bson:"index_keywords,omitempty" json:"index_keywords,omitempty"`
 	Affiliations   string `bson:"affiliations,omitempty" json:"affiliations,omitempty"`
@@ -558,15 +558,15 @@ type Paper struct {
 	EID            string `bson:"eid,omitempty" json:"eid,omitempty"`
 	PubMedID       string `bson:"pubmed_id,omitempty" json:"pubmed_id,omitempty"`
 	References     string `bson:"references,omitempty" json:"references,omitempty"`
-	Status       string `bson:"status" json:"status"` // "PENDING", "ACCEPT", "REJECT"
-	Reason       string `bson:"reason" json:"reason"`
+	Status         string `bson:"status" json:"status"` // "PENDING", "ACCEPT", "REJECT"
+	Reason         string `bson:"reason" json:"reason"`
 
 	// Modul 6: Full-text Acquisition Tracking
-	FullTextLocation         string `bson:"full_text_location" json:"full_text_location"`                   // "unpaywall", "arxiv", "hitl download"
-	DownloadURL              string `bson:"download_url" json:"download_url"`                               // URL to download PDF
-	FullTextRetrieved        bool   `bson:"full_text_retrieved" json:"full_text_retrieved"`                 // Verified in Qdrant
-	AcquisitionDate          string `bson:"acquisition_date" json:"acquisition_date"`                       // Date of retrieval
-	Inaccessible             bool   `bson:"inaccessible" json:"inaccessible"`                               // User marked as inaccessible
+	FullTextLocation          string `bson:"full_text_location" json:"full_text_location"`                 // "unpaywall", "arxiv", "hitl download"
+	DownloadURL               string `bson:"download_url" json:"download_url"`                             // URL to download PDF
+	FullTextRetrieved         bool   `bson:"full_text_retrieved" json:"full_text_retrieved"`               // Verified in Qdrant
+	AcquisitionDate           string `bson:"acquisition_date" json:"acquisition_date"`                     // Date of retrieval
+	Inaccessible              bool   `bson:"inaccessible" json:"inaccessible"`                             // User marked as inaccessible
 	DocumentationInaccessible string `bson:"documentation_inaccessible" json:"documentation_inaccessible"` // Reason for failure
 }
 
@@ -632,6 +632,11 @@ type ExtractionLog struct {
 	SystemPrompt        string  `bson:"system_prompt,omitempty" json:"system_prompt,omitempty"`
 	ModelExtraction     string  `bson:"model_extraction,omitempty" json:"model_extraction,omitempty"`
 	ModelRefineProtocol string  `bson:"model_refine_protocol,omitempty" json:"model_refine_protocol,omitempty"`
+	// VerifierError menyimpan error PENUH (tak dipotong) saat provider Reviewer 2 tak bisa
+	// dipakai, agar developer/user tahu PERSIS apa yang harus diperbaiki di Pengaturan LLM
+	// (mis. 404 nama model salah, 401 API key salah, 429 kuota). Diisi saat gerbang
+	// M7_STEP2_VERIFY_BLOCKED; kosong saat verifikasi normal/berhasil.
+	VerifierError string `bson:"verifier_error,omitempty" json:"verifier_error,omitempty"`
 }
 
 // QAAnchorExample = contoh sintetis anchor untuk kalibrasi QA.
@@ -682,19 +687,19 @@ type QAKappaDetails struct {
 
 // QAThresholdJustification = output L3 (tool + threshold 3-lapis + kappa).
 type QAThresholdJustification struct {
-	Tool             string          `bson:"tool" json:"tool"`
-	ToolJustification string         `bson:"tool_justification" json:"tool_justification"`
-	QARubric         string          `bson:"qa_rubric,omitempty" json:"qa_rubric,omitempty"` // operational scoring rubric per domain
-	Threshold        float64         `bson:"threshold" json:"threshold"`
-	LayerLiterature  string          `bson:"layer_literature" json:"layer_literature"`
-	LayerDeveloper   string          `bson:"layer_developer" json:"layer_developer"`
-	LayerFeasibility string          `bson:"layer_feasibility" json:"layer_feasibility"`
-	Categorization   string          `bson:"categorization" json:"categorization"`
-	Kappa            float64         `bson:"kappa" json:"kappa"`
-	KappaDetails     *QAKappaDetails `bson:"kappa_details,omitempty" json:"kappa_details,omitempty"`
+	Tool              string          `bson:"tool" json:"tool"`
+	ToolJustification string          `bson:"tool_justification" json:"tool_justification"`
+	QARubric          string          `bson:"qa_rubric,omitempty" json:"qa_rubric,omitempty"` // operational scoring rubric per domain
+	Threshold         float64         `bson:"threshold" json:"threshold"`
+	LayerLiterature   string          `bson:"layer_literature" json:"layer_literature"`
+	LayerDeveloper    string          `bson:"layer_developer" json:"layer_developer"`
+	LayerFeasibility  string          `bson:"layer_feasibility" json:"layer_feasibility"`
+	Categorization    string          `bson:"categorization" json:"categorization"`
+	Kappa             float64         `bson:"kappa" json:"kappa"`
+	KappaDetails      *QAKappaDetails `bson:"kappa_details,omitempty" json:"kappa_details,omitempty"`
 	// Point 1: Actual feasibility calculated from rated data (post-rating).
-	ActualFeasibility     float64  `bson:"actual_feasibility,omitempty" json:"actual_feasibility,omitempty"`
-	ActualFeasibilityNote string   `bson:"actual_feasibility_note,omitempty" json:"actual_feasibility_note,omitempty"`
+	ActualFeasibility     float64 `bson:"actual_feasibility,omitempty" json:"actual_feasibility,omitempty"`
+	ActualFeasibilityNote string  `bson:"actual_feasibility_note,omitempty" json:"actual_feasibility_note,omitempty"`
 	// Point 4: Literature grounding from known tool cutoffs.
 	LiteratureReferences   []string `bson:"literature_references,omitempty" json:"literature_references,omitempty"`
 	ThresholdDeviationNote string   `bson:"threshold_deviation_note,omitempty" json:"threshold_deviation_note,omitempty"`
@@ -739,11 +744,11 @@ type Modul7Summary struct {
 }
 
 type AcquisitionLog struct {
-	TotalInclude       int     `bson:"total_include" json:"total_include"`
-	HighRetrieved      int     `bson:"high_retrieved" json:"high_retrieved"` // from unpaywall/arxiv OA
-	MediumRetrieved    int     `bson:"medium_retrieved" json:"medium_retrieved"` // from hitl download
-	LowRetrieved       int     `bson:"low_retrieved" json:"low_retrieved"` // if we want to differentiate
-	InaccessibleCount  int     `bson:"inaccessible_count" json:"inaccessible_count"`
-	InaccessiblePct    float64 `bson:"inaccessible_pct" json:"inaccessible_pct"`
-	VectorizedCount    int     `bson:"vectorized_count" json:"vectorized_count"` // found in qdrant
+	TotalInclude      int     `bson:"total_include" json:"total_include"`
+	HighRetrieved     int     `bson:"high_retrieved" json:"high_retrieved"`     // from unpaywall/arxiv OA
+	MediumRetrieved   int     `bson:"medium_retrieved" json:"medium_retrieved"` // from hitl download
+	LowRetrieved      int     `bson:"low_retrieved" json:"low_retrieved"`       // if we want to differentiate
+	InaccessibleCount int     `bson:"inaccessible_count" json:"inaccessible_count"`
+	InaccessiblePct   float64 `bson:"inaccessible_pct" json:"inaccessible_pct"`
+	VectorizedCount   int     `bson:"vectorized_count" json:"vectorized_count"` // found in qdrant
 }

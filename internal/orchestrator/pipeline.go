@@ -29,8 +29,8 @@ func pipelineTimeout() time.Duration {
 }
 
 type SLRPipeline struct {
-	mongoRepo     *repository.MongoRepository
-	llmFactory    *llm.LLMFactory
+	mongoRepo         *repository.MongoRepository
+	llmFactory        *llm.LLMFactory
 	registry          map[string]modules.Module
 	activeWorkers     map[string]bool
 	activeCancelFuncs map[string]context.CancelFunc
@@ -127,7 +127,7 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 		// Gunakan background context baru agar tidak ter-cancel saat request HTTP selesai
 		// Beri timeout panjang (configurable) karena panggilan LLM bisa memakan banyak jam
 		asyncCtx, cancel := context.WithTimeout(context.Background(), pipelineTimeout())
-		
+
 		p.mu.Lock()
 		p.activeCancelFuncs[sessionID] = cancel
 		p.mu.Unlock()
@@ -159,13 +159,13 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 				if totalP > 0 {
 					logger.Logf(sessionID, "   ℹ️ [Info] Meskipun terhenti, progres Anda tersimpan aman: %d dari %d papers telah berhasil discreening.\n", screenedP, totalP)
 				}
-				
+
 				// Set status ke ERROR agar UI frontend berhenti loading dan memunculkan tombol revisi/retry
 				session, getErr := p.mongoRepo.GetSession(asyncCtx, sessionID)
 				if getErr == nil {
 					// Tandai error di system_error (biarkan feedback tetap utuh)
 					session.SystemError = fmt.Sprintf("System Error: %v", err)
-					
+
 					// Jika status belum memiliki _ERROR
 					if !strings.Contains(session.Status, "_ERROR") {
 						session.Status = session.Status + "_ERROR"
@@ -184,15 +184,16 @@ func (p *SLRPipeline) ExecuteAsync(ctx context.Context, sessionID string) {
 
 			// Berhenti looping jika butuh interaksi manusia, sedang error, atau sudah selesai
 			if strings.Contains(session.Status, "WAITING") ||
-			   strings.Contains(session.Status, "NEEDS_REVISION") ||
-			   strings.Contains(session.Status, "ERROR") ||
-			   strings.Contains(session.Status, "LOW_KAPPA") ||
-			   (strings.Contains(session.Status, "DONE") && session.Status != "M5_DONE") ||
-			   session.Status == "COMPLETED" {
+				strings.Contains(session.Status, "NEEDS_REVISION") ||
+				strings.Contains(session.Status, "ERROR") ||
+				strings.Contains(session.Status, "BLOCKED") || // gerbang HITL: provider Reviewer 2 perlu diperbaiki
+				strings.Contains(session.Status, "LOW_KAPPA") ||
+				(strings.Contains(session.Status, "DONE") && session.Status != "M5_DONE") ||
+				session.Status == "COMPLETED" {
 				notify.Telegram(notify.GateMessage(sessionID, session.Status))
 				break
 			}
-			
+
 			// Jeda singkat antar eksekusi untuk keamanan
 			time.Sleep(500 * time.Millisecond)
 		}
