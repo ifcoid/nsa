@@ -110,11 +110,19 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, err := h.mongoRepo.GetSession(context.Background(), id)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	session, err := h.mongoRepo.GetSession(ctx, id)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Session not found")
 		return
 	}
+
+	// PERF: GetSession dipoll frontend tiap ~3 dtk. `xai_log` (hingga 500 entri × system prompt
+	// PENUH ≈ ratusan KB–MB) TIDAK pernah dibaca dari objek sesi di frontend (panel xAI memakai
+	// endpoint terpisah GET /xai-log). Buang dari RESPONS poll agar ringan. Ini hanya mengubah
+	// payload JSON yang dikirim — TIDAK menyentuh DB (bukan lewat UpdateSession).
+	session.XAILog = nil
 
 	sendJSONResponse(w, http.StatusOK, session)
 }

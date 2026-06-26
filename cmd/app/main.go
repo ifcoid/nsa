@@ -56,6 +56,16 @@ func main() {
 	}
 	fmt.Println("✅ Berhasil terhubung ke MongoDB.")
 
+	// Pastikan index filter panas (session_id dll) ada — idempoten, non-fatal. Mencegah
+	// full-collection-scan yang bikin query melambat saat koleksi membesar.
+	idxCtx, idxCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := mongoRepo.EnsureIndexes(idxCtx); err != nil {
+		log.Printf("⚠️ Sebagian index Mongo gagal dibuat (non-fatal): %v", err)
+	} else {
+		fmt.Println("✅ Index Mongo (session_id dll) siap.")
+	}
+	idxCancel()
+
 	// 2. Pragmatis: Seed Data Konfigurasi LLM & Sesi Awal (Jika Belum Ada)
 	// Ini memastikan aplikasi tidak error saat pertama kali dijalankan di database kosong
 	isFirstRun := seedInitialData(ctx, mongoRepo, sessionID)
@@ -125,9 +135,9 @@ func main() {
 	if port == "" {
 		port = "50607"
 	}
-	
+
 	fmt.Printf("🚀 Server berjalan di http://localhost:%s\n", port)
-	
+
 	// Server blocking
 	err = http.ListenAndServe(":"+port, router)
 	if err != nil {
@@ -355,7 +365,7 @@ func ensurePasetoKeys() {
 
 	if privKeyHex == "" || pubKeyHex == "" {
 		fmt.Println("⚠️  Info: PASETO keys tidak ditemukan. Men-generate pasangan kunci V4 Asymmetric baru...")
-		
+
 		secretKey := paseto.NewV4AsymmetricSecretKey()
 		publicKey := secretKey.Public()
 

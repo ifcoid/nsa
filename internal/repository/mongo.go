@@ -137,6 +137,34 @@ func (r *MongoRepository) GetDB() *mongo.Database {
 	return r.client.Database(r.dbName)
 }
 
+// EnsureIndexes membuat index untuk filter PANAS (terutama session_id) agar query tak
+// full-collection-scan saat koleksi membesar — penyebab utama latensi yang memburuk seiring
+// waktu. Idempoten (CreateMany aman dipanggil berulang). Dipanggil sekali saat startup;
+// kegagalan TIDAK fatal (kembalikan error pertama, lanjut buat sisanya).
+func (r *MongoRepository) EnsureIndexes(ctx context.Context) error {
+	db := r.client.Database(r.dbName)
+	plan := map[string][]mongo.IndexModel{
+		"slr_screening": {
+			{Keys: bson.D{{Key: "session_id", Value: 1}}},
+			{Keys: bson.D{{Key: "session_id", Value: 1}, {Key: "Final_Decision", Value: 1}}},
+		},
+		"slr_extraction": {
+			{Keys: bson.D{{Key: "session_id", Value: 1}}},
+			{Keys: bson.D{{Key: "session_id", Value: 1}, {Key: "coverage", Value: 1}}},
+		},
+		"slr_papers":            {{Keys: bson.D{{Key: "session_id", Value: 1}}}},
+		"slr_papers_post_dedup": {{Keys: bson.D{{Key: "session_id", Value: 1}}}},
+		"llm_call_debug":        {{Keys: bson.D{{Key: "session_id", Value: 1}}}},
+	}
+	var firstErr error
+	for coll, idx := range plan {
+		if _, err := db.Collection(coll).Indexes().CreateMany(ctx, idx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 func (r *MongoRepository) GetPapersCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_papers")
 }
