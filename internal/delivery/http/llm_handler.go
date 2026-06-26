@@ -86,6 +86,8 @@ func (h *LLMHandler) UpdateConfig(w http.ResponseWriter, req *http.Request) {
 			config.BaseURL = "https://token-plan-sgp.xiaomimimo.com/v1"
 		} else if payload.Provider == "nvidia" {
 			config.BaseURL = "https://integrate.api.nvidia.com/v1"
+		} else if payload.Provider == "mistral" {
+			config.BaseURL = "https://api.mistral.ai/v1"
 		} else if strings.HasPrefix(payload.Provider, "rprompt") {
 			config.BaseURL = "https://rprompt.ll.my.id/v1"
 		}
@@ -263,6 +265,8 @@ func (h *LLMHandler) TestModel(w http.ResponseWriter, req *http.Request) {
 				cfg.BaseURL = "https://api.groq.com/openai/v1"
 			case "zhipu", "z-ai":
 				cfg.BaseURL = "https://open.bigmodel.cn/api/paas/v4"
+			case "mistral":
+				cfg.BaseURL = "https://api.mistral.ai/v1"
 			}
 		}
 		if cfg.APIKey == "" {
@@ -464,6 +468,8 @@ func (h *LLMHandler) FetchModels(w http.ResponseWriter, req *http.Request) {
 				baseURL = "https://integrate.api.nvidia.com/v1"
 			} else if provider == "unimodel" {
 				baseURL = "https://unimodel.ai/v1"
+			} else if provider == "mistral" {
+				baseURL = "https://api.mistral.ai/v1"
 			} else if provider == "aerolink" {
 				baseURL = "https://capi.aerolink.lat/v1"
 			} else if strings.HasPrefix(provider, "rprompt") {

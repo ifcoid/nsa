@@ -77,6 +77,13 @@ func (f *LLMFactory) ClientFromConfig(config *model.LLMConfig) LLMClient {
 		}
 		client = NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel)
 
+	case "mistral":
+		baseURL := config.BaseURL
+		if baseURL == "" {
+			baseURL = "https://api.mistral.ai/v1"
+		}
+		client = NewOpenAICompatibleClient(config.APIKey, baseURL, config.DefaultModel)
+
 	default:
 		client = NewOpenAICompatibleClient(config.APIKey, config.BaseURL, config.DefaultModel)
 	}
