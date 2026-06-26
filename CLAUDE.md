@@ -33,6 +33,25 @@ Kredensial untuk verifikasi langsung (read-only, JANGAN bocorkan) ada di `/home/
 (catatan: kode `pede` baca `QDRANT_URL`, jadi map `QDRANT_ENDPOINT`→`QDRANT_URL` saat run),
 `NEO4JURI`/`NEO4JUSER`/`NEO4JPASSWORD`, plus `GHPAT`/`TELEGRAM_BOT_TOKEN`/`CHAT_ID`.
 
+## Deploy & distribusi (GitHub Pages, domain if.co.id)
+
+- **BACKEND `nsa`** → di-**build via GitHub workflow**; file hasil build (binary) di-**upload ke
+  `https://if.co.id/download/`** dari repo **`github.com/ifcoid/download`** (GitHub Pages, branch
+  `main`). User yang menjalankan backend **LOKAL** (mis. `http://localhost:50607`) **mengunduh
+  binary dari sini**. Tiap commit `ifcoid/download` menyebut SHA `nsa` sumbernya (mis. pesan
+  "Update SLR backend binaries (commit: <nsa-sha>)"). (Selain itu nsa juga bisa jalan di fly.io.)
+- **FRONTEND `slr`** → di-**deploy langsung ke `https://if.co.id/slr/`** dari repo
+  **`github.com/ifcoid/slr`** (GitHub Pages). `notify.yml` mengirim Telegram saat Pages deploy
+  sukses. CATATAN: `apiBaseURL` default frontend = `http://localhost:50607/api` → user yang
+  pakai backend lokal, frontend if.co.id/slr menunjuk ke localhost-nya sendiri.
+- **Verifikasi sebelum klaim "sudah live"** (JANGAN cukup "build hijau"): cek Pages build via
+  API — `GET /repos/ifcoid/download/pages/builds/latest` & `…/ifcoid/slr/pages/builds/latest`
+  (status `built`, `error:null`), pastikan commit-nya match commit terbaru sumber, lalu `curl`
+  file live (mis. `if.co.id/slr/js/...`) dan grep string dari commit terbaru. Auth pakai `GHPAT`.
+- **Implikasi untuk user backend-lokal:** push `nsa` saja TIDAK cukup — mereka harus **unduh
+  ulang binary** dari if.co.id/download (tunggu workflow build + Pages selesai). Push `slr` →
+  frontend live di if.co.id/slr (cukup user Ctrl+F5).
+
 ## Notifikasi Telegram (langsung via Bot API)
 
 TIDAK memakai MCP server (cocote) lagi. Notifikasi progres dikirim **langsung ke
