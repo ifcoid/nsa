@@ -193,7 +193,12 @@ satunya = bot Telegram **@BugLaporBot**. Konten laporan DIBAWA lewat pesan/FILE 
   distribusi"). Jangan janjikan fix yang belum benar-benar ter-deploy. CATATAN: mengirim pesan ke
   USER NYATA adalah aksi yang butuh OTORISASI manusia — assistant tak boleh kirim sendiri tanpa
   izin eksplisit; sodorkan perintahnya agar user yang menjalankan (atau user menambah permission).
-- Poller + reply + log + token ada di folder `awangga` (DI LUAR repo `nsa`/`slr`), tidak di-commit.
+- **Skrip bugbot di-version di repo PRIVATE `github.com/ifcoid/bugbot`** (`poll.sh`, `reply.sh`,
+  README, `.gitignore`, `.env.example`). **Data user & rahasia TIDAK di-commit** (di-`.gitignore`):
+  `inbox.jsonl`, `offset`, `files/`, `poll.log`, `.lock`, `.env` — tetap LOKAL di folder
+  `/home/adb/awangga/bugbot/` (berisi laporan user = privasi; token di `.env`). Jalankan tetap
+  dari folder lokal itu; repo hanya untuk versioning + backup skripnya. Ingat: poll.sh = satu
+  konsumen `getUpdates` → **jalankan di SATU mesin saja**.
 
 ## Validitas metodologi SLR (publikasi Q1): protokol STABIL, preserve ≠ reset
 
