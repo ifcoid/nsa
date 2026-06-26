@@ -32,6 +32,19 @@ type SessionHandler struct {
 	pipeline   *orchestrator.SLRPipeline
 	recodeJobs map[string]*recodeJob
 	recodeMu   sync.Mutex
+	syncJobs   map[string]*syncJob
+	syncMu     sync.Mutex
+}
+
+// syncJob = status job Sync-Qdrant (Modul 6) yang berjalan di background. Dipindah ke async
+// karena scroll seluruh koleksi Qdrant + pencocokan similarity bisa 30–120s → memblok HTTP &
+// kena timeout proxy. Frontend poll hasilnya.
+type syncJob struct {
+	Done         bool   `json:"done"`
+	SyncedCount  int    `json:"synced_count"`
+	QdrantUnique int    `json:"qdrant_unique"`
+	MongoPapers  int    `json:"mongo_papers"`
+	Error        string `json:"error"`
 }
 
 // recodeJob = status job saran re-code (AI) yang berjalan di background, agar progres
@@ -50,6 +63,7 @@ func NewSessionHandler(mongo *repository.MongoRepository, pipeline *orchestrator
 		mongoRepo:  mongo,
 		pipeline:   pipeline,
 		recodeJobs: make(map[string]*recodeJob),
+		syncJobs:   make(map[string]*syncJob),
 	}
 }
 
@@ -1437,7 +1451,10 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 		return
 	}
 
-	ctx := context.Background()
+	// Timeout: indeks full-text kini pakai cache (tak scroll ulang Qdrant tiap field), tinggal
+	// panggilan LLM → batasi agar request tak menggantung tanpa batas bila provider lambat.
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
 	session, err := h.mongoRepo.GetSession(ctx, id)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Session not found")
@@ -1481,7 +1498,7 @@ func (h *SessionHandler) ResolveExtractionAuto(w http.ResponseWriter, req *http.
 		opDefs = string(b)
 	}
 
-	ftIndex, _, _ := modules.BuildFulltextIndex(ctx)
+	ftIndex, _, _ := modules.BuildFulltextIndexCached(ctx) // cache → tak scroll ulang tiap field
 	if ftIndex == nil {
 		ftIndex = map[string]string{}
 	}
@@ -1598,20 +1615,75 @@ func (h *SessionHandler) SubmitVOSviewer(w http.ResponseWriter, req *http.Reques
 }
 
 // SyncQdrant mencocokkan DOI dari Qdrant ke MongoDB (Modul 6)
+// SyncQdrant (Modul 6) — ASYNC. Scroll seluruh koleksi Qdrant + cocokkan DOI/title-similarity
+// bisa 30–120s → JANGAN sinkron (timeout proxy). Mulai job background, balas {started}, frontend
+// poll GET .../sync-qdrant/result. Anti dobel-klik via job in-flight.
 func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {
 		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
 		return
 	}
-
-	ctx := context.Background()
-	session, err := h.mongoRepo.GetSession(ctx, id)
+	session, err := h.mongoRepo.GetSession(context.Background(), id)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Session not found")
 		return
 	}
 
+	h.syncMu.Lock()
+	if j, ok := h.syncJobs[id]; ok && !j.Done {
+		h.syncMu.Unlock()
+		sendJSONResponse(w, http.StatusAccepted, map[string]interface{}{"started": true, "already_running": true})
+		return
+	}
+	job := &syncJob{}
+	h.syncJobs[id] = job
+	h.syncMu.Unlock()
+
+	go func() {
+		bg := context.Background()
+		logger.Logf(id, "   🔄 [Sync Qdrant] Mulai mencocokkan paper INCLUDE dengan koleksi Qdrant (scroll + DOI/title)…")
+		synced, qUnique, mPapers, derr := h.doSyncQdrant(bg, id, session)
+		h.syncMu.Lock()
+		job.Done, job.SyncedCount, job.QdrantUnique, job.MongoPapers = true, synced, qUnique, mPapers
+		if derr != nil {
+			job.Error = derr.Error()
+		}
+		h.syncMu.Unlock()
+		if derr != nil {
+			logger.Logf(id, "   🔄 [Sync Qdrant] GAGAL: %v", derr)
+		} else {
+			logger.Logf(id, "   🔄 [Sync Qdrant] Selesai: %d tervektor (dari %d INCLUDE; %d unik di Qdrant).", synced, mPapers, qUnique)
+		}
+	}()
+
+	sendJSONResponse(w, http.StatusAccepted, map[string]interface{}{"started": true})
+}
+
+// GetSyncQdrantResult — poll hasil job Sync-Qdrant (frontend). found=false bila belum mulai.
+func (h *SessionHandler) GetSyncQdrantResult(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	h.syncMu.Lock()
+	job, ok := h.syncJobs[id]
+	var snap syncJob
+	if ok {
+		snap = *job
+	}
+	h.syncMu.Unlock()
+	if !ok {
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{"found": false})
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"found": true, "done": snap.Done, "synced_count": snap.SyncedCount,
+		"debug_qdrant_unique": snap.QdrantUnique, "debug_mongo_papers": snap.MongoPapers,
+		"error": snap.Error,
+	})
+}
+
+// doSyncQdrant = pekerjaan berat Sync-Qdrant di background. Kembalikan (synced, qdrantUnique,
+// mongoPapers, error) — bukan tulis HTTP.
+func (h *SessionHandler) doSyncQdrant(ctx context.Context, id string, session *model.SLRSession) (int, int, int, error) {
 	// Qdrant Configuration
 	qdrantURL := os.Getenv("QDRANT_URL")
 	if qdrantURL == "" {
@@ -1644,8 +1716,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 	}
 	cursor, err := coll.Find(ctx, filter)
 	if err != nil {
-		sendJSONError(w, http.StatusInternalServerError, "Gagal mengambil data paper")
-		return
+		return 0, 0, 0, fmt.Errorf("gagal mengambil data paper: %w", err)
 	}
 	var papers []bson.M
 	_ = cursor.All(ctx, &papers)
@@ -1670,8 +1741,7 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 
 			reqQdrant, err := http.NewRequest("POST", fmt.Sprintf("%s/collections/scientific_articles/points/scroll", qdrantURL), strings.NewReader(reqBody))
 			if err != nil {
-				sendJSONError(w, http.StatusInternalServerError, "Gagal membuat request ke Qdrant: "+err.Error())
-				return
+				return 0, 0, 0, fmt.Errorf("gagal membuat request ke Qdrant: %w", err)
 			}
 			reqQdrant.Header.Set("Content-Type", "application/json")
 			if qdrantKey != "" {
@@ -1680,16 +1750,13 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 
 			resp, err := client.Do(reqQdrant)
 			if err != nil {
-				sendJSONError(w, http.StatusInternalServerError, "Gagal terhubung ke Qdrant: "+err.Error())
-				return
+				return 0, 0, 0, fmt.Errorf("gagal terhubung ke Qdrant: %w", err)
 			}
 
 			if resp.StatusCode != 200 {
 				bodyBytes, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
-				errMsg := fmt.Sprintf("Qdrant mengembalikan status %d: %s", resp.StatusCode, string(bodyBytes))
-				sendJSONError(w, http.StatusInternalServerError, errMsg)
-				return
+				return 0, 0, 0, fmt.Errorf("Qdrant mengembalikan status %d: %s", resp.StatusCode, string(bodyBytes))
 			}
 
 			var qdrantResp map[string]interface{}
@@ -1817,43 +1884,9 @@ func (h *SessionHandler) SyncQdrant(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 	}
-	// Lakukan kalkulasi ulang AcquisitionLog secara sinkron agar UI langsung ter-update
+	// Kalkulasi ulang AcquisitionLog agar header UI (Total/Vectorized/%) ter-update.
 	h.recalculateAcquisitionLogSync(ctx, session)
-
-	// Collect debug info
-	qDOIs := []string{}
-	for k := range qdrantDOIs {
-		if len(qDOIs) < 5 {
-			qDOIs = append(qDOIs, k)
-		}
-	}
-	mDOIs := []string{}
-	for _, p := range papers {
-		var doi string
-		if val, ok := p["doi"].(string); ok && val != "" {
-			doi = val
-		} else if val, ok := p["DOI"].(string); ok && val != "" {
-			doi = val
-		}
-		if doi != "" {
-			doi = strings.TrimPrefix(doi, "https://doi.org/")
-			doi = strings.TrimPrefix(doi, "http://doi.org/")
-			if len(mDOIs) < 5 {
-				mDOIs = append(mDOIs, doi)
-			}
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":             "success",
-		"synced_count":        syncedCount,
-		"debug_qdrant_unique": len(qdrantDOIs),
-		"debug_mongo_papers":  len(papers),
-		"debug_qdrant_sample": qDOIs,
-		"debug_mongo_sample":  mDOIs,
-		"version":             "v4",
-	})
+	return syncedCount, len(qdrantDOIs), len(papers), nil
 }
 
 // MarkInaccessible untuk menandai dokumen yang tidak bisa diunduh

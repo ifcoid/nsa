@@ -48,6 +48,34 @@ type ragChunk struct {
 // BuildFulltextIndex melakukan scroll seluruh collection Qdrant `scientific_articles`
 // dan mengembalikan map[normalizedDOI] -> teks full-text tergabung (urut chunk_index).
 // available=false jika environment Qdrant belum diset (mode tanpa RAG).
+var (
+	ftIdxCache   map[string]string
+	ftIdxBuiltAt time.Time
+	ftIdxMu      sync.Mutex
+)
+
+const ftIdxCacheTTL = 10 * time.Minute
+
+// BuildFulltextIndexCached membungkus BuildFulltextIndex dengan cache proses (TTL 10 mnt) agar
+// pemanggilan BERUNTUN (mis. Auto-Resolve banyak field sekaligus) tidak men-scroll ULANG
+// seluruh koleksi Qdrant tiap kali — penyebab utama lambat. Build dilakukan DI BAWAH lock,
+// jadi panggilan paralel ber-serialisasi: yang pertama membangun, sisanya menunggu lalu pakai
+// cache (hindari thundering-herd). Index ini GLOBAL (koleksi scientific_articles shared lintas
+// sesi/tenant), jadi cache lintas-sesi memang benar.
+func BuildFulltextIndexCached(ctx context.Context) (map[string]string, bool, error) {
+	ftIdxMu.Lock()
+	defer ftIdxMu.Unlock()
+	if ftIdxCache != nil && time.Since(ftIdxBuiltAt) < ftIdxCacheTTL {
+		return ftIdxCache, true, nil
+	}
+	idx, avail, err := BuildFulltextIndex(ctx)
+	if err == nil && idx != nil {
+		ftIdxCache = idx
+		ftIdxBuiltAt = time.Now()
+	}
+	return idx, avail, err
+}
+
 func BuildFulltextIndex(ctx context.Context) (index map[string]string, available bool, err error) {
 	qdrantURL := os.Getenv("QDRANT_URL")
 	if qdrantURL == "" {
@@ -765,8 +793,9 @@ func HybridSearch(ctx context.Context, query string, topK int) ([]SemanticResult
 // lewat health endpoint "/". Dipakai M9 untuk MENJEDA verifikasi sitasi (bukan
 // degradasi diam-diam) bila server mati — menjaga mode retrieval tetap konsisten
 // hybrid untuk publikasi Q1. Mengembalikan:
-//   ok=false     -> endpoint tak diset / tak merespons (reason berisi sebabnya)
-//   hybrid=false -> server hidup tetapi sparse nonaktif (mis. Colab tanpa GPU)
+//
+//	ok=false     -> endpoint tak diset / tak merespons (reason berisi sebabnya)
+//	hybrid=false -> server hidup tetapi sparse nonaktif (mis. Colab tanpa GPU)
 func CheckSearchBackend(ctx context.Context) (ok bool, hybrid bool, reason string) {
 	searchURL := deriveSearchURL()
 	if searchURL == "" {
