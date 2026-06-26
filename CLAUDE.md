@@ -103,6 +103,29 @@ ekstraksi, sintesis, manuskrip) WAJIB memenuhi empat invariant ini:
   Sync). Dan jaga **invariant di SETIAP titik tulis**: bila dua field saling-eksklusif,
   set satu → **clear lawannya** (mis. `full_text_retrieved` vs `inaccessible`).
 
+## Reproducible Error (xAI): setiap kegagalan WAJIB bisa di-reproduksi user→developer
+
+Mirip aturan **"steps to reproduce"** pada pull request / issue GitHub: **setiap error yang
+melibatkan LLM/provider WAJIB bisa diproduksi-ulang oleh USER langsung dari UI** (tanpa akses
+ke server/DB/log developer), agar laporan ke developer langsung *actionable*. Ini **perluasan
+invariant xAI** (provenance + **reproducibility**), bukan opsional.
+
+- **Tangkap jejak LENGKAP saat call LLM gagal:** `{step, role, provider, NAMA model, system
+  prompt LENGKAP, user prompt LENGKAP, error mentah, durasi, jumlah char/estimasi token,
+  timestamp}`. Simpan di store khusus (mis. capped / last-failed per sesi) — JANGAN gemukkan
+  `xai_log` (full-text akan meledak; `UserPromptPreview` di situ sengaja dipotong 500 char).
+- **Sediakan REPLAY dari UI:** endpoint + tombol **"Uji Coba"** yang mengirim ULANG prompt
+  asli (boleh diedit, mis. dipotong full-text-nya) ke provider lalu menampilkan **respons
+  mentah / error apa adanya** + timing. Inilah cara user & developer pinpoint *error sebelah
+  mana*: context overflow (0 token balik), JSON rusak, 429, 401, base URL salah, dll.
+- **Redaksi rahasia:** API key/secret TIDAK pernah ikut di payload debug/replay yang dikirim
+  ke klien (redact `***`). Prompt boleh memuat data paper (milik sesi user sendiri).
+- **Pesan error self-explanatory + actionable:** sebut **NAMA model** + dugaan akar + langkah
+  perbaikan, sehingga user paham tanpa membaca kode (selaras atribusi model xAI).
+- **JANGAN telan error diam-diam:** `console.warn`/`catch{}` tanpa surfacing = melanggar
+  invariant ini (user tak bisa melaporkan apa yang tak terlihat). Bedakan dari notif Telegram
+  (satu-arah, untuk progres) — reproduksi error adalah jejak yang TERSIMPAN + bisa di-replay.
+
 ## Validitas metodologi SLR (publikasi Q1): protokol STABIL, preserve ≠ reset
 
 SLR yang defensible (PRISMA + reproducibility) menuntut: **protokol ditetapkan a priori
