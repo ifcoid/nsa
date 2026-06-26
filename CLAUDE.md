@@ -126,6 +126,35 @@ invariant xAI** (provenance + **reproducibility**), bukan opsional.
   invariant ini (user tak bisa melaporkan apa yang tak terlihat). Bedakan dari notif Telegram
   (satu-arah, untuk progres) — reproduksi error adalah jejak yang TERSIMPAN + bisa di-replay.
 
+## Pelaporan bug & cara baca inbox @BugLaporBot (operasional)
+
+Backend bisa dijalankan **LOKAL per-user** (BUKAN satu deploy terpusat), jadi laporan bug TIDAK
+boleh mengandalkan DB backend (developer tak bisa baca Mongo lokal user). Kanal terpusat satu-
+satunya = bot Telegram **@BugLaporBot**. Konten laporan DIBAWA lewat pesan/FILE dari user ke bot.
+
+### Alur lapor (user, frontend `slr`)
+- Tombol **🐞 Lapor / Debug Bug** (di ☰ Menu header, gerbang error M7, panel ERROR, Live Log,
+  Pengaturan, Health) → modal `js/components/llmdebug.js`.
+- Bug tampilan/UX: user isi **Keterangan**. Error LLM: detail prompt+error terisi otomatis
+  (dari koleksi `llm_call_debug`, di-tangkap `xaiLoggingClient` saat call gagal) + bisa
+  **Uji Coba** (replay ASYNC: `POST /api/llm/replay` → poll `GET /api/llm/replay/{id}`).
+- **State ditangkap OTOMATIS** (session, modul/step dari `display-status`, url, viewport,
+  userAgent). Klik **Report Bug** → unduh **file .txt LENGKAP** (tak terpotong) → buka
+  `t.me/BugLaporBot` → user **lampirkan file** & kirim. (Sengaja pakai FILE, BUKAN deep-link
+  `?text=`, agar prompt full-text besar tetap utuh — lewat limit pesan Telegram 4096 char.)
+- Bot **auto-reply "✅ diterima"** lewat poller di bawah.
+
+### Cara DEVELOPER/Claude baca laporan
+- Token bot di `/home/adb/awangga/.env` → `BUGLAPOR_BOT_TOKEN` (JANGAN bocorkan; redact `***`,
+  `set +x` sebelum export). TIDAK di-hardcode di kode (frontend hanya pakai username publik).
+- Poller: `/home/adb/awangga/bugbot/poll.sh` — **SATU-SATUNYA konsumen `getUpdates`**. JANGAN
+  panggil `getUpdates` manual di tempat lain (offset bentrok → laporan hilang/ke-skip).
+- Dipakai **ON-DEMAND**: saat user bilang "cek inbox", jalankan `bash /home/adb/awangga/bugbot/poll.sh`.
+  Ia: (1) balas "diterima" tiap pesan, (2) unduh file lampiran ke `bugbot/files/`, (3) catat
+  ringkas ke `bugbot/inbox.jsonl`, (4) majukan `bugbot/offset`. Lalu BACA `inbox.jsonl` + file
+  di `files/` → perbaiki. (Real-time opsional: user sendiri pasang cron `* * * * * .../poll.sh`.)
+- Poller + log + token ada di folder `awangga` (DI LUAR repo `nsa`/`slr`), tidak di-commit.
+
 ## Validitas metodologi SLR (publikasi Q1): protokol STABIL, preserve ≠ reset
 
 SLR yang defensible (PRISMA + reproducibility) menuntut: **protokol ditetapkan a priori
