@@ -22,6 +22,7 @@ import (
 	"nsa/internal/orchestrator"
 	"nsa/internal/parser"
 	"nsa/internal/repository"
+	"nsa/internal/version"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -2759,6 +2760,7 @@ func (h *SessionHandler) GetSessionDiagnostic(w http.ResponseWriter, req *http.R
 		sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 			"found":                 false,
 			"session_id":            id,
+			"backend_version":       version.Commit,
 			"error_reason":          err.Error(),
 			"available_session_ids": ids,
 			"note":                  "Sesi tak ditemukan di DB backend ini. Cek api_base benar & id cocok dgn salah satu available_session_ids (mungkin frontend melacak id berbeda, atau Mongo lambat/timeout — lihat error_reason).",
@@ -2788,13 +2790,14 @@ func (h *SessionHandler) GetSessionDiagnostic(w http.ResponseWriter, req *http.R
 	}
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"found":        true,
-		"session_id":   id,
-		"status":       s.Status,
-		"updated_at":   s.UpdatedAt,
-		"system_error": s.SystemError,
-		"embed_error":  s.EmbedError,
-		"feedback":     s.Feedback,
+		"found":           true,
+		"session_id":      id,
+		"backend_version": version.Commit, // commit nsa yang membangun binary ini (lihat ldflags)
+		"status":          s.Status,
+		"updated_at":      s.UpdatedAt,
+		"system_error":    s.SystemError,
+		"embed_error":     s.EmbedError,
+		"feedback":        s.Feedback,
 		"flags": map[string]bool{
 			"has_manuscript":          s.Manuscript != nil,
 			"has_framework_selection": s.FrameworkSelection != nil,
