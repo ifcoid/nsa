@@ -160,8 +160,6 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("GET /api/llm/preflight", r.llmHndlr.PreflightRoles)
 	protected.HandleFunc("POST /api/llm/replay", r.llmHndlr.ReplayLLM)
 	protected.HandleFunc("GET /api/llm/replay/{id}", r.llmHndlr.GetReplayResult)
-	// Report Bug → simpan laporan + deep-link Telegram ke @BugLaporBot (Reproducible Error)
-	protected.HandleFunc("POST /api/report-bug", r.llmHndlr.ReportBug)
 	protected.HandleFunc("GET /api/llm/config", r.llmHndlr.ListConfigs)
 	protected.HandleFunc("PUT /api/llm/config", r.llmHndlr.UpdateConfig)
 	protected.HandleFunc("POST /api/llm/providers/{id}/models", r.llmHndlr.FetchModels)
