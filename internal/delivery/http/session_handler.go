@@ -26,6 +26,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type SessionHandler struct {
@@ -2738,9 +2739,29 @@ func (h *SessionHandler) GetSessionDiagnostic(w http.ResponseWriter, req *http.R
 	defer cancel()
 	s, err := h.mongoRepo.GetSession(ctx, id)
 	if err != nil {
+		// Bedakan dokumen-tak-ada vs error koneksi/timeout, DAN daftar id sesi yang ADA di
+		// backend ini → bantu deteksi salah-id / DB beda (penyebab UI stuck "Menunggu..."
+		// padahal worker jalan). Hanya ID (bukan rahasia).
+		var ids []string
+		lc, lcancel := context.WithTimeout(context.Background(), 8*time.Second)
+		if cur, e := h.mongoRepo.GetSessionCollection().Find(lc, bson.M{},
+			options.Find().SetProjection(bson.M{"_id": 1, "status": 1, "updated_at": 1}).
+				SetSort(bson.M{"updated_at": -1}).SetLimit(40)); e == nil {
+			var docs []bson.M
+			_ = cur.All(lc, &docs)
+			for _, d := range docs {
+				if v, ok := d["_id"].(string); ok {
+					ids = append(ids, fmt.Sprintf("%s (%v)", v, d["status"]))
+				}
+			}
+		}
+		lcancel()
 		sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-			"found": false, "session_id": id,
-			"note": "Sesi tidak ditemukan di DB backend ini (cek api_base / id benar).",
+			"found":                 false,
+			"session_id":            id,
+			"error_reason":          err.Error(),
+			"available_session_ids": ids,
+			"note":                  "Sesi tak ditemukan di DB backend ini. Cek api_base benar & id cocok dgn salah satu available_session_ids (mungkin frontend melacak id berbeda, atau Mongo lambat/timeout — lihat error_reason).",
 		})
 		return
 	}
