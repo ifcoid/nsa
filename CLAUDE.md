@@ -153,7 +153,11 @@ satunya = bot Telegram **@BugLaporBot**. Konten laporan DIBAWA lewat pesan/FILE 
   Ia: (1) balas "diterima" tiap pesan, (2) unduh file lampiran ke `bugbot/files/`, (3) catat
   ringkas ke `bugbot/inbox.jsonl`, (4) majukan `bugbot/offset`. Lalu BACA `inbox.jsonl` + file
   di `files/` → perbaiki. (Real-time opsional: user sendiri pasang cron `* * * * * .../poll.sh`.)
-- Poller + log + token ada di folder `awangga` (DI LUAR repo `nsa`/`slr`), tidak di-commit.
+- **Balas pelapor:** `bash /home/adb/awangga/bugbot/reply.sh <chat_id|last> "<pesan>"` (kirim via
+  @BugLaporBot; `last` = pengirim laporan TERAKHIR di inbox.jsonl). CATATAN: mengirim pesan ke
+  USER NYATA adalah aksi yang butuh OTORISASI manusia — assistant tak boleh kirim sendiri tanpa
+  izin eksplisit; sodorkan perintahnya agar user yang menjalankan (atau user menambah permission).
+- Poller + reply + log + token ada di folder `awangga` (DI LUAR repo `nsa`/`slr`), tidak di-commit.
 
 ## Validitas metodologi SLR (publikasi Q1): protokol STABIL, preserve ≠ reset
 
