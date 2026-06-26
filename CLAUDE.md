@@ -170,11 +170,22 @@ satunya = bot Telegram **@BugLaporBot**. Konten laporan DIBAWA lewat pesan/FILE 
 - **State ditangkap OTOMATIS** (session, modul/step dari `display-status`, **`api_base`**=
   backend yang dipakai, url, viewport, userAgent). Klik **Report Bug** → frontend fetch
   `GET /sessions/{id}/diagnostic` dan **menyisipkan SNAPSHOT STATE DB** (status/error/flags/
-  counts/roles/log terakhir, TANPA rahasia) ke file → unduh **file .txt LENGKAP** → buka
-  `t.me/BugLaporBot` → user **lampirkan file** & kirim. (FILE, bukan deep-link `?text=`, agar
-  utuh.) **Laporan jadi swasembada: developer TAK perlu akses Mongo user** (krusial karena
-  backend bisa lokal per-user → connection-string tak boleh & tak perlu dibocorkan). `api_base`
-  memberi tahu backend mana bila perlu hit endpoint langsung.
+  counts/roles/log terakhir, **`backend_version`**=commit nsa binary, TANPA rahasia) ke file →
+  unduh **file .txt LENGKAP** → buka `t.me/BugLaporBot` → user **lampirkan file** & kirim. (FILE,
+  bukan deep-link `?text=`, agar utuh.) **Laporan jadi swasembada: developer TAK perlu akses
+  Mongo user** (krusial karena backend bisa lokal per-user → connection-string tak boleh & tak
+  perlu dibocorkan). `api_base` memberi tahu backend mana bila perlu hit endpoint langsung.
+- **Bekal reproduksi (jangan dikurangi):** laporan WAJIB memuat cukup untuk repro tanpa tanya
+  balik — khususnya bug TAMPILAN/UX:
+  1. **Error console JS** — di-tangkap sedini mungkin via script di `<head>` (`window.onerror` +
+     `unhandledrejection` + hook `console.error` → ring-buffer 30 `window.__errLog`). Untuk bug
+     UI, ini sering kuncinya.
+  2. **Versi BACKEND** — `backend_version` (commit nsa) di `/diagnostic`; di-stamp saat build via
+     `ldflags "-X 'nsa/internal/version.Commit=<sha>'"` (di `compile.yml`/`release.yml`). Tanpa
+     stamp = `"dev"`. WAJIB tahu binary mana (backend lokal bisa BASI — kasus balqis).
+  3. **Versi FRONTEND** — fingerprint deploy (`version.json` bila ada + `Last-Modified`/`ETag`
+     situs), karena slr Pages "deploy from branch" (tanpa SHA build).
+  Kalau menambah fitur yang bisa gagal di UI, pastikan jejaknya tertangkap salah satu di atas.
 - Bot **auto-reply "✅ diterima"** lewat poller di bawah.
 
 ### Cara DEVELOPER/Claude baca laporan
