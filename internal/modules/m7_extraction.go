@@ -489,7 +489,13 @@ func (m *M7Extraction) runExtractionL2(ctx context.Context, session *model.SLRSe
 				// jadi ERROR. Paper ini & sisanya TIDAK ditulis ERROR -> re-extract bersih saat
 				// provider beres (Resume).
 				if consecutiveFails >= maxConsecutiveExtractFails {
-					return fmt.Errorf("Ekstraksi dihentikan: extractor LLM role Reviewer 1 (%s) gagal %d paper beruntun (terakhir: %v) — kemungkinan provider down / rate-limit / API key salah, bukan paper-nya. Perbaiki provider Reviewer 1 di Pengaturan LLM lalu Resume. (Sisa paper belum ditandai ERROR.)", extractorModel, consecutiveFails, e)
+					hint := ""
+					if isContextOverflowError(e) {
+						// Pola khas: smoke test (prompt mungil) HIJAU, tapi ekstraksi (full-text
+						// besar) gagal "stream kosong". Arahkan ke akar yang benar: context window.
+						hint = " PETUNJUK: error 'stream kosong'/context menandakan full-text paper kemungkinan MELEBIHI context window model — ganti Reviewer 1 ke model context BESAR (mis. Gemini / model >=128k token), bukan sekadar provider lain. (Smoke test hijau memakai prompt mungil, jadi tak menjamin sanggup prompt full-text.)"
+					}
+					return fmt.Errorf("Ekstraksi dihentikan: extractor LLM role Reviewer 1 (%s) gagal %d paper beruntun (terakhir: %v) — kemungkinan provider down / rate-limit / API key salah / context window terlampaui.%s Perbaiki provider Reviewer 1 di Pengaturan LLM lalu Resume. (Sisa paper belum ditandai ERROR.)", extractorModel, consecutiveFails, e, hint)
 				}
 				logger.Logf(session.ID, "         [!] gagal extract: %v (ditandai ERROR; %d/%d beruntun)\n", e, consecutiveFails, maxConsecutiveExtractFails)
 				update["coverage"] = "ERROR"

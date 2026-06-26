@@ -110,7 +110,10 @@ func (c *AnthropicCompatibleClient) Generate(ctx context.Context, systemPrompt, 
 			if perr != nil {
 				lastErr = fmt.Errorf("gagal membaca stream: %w", perr)
 			} else {
-				lastErr = fmt.Errorf("stream kosong dari provider")
+				// 200 OK tapi TANPA token konten. Penyebab tersering: prompt terlalu besar
+				// (full-text RAG) MELEBIHI context window model, output token habis, atau
+				// provider memutus stream. Beri petunjuk + nama model agar actionable.
+				lastErr = fmt.Errorf("stream kosong dari provider (model %s): server membalas 200 OK tapi tanpa konten — kemungkinan context window model terlampaui oleh prompt besar (mis. full-text), output kosong, atau provider memutus stream. Coba model dengan context window lebih besar", c.Model)
 			}
 		}
 

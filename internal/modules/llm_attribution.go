@@ -86,6 +86,27 @@ func isLLMConnectivityError(err error) bool {
 	return false
 }
 
+// isContextOverflowError menandai kegagalan yang berbau prompt melebihi context window model
+// / stream kosong (200 OK tanpa konten). Dipakai utk memberi saran "pakai model context besar"
+// pada langkah yang mengirim prompt besar (mis. ekstraksi full-text di Reviewer 1) — kasus yang
+// LOLOS smoke test (prompt mungil) tapi GAGAL saat prompt nyata yang besar.
+func isContextOverflowError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	for _, sig := range []string{
+		"stream kosong", "context window", "context length", "maximum context",
+		"context_length_exceeded", "too many tokens", "tokens exceed", "reduce the length",
+		"prompt is too long", "input is too long",
+	} {
+		if strings.Contains(s, sig) {
+			return true
+		}
+	}
+	return false
+}
+
 // llmError membungkus error pemanggilan LLM dengan atribusi xAI yang konsisten:
 // "<aksi> gagal via role <Role> (<provider (model)>): <err> — periksa provider <Role>
 // di Pengaturan LLM (API key, nama model, kuota/limit)". `role` adalah kunci role internal
