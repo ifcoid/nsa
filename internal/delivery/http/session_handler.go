@@ -135,6 +135,10 @@ func (h *SessionHandler) getSessionResilient(id string, attempts int) (*model.SL
 			return s, nil
 		}
 		lastErr = err
+		// Sesi benar-benar TIDAK ADA → jangan retry (pasti gagal lagi).
+		if err == mongo.ErrNoDocuments {
+			return nil, err
+		}
 		if i < attempts-1 {
 			time.Sleep(300 * time.Millisecond)
 		}
@@ -154,7 +158,12 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, req *http.Request) {
 	// pool lain yang sehat) sebelum menyerah → mengubah "kadang gagal" jadi "hampir selalu ok".
 	session, err := h.getSessionResilient(id, 3)
 	if err != nil {
-		sendJSONError(w, http.StatusNotFound, "Session not found")
+		if err == mongo.ErrNoDocuments {
+			sendJSONError(w, http.StatusNotFound, "Session not found")
+		} else {
+			// Error transien (timeout/network) — bukan 404, agar frontend bedakan & retry.
+			sendJSONError(w, http.StatusServiceUnavailable, "Database timeout, silakan coba lagi")
+		}
 		return
 	}
 
