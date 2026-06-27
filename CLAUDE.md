@@ -58,6 +58,12 @@ Kredensial untuk verifikasi langsung (read-only, JANGAN bocorkan) ada di `/home/
   Untuk **frontend (`if.co.id/slr`)**: `…/ifcoid/slr/pages/builds/latest` `status:built` + `curl`
   file live (mis. `if.co.id/slr/js/...`) dan grep string dari commit terbaru. Auth pakai `GHPAT`.
   Kalau belum hijau/match → **JANGAN balas**; tunggu workflow build + Pages selesai dulu.
+- **Cek versi backend LIVE (cepat, tanpa auth):** `GET <backend>/api/version` →
+  `{ok, backend_version=<commit nsa>}`. Mis. `curl https://apk.fly.dev/api/version` (fly.io) atau
+  `curl <api_base>/api/version` (backend lokal user). `"dev"` = build tak ter-stamp. Untuk binary
+  download bisa juga grep SHA di file: `curl -sL if.co.id/download/backend-binaries/if-slr-linux-amd64 | strings | grep <sha>`.
+  STAMP via ldflags: `compile.yml`/`release.yml` (garble/go build) + `deploy.yml` (`--build-arg
+  VERSION_COMMIT=${{ github.sha }}` → `Dockerfile ARG VERSION_COMMIT` → ldflags).
 - **Implikasi untuk user backend-lokal:** push `nsa` saja TIDAK cukup — mereka harus **unduh
   ulang binary** dari if.co.id/download (tunggu workflow build + Pages selesai). Push `slr` →
   frontend live di if.co.id/slr (cukup user Ctrl+F5).
