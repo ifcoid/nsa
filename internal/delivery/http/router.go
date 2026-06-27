@@ -9,6 +9,7 @@ import (
 	nsamcp "nsa/internal/delivery/mcp"
 	"nsa/internal/orchestrator"
 	"nsa/internal/repository"
+	"nsa/internal/version"
 )
 
 type Router struct {
@@ -83,6 +84,12 @@ func (r *Router) registerRoutes() {
 	// Auth endpoints (Public)
 	r.mux.HandleFunc("POST /api/auth/login", r.authHndlr.Login)
 	r.mux.HandleFunc("POST /api/auth/register", r.authHndlr.Register)
+
+	// Public: versi build backend (Reproducible Error — verifikasi deploy/version TANPA auth &
+	// TANPA rahasia; cuma commit nsa). Path "/api/version" tak masuk prefix yang di-AuthMiddleware.
+	r.mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, _ *http.Request) {
+		sendJSONResponse(w, http.StatusOK, map[string]interface{}{"ok": true, "backend_version": version.Commit})
+	})
 
 	// Protected endpoints
 	protected := http.NewServeMux()
