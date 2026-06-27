@@ -120,6 +120,27 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, req *http.Request)
 	})
 }
 
+// getSessionResilient mencoba GetSession sampai `attempts` kali untuk MENAHAN koneksi Mongo
+// FLAKY (Atlas i/o timeout / context deadline intermiten): satu read stall → read berikut
+// (koneksi pool berbeda) sering sukses. Per-attempt 10s + backoff 300ms; dipakai di jalur
+// poll yang sering. Driver retryReads tak menolong di sini karena yang habis = deadline ctx.
+func (h *SessionHandler) getSessionResilient(id string, attempts int) (*model.SLRSession, error) {
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		s, err := h.mongoRepo.GetSession(ctx, id)
+		cancel()
+		if err == nil {
+			return s, nil
+		}
+		lastErr = err
+		if i < attempts-1 {
+			time.Sleep(300 * time.Millisecond)
+		}
+	}
+	return nil, lastErr
+}
+
 func (h *SessionHandler) GetSession(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {
@@ -127,9 +148,10 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	session, err := h.mongoRepo.GetSession(ctx, id)
+	// Resilient: koneksi Mongo bisa FLAKY (Atlas i/o timeout intermiten — kasus balqis/Salwa:
+	// sesi ADA tapi read timeout). Coba beberapa kali (read berikut sering sukses pakai koneksi
+	// pool lain yang sehat) sebelum menyerah → mengubah "kadang gagal" jadi "hampir selalu ok".
+	session, err := h.getSessionResilient(id, 3)
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Session not found")
 		return
