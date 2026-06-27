@@ -57,6 +57,22 @@ func (r *MongoRepository) GetSession(ctx context.Context, sessionID string) (*mo
 	return &session, nil
 }
 
+// GetSessionLite = GetSession TANPA `xai_log` (proyeksi exclude di sisi Mongo). Untuk jalur
+// yang SERING & sensitif latensi (poll GetSession, diagnostic): `xai_log` (≤500 entri × system
+// prompt PENUH ≈ MB) membuat read Atlas TIMEOUT pada koneksi user yang lambat (kasus Salwa —
+// transfer MB tak selesai dalam 10s). Frontend TAK pernah baca xai_log dari objek sesi (panel
+// xAI pakai endpoint /xai-log terpisah), jadi aman dibuang dari read ini. JANGAN dipakai untuk
+// load→modify→save (UpdateSession) — nanti xai_log hilang dari struct.
+func (r *MongoRepository) GetSessionLite(ctx context.Context, sessionID string) (*model.SLRSession, error) {
+	collection := r.client.Database(r.dbName).Collection("slr_sessions")
+	var session model.SLRSession
+	opts := options.FindOne().SetProjection(bson.M{"xai_log": 0})
+	if err := collection.FindOne(ctx, bson.M{"_id": sessionID}, opts).Decode(&session); err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
 // ListResumableSessions mengembalikan ID sesi yang berstatus "sedang jalan"
 // (bukan gate WAITING, bukan ERROR/NEEDS_REVISION, bukan terminal/INIT/DONE) —
 // yaitu sesi yang worker-nya terputus saat mesin mati, untuk auto-resume saat startup.

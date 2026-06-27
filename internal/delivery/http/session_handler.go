@@ -128,7 +128,8 @@ func (h *SessionHandler) getSessionResilient(id string, attempts int) (*model.SL
 	var lastErr error
 	for i := 0; i < attempts; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		s, err := h.mongoRepo.GetSession(ctx, id)
+		// LITE (tanpa xai_log) — read kecil & cepat; menghindari timeout transfer MB di Atlas lambat.
+		s, err := h.mongoRepo.GetSessionLite(ctx, id)
 		cancel()
 		if err == nil {
 			return s, nil
@@ -2760,7 +2761,9 @@ func (h *SessionHandler) GetSessionDiagnostic(w http.ResponseWriter, req *http.R
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	s, err := h.mongoRepo.GetSession(ctx, id)
+	// LITE + retry (tanpa xai_log) — sama dgn jalur poll: hindari timeout transfer MB di Atlas
+	// lambat. error_reason di branch not-found tetap menangkap sinyal bila benar-benar gagal.
+	s, err := h.getSessionResilient(id, 3)
 	if err != nil {
 		// Bedakan dokumen-tak-ada vs error koneksi/timeout, DAN daftar id sesi yang ADA di
 		// backend ini → bantu deteksi salah-id / DB beda (penyebab UI stuck "Menunggu..."
