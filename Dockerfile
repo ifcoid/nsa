@@ -16,8 +16,14 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Stamp commit nsa ke binary (Reproducible Error: /diagnostic melaporkan backend_version).
+# Di-pass dari CI: flyctl deploy --build-arg VERSION_COMMIT=${{ github.sha }}. Default "dev".
+ARG VERSION_COMMIT=dev
+
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/app/...
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags "-X 'nsa/internal/version.Commit=${VERSION_COMMIT}'" \
+    -o main ./cmd/app/...
 
 # Runtime stage
 FROM alpine:latest
