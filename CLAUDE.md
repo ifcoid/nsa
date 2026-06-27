@@ -115,6 +115,20 @@ saya 2-3 kali keliru menyalahkan deploy/fly.io padahal akarnya bug `omitempty` d
 3. Cek log runtime: langkahnya benar dijalankan atau di-SKIP (mis. `firstAuditPass`)?
 4. BARU setelah 1-3 bersih, curigai deploy/cache/CI (cek commit SHA yang live + log).
 
+### Timeout AGRESIF di hot-path + Mongo flaky = kegagalan KERAS (pelajaran balqis/Salwa)
+Banyak user menjalankan backend LOKAL yang nyambung ke **MongoDB Atlas remote** dgn koneksi
+**intermiten** (`i/o timeout` / `context deadline exceeded`). Menambah **timeout ketat** di jalur
+yang sering dibaca (mis. `GetSession` yang dipoll frontend tiap 3 dtk) MENGUBAH "Atlas lambat
+sesaat" jadi **404 keras** → UI "Tidak bisa memuat sesi" padahal sesi ADA. Obatnya BUKAN timeout
+lebih galak, tapi **ketahanan**:
+- **Backend:** retry baca saat error transien (read berikut sering sukses pakai koneksi pool lain
+  — lih. `getSessionResilient`). `retryReads` driver TAK menolong utk deadline ctx kita.
+- **Frontend:** poll tiap 3 dtk ITU sudah retry alami — JANGAN munculkan panel error pada gagal
+  PERTAMA; tampilkan hanya setelah **gagal beruntun** (mis. ≥3), reset saat sukses, + guard
+  anti-poll-menumpuk. Blip transien self-heal di poll berikutnya.
+- Saat menambah `context.WithTimeout` di handler read yang sering dipanggil, pikirkan kasus
+  koneksi flaky dulu — timeout untuk anti-hang, retry/toleransi untuk anti-false-failure.
+
 ## Arsitektur WAJIB: HITL, xAI, Neuro-Symbolic, Multi-tenant
 
 Setiap fitur yang menyentuh **keputusan ilmiah** (screening, audit, inklusi/eksklusi,
