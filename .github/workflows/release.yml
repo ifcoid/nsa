@@ -52,7 +52,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          go build -ldflags "-s -w" -o if-slr-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/app/
+          go build -ldflags "-s -w -X 'nsa/internal/version.Commit=${{ github.sha }}'" -o if-slr-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/app/
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
