@@ -229,13 +229,22 @@ bash /home/adb/awangga/bugbot/unresolved.sh
 ```
 
 - **Kalau ada output** dari `unresolved.sh` → baca file lampiran (`bugbot/files/`), analisis,
-  perbaiki, deploy, verifikasi, lalu:
+  perbaiki, deploy, lalu **WAJIB selesaikan semua langkah di bawah sebelum tandai solved**:
   ```bash
-  # 3. BALAS pelapor (setelah fix terverifikasi deployed)
-  bash /home/adb/awangga/bugbot/reply.sh <chat_id|last> "<pesan>"
-  # 4. TANDAI SOLVED
+  # 3. VERIFIKASI DEPLOY — JANGAN balas user sebelum ini hijau semua
+  #    (cek commit ifcoid/download = SHA nsa terbaru + Pages built + status:built)
+  #    Lihat seksi "Deploy & distribusi" untuk detail API call-nya.
+
+  # 4. BALAS pelapor — WAJIB kirim pesan ke user dgn SOLUSI DETAIL:
+  #    • Apa masalahnya (root cause ringkas)
+  #    • Apa yang diperbaiki
+  #    • Langkah user selanjutnya (mis. "unduh ulang binary", "Ctrl+F5", "ganti provider")
+  bash /home/adb/awangga/bugbot/reply.sh <chat_id|last> "<pesan solusi detail>"
+
+  # 5. TANDAI SOLVED
   echo "<update_id>" >> /home/adb/awangga/bugbot/solved.txt
   ```
+  **Tiket BELUM SOLVED kalau user belum dibalas.** Deploy tanpa balas = user tidak tahu fix-nya ada.
 - **Kalau KOSONG** → tidak ada tiket pending, selesai.
 
 (Real-time opsional: user sendiri pasang cron `* * * * * .../poll.sh`.)
