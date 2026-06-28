@@ -215,8 +215,11 @@ satunya = bot Telegram **@BugLaporBot**. Konten laporan DIBAWA lewat pesan/FILE 
   panggil `getUpdates` manual di tempat lain (offset bentrok → laporan hilang/ke-skip).
 - Dipakai **ON-DEMAND**: saat user bilang "cek inbox", jalankan `bash /home/adb/awangga/bugbot/poll.sh`.
   Ia: (1) balas "diterima" tiap pesan, (2) unduh file lampiran ke `bugbot/files/`, (3) catat
-  ringkas ke `bugbot/inbox.jsonl`, (4) majukan `bugbot/offset`. Lalu BACA `inbox.jsonl` + file
-  di `files/` → perbaiki. (Real-time opsional: user sendiri pasang cron `* * * * * .../poll.sh`.)
+  ringkas ke `bugbot/inbox.jsonl`, (4) majukan `bugbot/offset`. Lalu jalankan
+  `bash /home/adb/awangga/bugbot/unresolved.sh` untuk melihat **hanya pesan yang BELUM solved**
+  (filter `inbox.jsonl` minus `solved.txt`). Setelah selesai menangani laporan, tandai solved:
+  `echo "<update_id>" >> /home/adb/awangga/bugbot/solved.txt`.
+  (Real-time opsional: user sendiri pasang cron `* * * * * .../poll.sh`.)
 - **Balas pelapor:** `bash /home/adb/awangga/bugbot/reply.sh <chat_id|last> "<pesan>"` (kirim via
   @BugLaporBot; `last` = pengirim laporan TERAKHIR di inbox.jsonl). **SEBELUM membalas (bila pesan
   mengklaim fix sudah live): WAJIB verifikasi deploy** dulu — binary `if.co.id/download` = commit
