@@ -127,8 +127,9 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, req *http.Request)
 func (h *SessionHandler) getSessionResilient(id string, attempts int) (*model.SLRSession, error) {
 	var lastErr error
 	for i := 0; i < attempts; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		// LITE (tanpa xai_log) — read kecil & cepat; menghindari timeout transfer MB di Atlas lambat.
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		// LITE (tanpa xai_log, fulltext_screening_log, manuscript) — read ringan; menghindari
+		// timeout transfer di Atlas lambat (kasus balqis: hotspot flaky).
 		s, err := h.mongoRepo.GetSessionLite(ctx, id)
 		cancel()
 		if err == nil {
@@ -140,7 +141,7 @@ func (h *SessionHandler) getSessionResilient(id string, attempts int) (*model.SL
 			return nil, err
 		}
 		if i < attempts-1 {
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 	return nil, lastErr
@@ -156,7 +157,7 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, req *http.Request) {
 	// Resilient: koneksi Mongo bisa FLAKY (Atlas i/o timeout intermiten — kasus balqis/Salwa:
 	// sesi ADA tapi read timeout). Coba beberapa kali (read berikut sering sukses pakai koneksi
 	// pool lain yang sehat) sebelum menyerah → mengubah "kadang gagal" jadi "hampir selalu ok".
-	session, err := h.getSessionResilient(id, 3)
+	session, err := h.getSessionResilient(id, 5)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			sendJSONError(w, http.StatusNotFound, "Session not found")
@@ -2772,7 +2773,7 @@ func (h *SessionHandler) GetSessionDiagnostic(w http.ResponseWriter, req *http.R
 	defer cancel()
 	// LITE + retry (tanpa xai_log) — sama dgn jalur poll: hindari timeout transfer MB di Atlas
 	// lambat. error_reason di branch not-found tetap menangkap sinyal bila benar-benar gagal.
-	s, err := h.getSessionResilient(id, 3)
+	s, err := h.getSessionResilient(id, 5)
 	if err != nil {
 		// Bedakan dokumen-tak-ada vs error koneksi/timeout, DAN daftar id sesi yang ADA di
 		// backend ini → bantu deteksi salah-id / DB beda (penyebab UI stuck "Menunggu..."

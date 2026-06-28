@@ -66,7 +66,13 @@ func (r *MongoRepository) GetSession(ctx context.Context, sessionID string) (*mo
 func (r *MongoRepository) GetSessionLite(ctx context.Context, sessionID string) (*model.SLRSession, error) {
 	collection := r.client.Database(r.dbName).Collection("slr_sessions")
 	var session model.SLRSession
-	opts := options.FindOne().SetProjection(bson.M{"xai_log": 0})
+	// Exclude field-field BERAT yang tidak dibutuhkan frontend poll (xai_log, fulltext_screening_log,
+	// manuscript) — mengurangi ukuran transfer dari Atlas agar tidak timeout di koneksi lambat.
+	opts := options.FindOne().SetProjection(bson.M{
+		"xai_log":                0,
+		"fulltext_screening_log": 0,
+		"manuscript":             0,
+	})
 	if err := collection.FindOne(ctx, bson.M{"_id": sessionID}, opts).Decode(&session); err != nil {
 		return nil, err
 	}
