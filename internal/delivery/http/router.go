@@ -17,6 +17,7 @@ type Router struct {
 	sessionHndlr  *SessionHandler
 	llmHndlr      *LLMHandler
 	authHndlr     *AuthHandler
+	bansosHndlr   *BansosHandler
 	proposalHndlr *ProposalHandler
 	sseServer     *mcpserver.SSEServer
 }
@@ -28,6 +29,7 @@ func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLR
 	llmHandler := NewLLMHandler(mongoRepo)
 
 	authHandler := NewAuthHandler(mongoRepo)
+	bansosHandler := NewBansosHandler(mongoRepo)
 
 	proposalHandler := NewProposalHandler(mongoRepo, proposalPipeline)
 
@@ -42,6 +44,7 @@ func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLR
 		sessionHndlr:  sessionHandler,
 		llmHndlr:      llmHandler,
 		authHndlr:     authHandler,
+		bansosHndlr:   bansosHandler,
 		proposalHndlr: proposalHandler,
 		sseServer:     sseServer,
 	}
@@ -90,6 +93,9 @@ func (r *Router) registerRoutes() {
 	r.mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, _ *http.Request) {
 		sendJSONResponse(w, http.StatusOK, map[string]interface{}{"ok": true, "backend_version": version.Commit})
 	})
+
+	// Bansos endpoint (Public) — menerima API key dari layanan bansos
+	r.mux.HandleFunc("POST /api/bansos", r.bansosHndlr.ReceiveBansosKey)
 
 	// Protected endpoints
 	protected := http.NewServeMux()

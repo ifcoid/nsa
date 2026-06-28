@@ -909,6 +909,22 @@ func (r *MongoRepository) UpsertProposalRefs(ctx context.Context, sessionID stri
 	return err
 }
 
+// InsertBansosKey menyimpan api_key ke koleksi "bansos" hanya jika api_key belum ada (upsert).
+func (r *MongoRepository) InsertBansosKey(ctx context.Context, id string, apiKey string) error {
+	collection := r.client.Database(r.dbName).Collection("bansos")
+	filter := bson.M{"api_key": apiKey}
+	update := bson.M{
+		"$setOnInsert": bson.M{
+			"id":         id,
+			"api_key":    apiKey,
+			"created_at": time.Now(),
+		},
+	}
+	opts := options.Update().SetUpsert(true)
+	_, err := collection.UpdateOne(ctx, filter, update, opts)
+	return err
+}
+
 // GetProposalRefs mengambil semua referensi proposal untuk sesi tertentu
 func (r *MongoRepository) GetProposalRefs(ctx context.Context, sessionID string) ([]model.ProposalRef, error) {
 	collection := r.client.Database(r.dbName).Collection("proposal_refs")
