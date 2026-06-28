@@ -206,6 +206,9 @@ satunya = bot Telegram **@BugLaporBot**. Konten laporan DIBAWA lewat pesan/FILE 
   3. **Versi FRONTEND** — fingerprint deploy (`version.json` bila ada + `Last-Modified`/`ETag`
      situs), karena slr Pages "deploy from branch" (tanpa SHA build).
   Kalau menambah fitur yang bisa gagal di UI, pastikan jejaknya tertangkap salah satu di atas.
+  4. **Screenshot UI** — di-capture otomatis via `html2canvas` saat user klik Report Bug;
+     disimpan sebagai base64 JPEG di file laporan. Untuk bug tampilan, ini seringkali
+     bukti paling jelas (developer bisa lihat persis apa yang tampil di layar user).
 - Bot **auto-reply "✅ diterima"** lewat poller di bawah.
 
 ### Cara DEVELOPER/Claude baca laporan
@@ -213,26 +216,57 @@ satunya = bot Telegram **@BugLaporBot**. Konten laporan DIBAWA lewat pesan/FILE 
   `set +x` sebelum export). TIDAK di-hardcode di kode (frontend hanya pakai username publik).
 - Poller: `/home/adb/awangga/bugbot/poll.sh` — **SATU-SATUNYA konsumen `getUpdates`**. JANGAN
   panggil `getUpdates` manual di tempat lain (offset bentrok → laporan hilang/ke-skip).
-- Dipakai **ON-DEMAND**: saat user bilang "cek inbox", jalankan `bash /home/adb/awangga/bugbot/poll.sh`.
-  Ia: (1) balas "diterima" tiap pesan, (2) unduh file lampiran ke `bugbot/files/`, (3) catat
-  ringkas ke `bugbot/inbox.jsonl`, (4) majukan `bugbot/offset`. Lalu jalankan
-  `bash /home/adb/awangga/bugbot/unresolved.sh` untuk melihat **hanya pesan yang BELUM solved**
-  (filter `inbox.jsonl` minus `solved.txt`). Setelah selesai menangani laporan, tandai solved:
-  `echo "<update_id>" >> /home/adb/awangga/bugbot/solved.txt`.
-  (Real-time opsional: user sendiri pasang cron `* * * * * .../poll.sh`.)
-- **Balas pelapor:** `bash /home/adb/awangga/bugbot/reply.sh <chat_id|last> "<pesan>"` (kirim via
-  @BugLaporBot; `last` = pengirim laporan TERAKHIR di inbox.jsonl). **SEBELUM membalas (bila pesan
-  mengklaim fix sudah live): WAJIB verifikasi deploy** dulu — binary `if.co.id/download` = commit
-  terbaru + Pages SUKSES + pesan commit download memuat SHA `nsa` terbaru (lihat seksi "Deploy &
-  distribusi"). Jangan janjikan fix yang belum benar-benar ter-deploy. CATATAN: mengirim pesan ke
-  USER NYATA adalah aksi yang butuh OTORISASI manusia — assistant tak boleh kirim sendiri tanpa
-  izin eksplisit; sodorkan perintahnya agar user yang menjalankan (atau user menambah permission).
+
+### Ticket lifecycle (trouble ticketing)
+Saat user bilang "cek inbox", jalankan langkah-langkah berikut **BERURUTAN**:
+
+```bash
+# 1. POLL — ambil pesan baru dari Telegram, catat ke inbox.jsonl
+bash /home/adb/awangga/bugbot/poll.sh
+
+# 2. CEK TIKET BELUM SOLVED — tampilkan hanya yang belum ditangani
+bash /home/adb/awangga/bugbot/unresolved.sh
+```
+
+- **Kalau ada output** dari `unresolved.sh` → baca file lampiran (`bugbot/files/`), analisis,
+  perbaiki, deploy, verifikasi, lalu:
+  ```bash
+  # 3. BALAS pelapor (setelah fix terverifikasi deployed)
+  bash /home/adb/awangga/bugbot/reply.sh <chat_id|last> "<pesan>"
+  # 4. TANDAI SOLVED
+  echo "<update_id>" >> /home/adb/awangga/bugbot/solved.txt
+  ```
+- **Kalau KOSONG** → tidak ada tiket pending, selesai.
+
+(Real-time opsional: user sendiri pasang cron `* * * * * .../poll.sh`.)
+
+### Isi file laporan (.txt)
+File laporan user memuat (ditangkap otomatis oleh frontend):
+1. **Header**: waktu, session, modul/step, api_base, url, viewport, userAgent
+2. **Keterangan user** (deskripsi bug)
+3. **Error console JS** (30 terakhir dari `window.__errLog`)
+4. **Detail LLM** (bila ada): step, provider, model, error, system+user prompt lengkap
+5. **Versi frontend** (Last-Modified/ETag)
+6. **Diagnostic DB** (snapshot state sesi dari backend — tanpa rahasia)
+7. **Screenshot UI** (base64 JPEG, capture otomatis via `html2canvas` saat klik Report Bug)
+
+Untuk melihat screenshot: decode base64 di section `════ SCREENSHOT (base64 JPEG) ════`:
+```bash
+grep -A1 "SCREENSHOT (base64" file.txt | tail -1 | base64 -d > screenshot.jpg
+```
+
+### Aturan balas pelapor
+- **SEBELUM membalas** (bila pesan mengklaim fix sudah live): WAJIB verifikasi deploy dulu —
+  binary `if.co.id/download` = commit terbaru + Pages SUKSES + pesan commit download memuat SHA
+  `nsa` terbaru (lihat seksi "Deploy & distribusi"). Jangan janjikan fix yang belum ter-deploy.
+- CATATAN: mengirim pesan ke USER NYATA adalah aksi yang butuh OTORISASI manusia — assistant
+  tak boleh kirim sendiri tanpa izin eksplisit; sodorkan perintahnya agar user yang menjalankan
+  (atau user menambah permission).
 - **Skrip bugbot di-version di repo PRIVATE `github.com/ifcoid/bugbot`** (`poll.sh`, `reply.sh`,
-  README, `.gitignore`, `.env.example`). **Data user & rahasia TIDAK di-commit** (di-`.gitignore`):
-  `inbox.jsonl`, `offset`, `files/`, `poll.log`, `.lock`, `.env` — tetap LOKAL di folder
-  `/home/adb/awangga/bugbot/` (berisi laporan user = privasi; token di `.env`). Jalankan tetap
-  dari folder lokal itu; repo hanya untuk versioning + backup skripnya. Ingat: poll.sh = satu
-  konsumen `getUpdates` → **jalankan di SATU mesin saja**.
+  `unresolved.sh`, README, `.gitignore`, `.env.example`). **Data user & rahasia TIDAK di-commit**
+  (di-`.gitignore`): `inbox.jsonl`, `offset`, `solved.txt`, `files/`, `poll.log`, `.lock`, `.env`
+  — tetap LOKAL di folder `/home/adb/awangga/bugbot/`. Ingat: poll.sh = satu konsumen
+  `getUpdates` → **jalankan di SATU mesin saja**.
 
 ## Validitas metodologi SLR (publikasi Q1): protokol STABIL, preserve ≠ reset
 
