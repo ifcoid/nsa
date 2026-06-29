@@ -113,6 +113,13 @@ func isContextOverflowError(err error) bool {
 // (mis. "brain", "reviewer1"); `action` deskripsi singkat langkah (mis. "Rekomendasi framework").
 func (d *ModuleDeps) llmError(ctx context.Context, role, action string, err error) error {
 	disp := roleDisplay(role)
-	return fmt.Errorf("%s gagal via role %s (%s): %w — periksa provider %s di Pengaturan LLM (API key, nama model, kuota/limit)",
-		action, disp, d.roleLabel(ctx, role), err, disp)
+	primary, _ := d.LLMFactory.RoleProviders(ctx, role)
+	hint := fmt.Sprintf("periksa provider %s di Pengaturan LLM (API key, nama model, kuota/limit)", disp)
+	// Enrichment: provider rprompt = aplikasi LLMy lokal. Kalau connectivity error, user perlu
+	// menjalankannya dulu — sebut dengan nama UI (LLMy) DAN nama internal (rprompt).
+	if isLLMConnectivityError(err) && strings.HasPrefix(primary, "rprompt") {
+		hint = fmt.Sprintf("pastikan aplikasi LLMy (%s) sudah dijalankan di PC Anda sebelum melanjutkan pipeline", primary)
+	}
+	return fmt.Errorf("%s gagal via role %s (%s): %w — %s",
+		action, disp, d.roleLabel(ctx, role), err, hint)
 }
