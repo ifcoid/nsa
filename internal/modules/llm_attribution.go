@@ -118,7 +118,7 @@ func (d *ModuleDeps) llmError(ctx context.Context, role, action string, err erro
 	// Enrichment: provider rprompt = aplikasi LLMy lokal. Kalau connectivity error, user perlu
 	// menjalankannya dulu — sebut dengan nama UI (LLMy) DAN nama internal (rprompt).
 	if isLLMConnectivityError(err) && strings.HasPrefix(primary, "rprompt") {
-		hint = fmt.Sprintf("pastikan aplikasi LLMy (%s) sudah dijalankan di PC Anda sebelum melanjutkan pipeline", primary)
+		hint = fmt.Sprintf("pastikan aplikasi LLMy (%s) sudah dijalankan di PC Anda sebelum melanjutkan pipeline (unduh di https://ll.my.id/download/)", primary)
 	}
 	return fmt.Errorf("%s gagal via role %s (%s): %w — %s",
 		action, disp, d.roleLabel(ctx, role), err, hint)
