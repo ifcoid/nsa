@@ -50,7 +50,13 @@ Kredensial untuk verifikasi langsung (read-only, JANGAN bocorkan) ada di `/home/
      `GET /repos/ifcoid/download/commits?per_page=1`;
   2. **GitHub Pages build SUKSES** untuk commit itu —
      `GET /repos/ifcoid/download/pages/builds/latest` → `status:"built"`, `error:null`, dan
-     `.commit` == SHA commit terbaru download;
+     `.commit` == SHA commit terbaru download.
+     ⚠️ **GOTCHA (pelajaran 2026-06-30):** untuk `ifcoid/download`, `pages/builds/latest` SERING
+     LAG/beku — bisa tetap menunjuk commit LAMA (mis. `b157744`) berMENIT-menit padahal HEAD &
+     konten LIVE sudah commit baru. JANGAN terjebak menunggu API ini. **Cek paling otoritatif =
+     grep SHA `nsa` TERSTAMP di binary LIVE** (poin di bawah): `curl -sL …/if-slr-linux-amd64 |
+     strings | grep <nsa-sha-40char>` + cek header `Last-Modified` baru. Bila binary live sudah
+     memuat SHA `nsa` terbaru → itu BUKTI definitif fix tersaji (apa pun kata pages/builds API);
   3. **pesan commit `ifcoid/download` memuat SHA `nsa` TERBARU** (format
      `Update SLR backend binaries (commit: <nsa-sha>)`) → artinya binary yang disajikan benar
      hasil build commit nsa terbaru. Bandingkan dgn `git -C nsa rev-parse HEAD` /
