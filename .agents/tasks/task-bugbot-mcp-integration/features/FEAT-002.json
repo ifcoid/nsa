@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Add deploy verification and auto-notification to bugbot MCP. During poll, check if resolved tickets with fix_commit have been deployed via GitHub Pages, then auto-notify reporters and close tickets. Add bugbot_check_stale tool for detecting stale resolved tickets.",
+  "status": "in_progress",
+  "steps": [
+    "1. Update internal/model/bug_ticket.go to add FixCommit, FixRepo, DeployedAt, NotifyFailed fields",
+    "2. Update internal/repository/bugbot_repo.go to add GetResolvedTicketsAwaitingDeploy, MarkTicketDeployed, MarkTicketNotifyFailed, GetTicketsPendingNotification, update GetUnresolvedTickets filter",
+    "3. Update internal/delivery/mcp/bugbot.go to modify handleMarkResolved to accept fix_commit and fix_repo params",
+    "4. Update internal/delivery/mcp/bugbot.go to add deploy verification logic in handlePoll",
+    "5. Add bugbot_check_stale tool to detect tickets resolved >7 days without deploy",
+    "6. Verify build and tests pass"
+  ],
+  "acceptance_criteria": [
+    "BugTicket model has FixCommit, FixRepo, DeployedAt, NotifyFailed fields",
+    "GetUnresolvedTickets includes resolved and deployed status (everything not closed)",
+    "handleMarkResolved accepts optional fix_commit and fix_repo parameters",
+    "handlePoll checks GitHub Pages for deploy verification of resolved tickets",
+    "Deployed tickets get auto-notification sent to reporter via Telegram",
+    "bugbot_check_stale tool returns tickets resolved >7 days without deploy",
+    "go build ./cmd/app/... succeeds",
+    "go test ./... passes"
+  ],
+  "verification": [
+    "Run cd /projects/sandbox/nsa && go build ./cmd/app/...",
+    "Run cd /projects/sandbox/nsa && go test ./..."
+  ],
+  "blocked_reason": null,
+  "findings": null
+}

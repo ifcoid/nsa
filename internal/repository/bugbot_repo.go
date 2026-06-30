@@ -64,14 +64,123 @@ func (r *MongoRepository) CreateBugTicket(ctx context.Context, ticket *model.Bug
 	return err
 }
 
-// GetUnresolvedTickets returns all bug tickets where status is NOT "closed" or "resolved".
+// GetUnresolvedTickets returns all bug tickets where status is NOT "closed".
+// This includes "open", "in_progress", "resolved", and "deployed" statuses.
 func (r *MongoRepository) GetUnresolvedTickets(ctx context.Context) ([]model.BugTicket, error) {
 	coll := r.client.Database(r.dbName).Collection(bugTicketsCollection)
 
 	filter := bson.M{
-		"status": bson.M{"$nin": []string{"closed", "resolved"}},
+		"status": bson.M{"$ne": "closed"},
 	}
 	opts := options.Find().SetSort(bson.M{"created_at": -1})
+
+	cursor, err := coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var tickets []model.BugTicket
+	if err := cursor.All(ctx, &tickets); err != nil {
+		return nil, err
+	}
+	return tickets, nil
+}
+
+// GetResolvedTicketsAwaitingDeploy returns tickets where status == "resolved",
+// fix_commit is set, and deployed_at is nil (not yet confirmed deployed).
+func (r *MongoRepository) GetResolvedTicketsAwaitingDeploy(ctx context.Context) ([]model.BugTicket, error) {
+	coll := r.client.Database(r.dbName).Collection(bugTicketsCollection)
+
+	filter := bson.M{
+		"status":      "resolved",
+		"fix_commit":  bson.M{"$ne": ""},
+		"deployed_at": bson.M{"$eq": nil},
+	}
+	opts := options.Find().SetSort(bson.M{"created_at": -1})
+
+	cursor, err := coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var tickets []model.BugTicket
+	if err := cursor.All(ctx, &tickets); err != nil {
+		return nil, err
+	}
+	return tickets, nil
+}
+
+// MarkTicketDeployed sets a ticket's status to "deployed" and records deployed_at timestamp.
+func (r *MongoRepository) MarkTicketDeployed(ctx context.Context, ticketID string) error {
+	coll := r.client.Database(r.dbName).Collection(bugTicketsCollection)
+
+	objID, err := primitive.ObjectIDFromHex(ticketID)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	_, err = coll.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": bson.M{
+		"status":      "deployed",
+		"deployed_at": now,
+		"updated_at":  now,
+	}})
+	return err
+}
+
+// MarkTicketNotifyFailed sets or clears the notify_failed flag on a ticket.
+func (r *MongoRepository) MarkTicketNotifyFailed(ctx context.Context, ticketID string, failed bool) error {
+	coll := r.client.Database(r.dbName).Collection(bugTicketsCollection)
+
+	objID, err := primitive.ObjectIDFromHex(ticketID)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	_, err = coll.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": bson.M{
+		"notify_failed": failed,
+		"updated_at":    now,
+	}})
+	return err
+}
+
+// GetTicketsPendingNotification returns tickets where status is "deployed" (notification pending or failed).
+func (r *MongoRepository) GetTicketsPendingNotification(ctx context.Context) ([]model.BugTicket, error) {
+	coll := r.client.Database(r.dbName).Collection(bugTicketsCollection)
+
+	filter := bson.M{
+		"status": "deployed",
+	}
+	opts := options.Find().SetSort(bson.M{"created_at": -1})
+
+	cursor, err := coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var tickets []model.BugTicket
+	if err := cursor.All(ctx, &tickets); err != nil {
+		return nil, err
+	}
+	return tickets, nil
+}
+
+// GetStaleResolvedTickets returns tickets with status "resolved" that were resolved more than
+// the given duration ago but have not been deployed yet.
+func (r *MongoRepository) GetStaleResolvedTickets(ctx context.Context, staleDuration time.Duration) ([]model.BugTicket, error) {
+	coll := r.client.Database(r.dbName).Collection(bugTicketsCollection)
+
+	cutoff := time.Now().Add(-staleDuration)
+	filter := bson.M{
+		"status":      "resolved",
+		"resolved_at": bson.M{"$lte": cutoff},
+		"deployed_at": bson.M{"$eq": nil},
+	}
+	opts := options.Find().SetSort(bson.M{"resolved_at": 1})
 
 	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
@@ -168,6 +277,30 @@ func (r *MongoRepository) UpdateTicketStatus(ctx context.Context, ticketID strin
 	}
 	if status == "resolved" {
 		setFields["resolved_at"] = now
+	}
+
+	_, err = coll.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": setFields})
+	return err
+}
+
+// UpdateTicketFixInfo sets fix_commit and fix_repo on a ticket (used when marking resolved with commit info).
+func (r *MongoRepository) UpdateTicketFixInfo(ctx context.Context, ticketID string, fixCommit string, fixRepo string) error {
+	coll := r.client.Database(r.dbName).Collection(bugTicketsCollection)
+
+	objID, err := primitive.ObjectIDFromHex(ticketID)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	setFields := bson.M{
+		"updated_at": now,
+	}
+	if fixCommit != "" {
+		setFields["fix_commit"] = fixCommit
+	}
+	if fixRepo != "" {
+		setFields["fix_repo"] = fixRepo
 	}
 
 	_, err = coll.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": setFields})

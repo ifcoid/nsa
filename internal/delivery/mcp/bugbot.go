@@ -65,8 +65,10 @@ func (s *BugBotMCPServer) registerTools() {
 
 	// Tool 4: bugbot_mark_resolved
 	s.MCPServer.AddTool(mcp.NewTool("bugbot_mark_resolved",
-		mcp.WithDescription("Mark a bug ticket as 'resolved'. Sets status and resolved_at timestamp."),
+		mcp.WithDescription("Mark a bug ticket as 'resolved'. Sets status and resolved_at timestamp. Optionally records fix_commit and fix_repo for deploy verification."),
 		mcp.WithString("ticket_id", mcp.Required(), mcp.Description("Ticket ObjectID (hex) or 'last' to resolve the most recent ticket")),
+		mcp.WithString("fix_commit", mcp.Description("SHA of the commit containing the fix (optional, enables deploy verification)")),
+		mcp.WithString("fix_repo", mcp.Description("Which repo was fixed: 'nsa' or 'slr' (optional, defaults to 'nsa')")),
 	), s.handleMarkResolved)
 
 	// Tool 5: bugbot_close
@@ -74,6 +76,11 @@ func (s *BugBotMCPServer) registerTools() {
 		mcp.WithDescription("Mark a bug ticket as 'closed'."),
 		mcp.WithString("ticket_id", mcp.Required(), mcp.Description("Ticket ObjectID (hex) or 'last' to close the most recent ticket")),
 	), s.handleClose)
+
+	// Tool 6: bugbot_check_stale
+	s.MCPServer.AddTool(mcp.NewTool("bugbot_check_stale",
+		mcp.WithDescription("Check for tickets that have been 'resolved' for more than 7 days but haven't been deployed yet. Helps flag potential CI failures or forgotten deploys."),
+	), s.handleCheckStale)
 }
 
 // handlePoll calls Telegram getUpdates, processes messages, saves tickets to MongoDB,
@@ -196,7 +203,15 @@ func (s *BugBotMCPServer) handlePoll(ctx context.Context, request mcp.CallToolRe
 		processed++
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("Processed %d update(s).", processed)), nil
+	pollResult := fmt.Sprintf("Processed %d update(s).", processed)
+
+	// --- Deploy verification: check resolved tickets awaiting deploy ---
+	deployResult := s.checkDeployAndNotify(ctx)
+	if deployResult != "" {
+		pollResult += "\n" + deployResult
+	}
+
+	return mcp.NewToolResultText(pollResult), nil
 }
 
 // handleGetUnresolved returns all tickets that are not closed or resolved.
@@ -262,7 +277,7 @@ func (s *BugBotMCPServer) handleReply(ctx context.Context, request mcp.CallToolR
 	return mcp.NewToolResultText(fmt.Sprintf("Balasan terkirim ke %s (chat %d), ticket %s status -> in_progress", ticket.ReporterName, ticket.ChatID, ticket.ID.Hex())), nil
 }
 
-// handleMarkResolved sets a ticket's status to "resolved".
+// handleMarkResolved sets a ticket's status to "resolved" and optionally records fix info.
 func (s *BugBotMCPServer) handleMarkResolved(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args, ok := request.Params.Arguments.(map[string]interface{})
 	if !ok {
@@ -274,6 +289,9 @@ func (s *BugBotMCPServer) handleMarkResolved(ctx context.Context, request mcp.Ca
 		return mcp.NewToolResultError("ticket_id is required"), nil
 	}
 
+	fixCommit, _ := args["fix_commit"].(string)
+	fixRepo, _ := args["fix_repo"].(string)
+
 	ticket, err := s.resolveTicket(ctx, ticketID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to find ticket: %v", err)), nil
@@ -283,7 +301,21 @@ func (s *BugBotMCPServer) handleMarkResolved(ctx context.Context, request mcp.Ca
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to update ticket status: %v", err)), nil
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("Ticket %s ditandai sebagai resolved.", ticket.ID.Hex())), nil
+	// Save fix_commit and fix_repo if provided
+	if fixCommit != "" {
+		if fixRepo == "" {
+			fixRepo = "nsa"
+		}
+		if err := s.repo.UpdateTicketFixInfo(ctx, ticket.ID.Hex(), fixCommit, fixRepo); err != nil {
+			log.Printf("[bugbot] failed to save fix info for ticket %s: %v", ticket.ID.Hex(), err)
+		}
+	}
+
+	result := fmt.Sprintf("Ticket %s ditandai sebagai resolved.", ticket.ID.Hex())
+	if fixCommit != "" {
+		result += fmt.Sprintf(" Fix commit: %s (repo: %s). Deploy verification will run on next poll.", fixCommit, fixRepo)
+	}
+	return mcp.NewToolResultText(result), nil
 }
 
 // handleClose sets a ticket's status to "closed".
@@ -308,6 +340,256 @@ func (s *BugBotMCPServer) handleClose(ctx context.Context, request mcp.CallToolR
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Ticket %s ditandai sebagai closed.", ticket.ID.Hex())), nil
+}
+
+// --- Deploy verification and notification ---
+
+// checkDeployAndNotify verifies deployment status for resolved tickets and sends notifications.
+// This is best-effort: failures are logged but don't block the poll.
+func (s *BugBotMCPServer) checkDeployAndNotify(ctx context.Context) string {
+	var results []string
+
+	// Step 1: Check resolved tickets awaiting deploy
+	tickets, err := s.repo.GetResolvedTicketsAwaitingDeploy(ctx)
+	if err != nil {
+		log.Printf("[bugbot] deploy check: failed to query resolved tickets: %v", err)
+	} else {
+		for _, ticket := range tickets {
+			deployed, err := s.verifyDeploy(ctx, ticket)
+			if err != nil {
+				log.Printf("[bugbot] deploy check: failed for ticket %s: %v", ticket.ID.Hex(), err)
+				continue
+			}
+			if deployed {
+				// Mark as deployed
+				if err := s.repo.MarkTicketDeployed(ctx, ticket.ID.Hex()); err != nil {
+					log.Printf("[bugbot] deploy check: failed to mark ticket %s as deployed: %v", ticket.ID.Hex(), err)
+					continue
+				}
+				// Send notification immediately
+				if err := s.sendDeployNotification(ctx, &ticket); err != nil {
+					log.Printf("[bugbot] deploy check: notification failed for ticket %s: %v", ticket.ID.Hex(), err)
+					if markErr := s.repo.MarkTicketNotifyFailed(ctx, ticket.ID.Hex(), true); markErr != nil {
+						log.Printf("[bugbot] deploy check: failed to mark notify_failed for ticket %s: %v", ticket.ID.Hex(), markErr)
+					}
+					results = append(results, fmt.Sprintf("Deploy confirmed for #%s but notification failed", ticket.ID.Hex()))
+				} else {
+					// Notification sent successfully, close the ticket
+					if err := s.repo.UpdateTicketStatus(ctx, ticket.ID.Hex(), "closed"); err != nil {
+						log.Printf("[bugbot] deploy check: failed to close ticket %s: %v", ticket.ID.Hex(), err)
+					}
+					results = append(results, fmt.Sprintf("Deploy confirmed and notified for #%s -> closed", ticket.ID.Hex()))
+				}
+			}
+		}
+	}
+
+	// Step 2: Retry notifications for deployed tickets that failed to notify
+	pendingTickets, err := s.repo.GetTicketsPendingNotification(ctx)
+	if err != nil {
+		log.Printf("[bugbot] notify retry: failed to query pending notifications: %v", err)
+	} else {
+		for _, ticket := range pendingTickets {
+			if !ticket.NotifyFailed {
+				// This is a deployed ticket that hasn't been notified yet (shouldn't normally happen)
+				// Try to notify
+			}
+			if err := s.sendDeployNotification(ctx, &ticket); err != nil {
+				log.Printf("[bugbot] notify retry: failed for ticket %s: %v", ticket.ID.Hex(), err)
+				continue
+			}
+			// Notification succeeded, clear flag and close
+			if err := s.repo.MarkTicketNotifyFailed(ctx, ticket.ID.Hex(), false); err != nil {
+				log.Printf("[bugbot] notify retry: failed to clear notify_failed for ticket %s: %v", ticket.ID.Hex(), err)
+			}
+			if err := s.repo.UpdateTicketStatus(ctx, ticket.ID.Hex(), "closed"); err != nil {
+				log.Printf("[bugbot] notify retry: failed to close ticket %s: %v", ticket.ID.Hex(), err)
+			} else {
+				results = append(results, fmt.Sprintf("Retry notification succeeded for #%s -> closed", ticket.ID.Hex()))
+			}
+		}
+	}
+
+	return strings.Join(results, "; ")
+}
+
+// verifyDeploy checks whether a ticket's fix has been deployed via GitHub Pages.
+func (s *BugBotMCPServer) verifyDeploy(ctx context.Context, ticket model.BugTicket) (bool, error) {
+	if ticket.FixCommit == "" {
+		return false, nil
+	}
+
+	repo := ticket.FixRepo
+	if repo == "" {
+		repo = "nsa"
+	}
+
+	if repo == "slr" {
+		return s.verifySLRDeploy(ctx, ticket.FixCommit)
+	}
+	return s.verifyNSADeploy(ctx, ticket.FixCommit)
+}
+
+// verifyNSADeploy checks if the NSA fix commit has been deployed.
+// Flow: check ifcoid/download pages build is "built", then verify the latest commit
+// on main contains the fix_commit SHA in its message.
+func (s *BugBotMCPServer) verifyNSADeploy(ctx context.Context, fixCommit string) (bool, error) {
+	// Check if GitHub Pages build is "built"
+	pagesBuild, err := s.getPagesBuild(ctx, "ifcoid/download")
+	if err != nil {
+		return false, fmt.Errorf("failed to check pages build: %w", err)
+	}
+	if pagesBuild.Status != "built" {
+		return false, nil
+	}
+
+	// Check if the latest commit on main of ifcoid/download contains the fix_commit SHA
+	commitMsg, err := s.getCommitMessage(ctx, "ifcoid/download", "main")
+	if err != nil {
+		return false, fmt.Errorf("failed to check commit message: %w", err)
+	}
+
+	// The compile workflow creates commit message: "Update SLR backend binaries (commit: <NSA_SHA>)"
+	return strings.Contains(commitMsg, fixCommit), nil
+}
+
+// verifySLRDeploy checks if the SLR fix commit has been deployed.
+// For SLR: check if the Pages build commit SHA matches or is newer than fix_commit.
+func (s *BugBotMCPServer) verifySLRDeploy(ctx context.Context, fixCommit string) (bool, error) {
+	// Check if GitHub Pages build is "built"
+	pagesBuild, err := s.getPagesBuild(ctx, "ifcoid/slr")
+	if err != nil {
+		return false, fmt.Errorf("failed to check pages build: %w", err)
+	}
+	if pagesBuild.Status != "built" {
+		return false, nil
+	}
+
+	// For SLR, check if the pages build commit matches or contains the fix commit
+	// The pages build commit is the deployed commit - if it matches, it's deployed
+	if strings.HasPrefix(pagesBuild.Commit, fixCommit) || strings.HasPrefix(fixCommit, pagesBuild.Commit) {
+		return true, nil
+	}
+
+	// Also check if the latest commit message on slr/main references the fix commit
+	// or if the build happened after the fix (by checking if fix_commit is an ancestor)
+	// Simple approach: check the latest main commit
+	commitMsg, err := s.getCommitMessage(ctx, "ifcoid/slr", "main")
+	if err != nil {
+		// If we can't check the commit, just compare SHAs
+		return pagesBuild.Commit == fixCommit, nil
+	}
+
+	// If the build commit itself is the fix commit or contains reference to it
+	return strings.Contains(commitMsg, fixCommit) || pagesBuild.Commit == fixCommit, nil
+}
+
+// pagesBuildInfo represents the GitHub Pages build API response.
+type pagesBuildInfo struct {
+	Status string `json:"status"`
+	Commit string `json:"commit"`
+}
+
+// getPagesBuild fetches the latest GitHub Pages build status for a repository.
+func (s *BugBotMCPServer) getPagesBuild(ctx context.Context, repo string) (*pagesBuildInfo, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/pages/builds/latest", repo)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "nsa-bugbot")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub Pages API returned status %d", resp.StatusCode)
+	}
+
+	var build pagesBuildInfo
+	if err := json.NewDecoder(resp.Body).Decode(&build); err != nil {
+		return nil, fmt.Errorf("failed to decode pages build response: %w", err)
+	}
+	return &build, nil
+}
+
+// getCommitMessage fetches the commit message of the latest commit on a branch.
+func (s *BugBotMCPServer) getCommitMessage(ctx context.Context, repo string, branch string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, branch)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "nsa-bugbot")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub Commits API returned status %d", resp.StatusCode)
+	}
+
+	var commitResp struct {
+		Commit struct {
+			Message string `json:"message"`
+		} `json:"commit"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&commitResp); err != nil {
+		return "", fmt.Errorf("failed to decode commit response: %w", err)
+	}
+	return commitResp.Commit.Message, nil
+}
+
+// sendDeployNotification sends a Telegram message to the reporter notifying them of deploy.
+func (s *BugBotMCPServer) sendDeployNotification(ctx context.Context, ticket *model.BugTicket) error {
+	if ticket.ChatID == 0 {
+		return fmt.Errorf("ticket %s has no chat_id", ticket.ID.Hex())
+	}
+
+	message := fmt.Sprintf(
+		"\u2705 Bug Anda (Ref #%s) sudah diperbaiki dan tersedia di update terbaru. Silakan download di https://if.co.id/download",
+		ticket.ID.Hex(),
+	)
+
+	api := fmt.Sprintf("https://api.telegram.org/bot%s", s.token)
+	return s.sendMessage(ctx, api, ticket.ChatID, message)
+}
+
+// handleCheckStale returns tickets that have been "resolved" for more than 7 days without deploy.
+func (s *BugBotMCPServer) handleCheckStale(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	staleDuration := 7 * 24 * time.Hour
+	tickets, err := s.repo.GetStaleResolvedTickets(ctx, staleDuration)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to query stale tickets: %v", err)), nil
+	}
+
+	if len(tickets) == 0 {
+		return mcp.NewToolResultText("Tidak ada ticket yang stale (resolved > 7 hari tanpa deploy)."), nil
+	}
+
+	var lines []string
+	for _, t := range tickets {
+		resolvedStr := ""
+		if t.ResolvedAt != nil {
+			resolvedStr = t.ResolvedAt.Format("2006-01-02 15:04")
+		}
+		line := fmt.Sprintf("- #%s | Reporter: %s | Resolved: %s | FixCommit: %s | FixRepo: %s",
+			t.ID.Hex(), t.ReporterName, resolvedStr, t.FixCommit, t.FixRepo)
+		lines = append(lines, line)
+	}
+
+	header := fmt.Sprintf("Ditemukan %d ticket stale (resolved > 7 hari tanpa deploy):\n", len(tickets))
+	return mcp.NewToolResultText(header + strings.Join(lines, "\n")), nil
 }
 
 // --- Helper functions ---

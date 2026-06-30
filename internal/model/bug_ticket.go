@@ -18,12 +18,16 @@ type BugTicket struct {
 	Caption          string             `bson:"caption" json:"caption"`
 	FileName         string             `bson:"file_name" json:"file_name"`
 	FileID           string             `bson:"file_id" json:"file_id"`
-	Status           string             `bson:"status" json:"status"` // "open", "in_progress", "resolved", "closed"
+	Status           string             `bson:"status" json:"status"` // "open", "in_progress", "resolved", "deployed", "closed"
 	Replies          []BugTicketReply   `bson:"replies" json:"replies"`
 	CreatedAt        time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt        time.Time          `bson:"updated_at" json:"updated_at"`
 	ResolvedAt       *time.Time         `bson:"resolved_at,omitempty" json:"resolved_at,omitempty"`
 	RelatedCommit    string             `bson:"related_commit,omitempty" json:"related_commit,omitempty"`
+	FixCommit        string             `bson:"fix_commit,omitempty" json:"fix_commit,omitempty"`       // SHA commit containing the fix
+	FixRepo          string             `bson:"fix_repo,omitempty" json:"fix_repo,omitempty"`           // "nsa" or "slr" - which repo was fixed
+	DeployedAt       *time.Time         `bson:"deployed_at,omitempty" json:"deployed_at,omitempty"`     // when deploy was confirmed
+	NotifyFailed     bool               `bson:"notify_failed,omitempty" json:"notify_failed,omitempty"` // true if notification failed
 }
 
 // BugTicketReply represents an outbound reply sent to the bug reporter.
