@@ -59,15 +59,19 @@ func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLR
 		if dataDir == "" {
 			dataDir = "./bugbot-data"
 		}
-		bugbotSrv := nsamcp.NewBugBotMCPServer(bugToken, dataDir)
-		bugbotSSE := mcpserver.NewSSEServer(bugbotSrv.MCPServer,
-			mcpserver.WithSSEEndpoint("/api/mcp/bugbot/sse"),
-			mcpserver.WithMessageEndpoint("/api/mcp/bugbot/messages"),
-		)
-		bearerMW := middleware.BearerTokenMiddleware(bugToken)
-		mux.Handle("GET /api/mcp/bugbot/sse", bearerMW(bugbotSSE.SSEHandler()))
-		mux.Handle("POST /api/mcp/bugbot/messages", bearerMW(bugbotSSE.MessageHandler()))
-		log.Println("[router] BugBot MCP enabled at /api/mcp/bugbot/")
+		bugbotSrv, err := nsamcp.NewBugBotMCPServer(bugToken, dataDir)
+		if err != nil {
+			log.Printf("[router] BugBot MCP disabled: failed to initialize: %v", err)
+		} else {
+			bugbotSSE := mcpserver.NewSSEServer(bugbotSrv.MCPServer,
+				mcpserver.WithSSEEndpoint("/api/mcp/bugbot/sse"),
+				mcpserver.WithMessageEndpoint("/api/mcp/bugbot/messages"),
+			)
+			bearerMW := middleware.BearerTokenMiddleware(bugToken)
+			mux.Handle("GET /api/mcp/bugbot/sse", bearerMW(bugbotSSE.SSEHandler()))
+			mux.Handle("POST /api/mcp/bugbot/messages", bearerMW(bugbotSSE.MessageHandler()))
+			log.Println("[router] BugBot MCP enabled at /api/mcp/bugbot/")
+		}
 	}
 
 	return r

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -23,15 +24,21 @@ import (
 type BugBotMCPServer struct {
 	token     string
 	dataDir   string
+	mu        sync.Mutex // protects concurrent access to inbox.jsonl, offset, and solved.txt
 	MCPServer *server.MCPServer
 }
 
 // NewBugBotMCPServer creates a new BugBot MCP server with the given Telegram bot
 // token and data directory. It creates necessary directories and registers tools.
-func NewBugBotMCPServer(token string, dataDir string) *BugBotMCPServer {
+// Returns an error if the data directories cannot be created.
+func NewBugBotMCPServer(token string, dataDir string) (*BugBotMCPServer, error) {
 	// Ensure data directories exist
-	os.MkdirAll(dataDir, 0o755)
-	os.MkdirAll(filepath.Join(dataDir, "files"), 0o755)
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create bugbot data directory %s: %w", dataDir, err)
+	}
+	if err := os.MkdirAll(filepath.Join(dataDir, "files"), 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create bugbot files directory: %w", err)
+	}
 
 	mcpSrv := server.NewMCPServer(
 		"BugBot MCP",
@@ -46,7 +53,7 @@ func NewBugBotMCPServer(token string, dataDir string) *BugBotMCPServer {
 	}
 
 	s.registerTools()
-	return s
+	return s, nil
 }
 
 func (s *BugBotMCPServer) registerTools() {
@@ -77,6 +84,9 @@ func (s *BugBotMCPServer) registerTools() {
 // handlePoll calls Telegram getUpdates, processes messages, downloads files,
 // logs to inbox.jsonl, sends auto-reply, and updates the offset.
 func (s *BugBotMCPServer) handlePoll(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	api := fmt.Sprintf("https://api.telegram.org/bot%s", s.token)
 
 	// Read current offset
@@ -210,6 +220,9 @@ func (s *BugBotMCPServer) handlePoll(ctx context.Context, request mcp.CallToolRe
 
 // handleGetUnresolved reads inbox.jsonl and returns entries NOT in solved.txt.
 func (s *BugBotMCPServer) handleGetUnresolved(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	inboxPath := filepath.Join(s.dataDir, "inbox.jsonl")
 	solvedPath := filepath.Join(s.dataDir, "solved.txt")
 
@@ -293,6 +306,9 @@ func (s *BugBotMCPServer) handleReply(ctx context.Context, request mcp.CallToolR
 
 // handleMarkSolved appends an update_id to solved.txt.
 func (s *BugBotMCPServer) handleMarkSolved(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	args, ok := request.Params.Arguments.(map[string]interface{})
 	if !ok {
 		return mcp.NewToolResultError("invalid arguments"), nil
@@ -351,6 +367,8 @@ func (s *BugBotMCPServer) downloadFile(ctx context.Context, api string, updateID
 	if fileName == "" {
 		fileName = "report.txt"
 	}
+	// Sanitize fileName to prevent path traversal via malicious Telegram file names.
+	fileName = filepath.Base(fileName)
 	outPath := filepath.Join(s.dataDir, "files", fmt.Sprintf("%d_%s", updateID, fileName))
 	downloadURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", s.token, fileResp.Result.FilePath)
 

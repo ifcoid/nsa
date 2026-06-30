@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"strings"
 )
@@ -8,6 +9,10 @@ import (
 // BearerTokenMiddleware returns an HTTP middleware that validates the
 // Authorization header against a static expected token. It checks for
 // "Bearer <token>" format and returns 401 if missing or invalid.
+//
+// Design note: the caller passes BUGLAPOR_BOT_TOKEN as the expected token,
+// reusing a single secret for both Telegram API auth and MCP endpoint auth.
+// This is an intentional trade-off for deployment simplicity (one env var).
 func BearerTokenMiddleware(expectedToken string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +34,8 @@ func BearerTokenMiddleware(expectedToken string) func(http.Handler) http.Handler
 				return
 			}
 
-			if parts[1] != expectedToken {
+			// Use constant-time comparison to prevent timing side-channel attacks.
+			if subtle.ConstantTimeCompare([]byte(parts[1]), []byte(expectedToken)) != 1 {
 				sendJSONError(w, http.StatusUnauthorized, "Invalid token")
 				return
 			}
