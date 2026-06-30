@@ -2,7 +2,9 @@ package http
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"os"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"nsa/internal/delivery/http/middleware"
@@ -50,6 +52,24 @@ func NewRouter(mongoRepo *repository.MongoRepository, pipeline *orchestrator.SLR
 	}
 
 	r.registerRoutes()
+
+	// BugBot MCP (optional, only if BUGLAPOR_BOT_TOKEN is set)
+	if bugToken := os.Getenv("BUGLAPOR_BOT_TOKEN"); bugToken != "" {
+		dataDir := os.Getenv("BUGBOT_DATA_DIR")
+		if dataDir == "" {
+			dataDir = "./bugbot-data"
+		}
+		bugbotSrv := nsamcp.NewBugBotMCPServer(bugToken, dataDir)
+		bugbotSSE := mcpserver.NewSSEServer(bugbotSrv.MCPServer,
+			mcpserver.WithSSEEndpoint("/api/mcp/bugbot/sse"),
+			mcpserver.WithMessageEndpoint("/api/mcp/bugbot/messages"),
+		)
+		bearerMW := middleware.BearerTokenMiddleware(bugToken)
+		mux.Handle("GET /api/mcp/bugbot/sse", bearerMW(bugbotSSE.SSEHandler()))
+		mux.Handle("POST /api/mcp/bugbot/messages", bearerMW(bugbotSSE.MessageHandler()))
+		log.Println("[router] BugBot MCP enabled at /api/mcp/bugbot/")
+	}
+
 	return r
 }
 
