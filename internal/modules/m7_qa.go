@@ -289,6 +289,36 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 		time.Sleep(3 * time.Second)
 		s2, e2 := r2.AppraiseQuality(ctx, tool, cat, calibJustification, title, ft)
 
+		// Fail-fast SISTEMIK (sama spt full rating): provider down/overload (503)/stream
+		// kosong/context overflow akan GAGAL identik di tiap pilot paper. JANGAN biarkan
+		// kalibrasi grind 3× attempt × N pilot (lambat + RefinementNote menumpuk WARNING)
+		// lalu "force proceed" dgn kappa sampah — hentikan dengan gate yang bisa dipulihkan.
+		var calSysErr error
+		var calRater, calModel string
+		if isSystemicLLMError(e1) {
+			calSysErr, calRater, calModel = e1, "Reviewer 1", cal.R1Model
+		} else if isSystemicLLMError(e2) {
+			calSysErr, calRater, calModel = e2, "Reviewer 2", cal.R2Model
+		}
+		if calSysErr != nil {
+			hint := "perbaiki/ganti provider rater di Pengaturan LLM lalu Ulangi Kalibrasi"
+			switch {
+			case isServerOverloadError(calSysErr):
+				hint = "server provider sedang sibuk/overload (mis. 503/429) — tunggu beberapa menit lalu Ulangi Kalibrasi, atau ganti provider rater di Pengaturan LLM"
+			case isContextOverflowError(calSysErr):
+				hint = "prompt full-text melebihi context window model — pakai model dengan context lebih besar untuk rater QA, lalu Ulangi Kalibrasi"
+			case isLLMConnectivityError(calSysErr):
+				hint = "endpoint provider tak terjangkau — pastikan server/gateway LLM berjalan & base URL benar, lalu Ulangi Kalibrasi"
+			}
+			msg := fmt.Sprintf("Kalibrasi QA dihentikan pada pilot '%s': rater %s (%s) gagal sistemik — %s. Penyebab ini berulang di semua pilot, jadi dihentikan agar tak menumpuk kappa sampah. %s.",
+				clipErr(title), calRater, calModel, clipErr(calSysErr.Error()), hint)
+			session.QACalibration = cal
+			session.Status = "M7_STEP3_NEEDS_REVISION"
+			session.SystemError = msg
+			logger.Logf(session.ID, "      [HALT] %s\n", msg)
+			return m.deps.MongoRepo.UpdateSession(ctx, session)
+		}
+
 		pilot := model.QACalibrationPilot{
 			PaperID: doi,
 			Title:   title,
@@ -536,20 +566,34 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 				time.Sleep(3 * time.Second)
 				s2, e2 := r2.AppraiseQuality(ctx, tool, cat, justification, title, ft)
 				
-				isFatal := false
-				var fatalMsg string
-				if e1 != nil && strings.Contains(e1.Error(), "provider merespons dengan error") {
-					isFatal = true
-					fatalMsg = e1.Error()
-				} else if e2 != nil && strings.Contains(e2.Error(), "provider merespons dengan error") {
-					isFatal = true
-					fatalMsg = e2.Error()
+				// Fail-fast SISTEMIK: error yang akan BERULANG IDENTIK di tiap paper
+				// (provider down/refused, server 5xx/429/overload spt 503 gateway,
+				// stream kosong/context overflow, provider balas status error). Hentikan
+				// SEKARANG dengan gate yang bisa dipulihkan user — JANGAN grind menandai
+				// semua paper "ERROR" satu per satu (lambat + hasil sampah + terlihat
+				// "nyangkut di N/6"). Atribusi xAI: sebut rater + model + paper + penyebab.
+				var sysErr error
+				var sysRater, sysModel string
+				if isSystemicLLMError(e1) {
+					sysErr, sysRater, sysModel = e1, "Reviewer 1", r1Model
+				} else if isSystemicLLMError(e2) {
+					sysErr, sysRater, sysModel = e2, "Reviewer 2", r2Model
 				}
-
-				if isFatal {
+				if sysErr != nil {
+					hint := "perbaiki/ganti provider di Pengaturan LLM lalu jalankan ulang QA"
+					switch {
+					case isServerOverloadError(sysErr):
+						hint = "server provider sedang sibuk/overload (mis. 503/429) — tunggu beberapa menit lalu jalankan ulang QA, atau ganti provider rater di Pengaturan LLM"
+					case isContextOverflowError(sysErr):
+						hint = "prompt full-text melebihi context window model — pakai model dengan context lebih besar untuk rater QA di Pengaturan LLM, lalu jalankan ulang QA"
+					case isLLMConnectivityError(sysErr):
+						hint = "endpoint provider tak terjangkau — pastikan server/gateway LLM berjalan & base URL benar di Pengaturan LLM, lalu jalankan ulang QA"
+					}
+					msg := fmt.Sprintf("QA dihentikan pada paper '%s': rater %s (%s) gagal sistemik — %s. Penyebab ini akan berulang di SEMUA paper, jadi proses dihentikan agar tidak menghasilkan rating ERROR massal. %s.",
+						clipErr(title), sysRater, sysModel, clipErr(sysErr.Error()), hint)
 					session.Status = "M7_STEP3_NEEDS_REVISION"
-					session.SystemError = fatalMsg
-					logger.Logf(session.ID, "      [FATAL] %s\n", fatalMsg)
+					session.SystemError = msg
+					logger.Logf(session.ID, "      [HALT] %s\n", msg)
 					return m.deps.MongoRepo.UpdateSession(ctx, session)
 				}
 

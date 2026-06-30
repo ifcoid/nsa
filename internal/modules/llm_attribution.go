@@ -107,6 +107,42 @@ func isContextOverflowError(err error) bool {
 	return false
 }
 
+// isServerOverloadError menandai kegagalan SISI SERVER provider yang bersifat sementara &
+// SISTEMIK (akan berulang identik untuk tiap item): 5xx (mis. 503 Service Unavailable dari
+// gateway inference user), 429/rate-limit, atau "overloaded". Beda dari connectivity (server
+// tak terjangkau sama sekali) — di sini server MEMBALAS tapi sedang tak sanggup melayani.
+func isServerOverloadError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	for _, sig := range []string{
+		"503", "502", "500", "504", "service unavailable", "bad gateway",
+		"internal server error", "gateway timeout", "overloaded", "overload",
+		"429", "rate limit", "rate-limit", "too many requests", "quota",
+	} {
+		if strings.Contains(s, sig) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSystemicLLMError menandai kegagalan yang akan BERULANG IDENTIK untuk SETIAP item (paper):
+// provider tak terjangkau (connectivity), server provider 5xx/429/overload, stream kosong /
+// context window terlampaui, atau provider membalas status error. Dipakai di hot-loop seperti
+// QA dual-rater untuk FAIL-FAST + buka gate yang bisa dipulihkan user — alih-alih menandai
+// SEMUA paper "ERROR" satu per satu (lambat, hasil sampah, terlihat "nyangkut").
+func isSystemicLLMError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if isLLMConnectivityError(err) || isServerOverloadError(err) || isContextOverflowError(err) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "provider merespons dengan error")
+}
+
 // llmError membungkus error pemanggilan LLM dengan atribusi xAI yang konsisten:
 // "<aksi> gagal via role <Role> (<provider (model)>): <err> — periksa provider <Role>
 // di Pengaturan LLM (API key, nama model, kuota/limit)". `role` adalah kunci role internal
