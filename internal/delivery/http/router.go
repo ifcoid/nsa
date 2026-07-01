@@ -159,6 +159,9 @@ func (r *Router) registerRoutes() {
 	// Modul 7 QA Recalculation
 	protected.HandleFunc("POST /api/sessions/{id}/m7/recalculate-qa", r.sessionHndlr.RecalculateQA)
 
+	// Modul 7 QA jalankan-ulang seluruh proses (tool → kalibrasi → rating), ekstraksi dipertahankan
+	protected.HandleFunc("POST /api/sessions/{id}/m7/rerun-qa", r.sessionHndlr.RerunQA)
+
 	// Modul 7 QA Re-rate single paper
 	protected.HandleFunc("POST /api/sessions/{id}/m7/rerate-paper", r.sessionHndlr.ReratePaper)
 

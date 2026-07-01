@@ -2676,6 +2676,93 @@ func (h *SessionHandler) RecalculateQA(w http.ResponseWriter, req *http.Request)
 	})
 }
 
+// RerunQA menjalankan ULANG SELURUH proses QA (Modul 7 Langkah 3) dari awal — tool selection
+// → kalibrasi (anchor + pilot + kappa) → full rating — sambil MEMPERTAHANKAN data ekstraksi
+// (framework + fields[] + full-text). Beda dari:
+//   - Recalculate ERROR: hanya paper ERROR ber-skor lengkap.
+//   - Lanjutkan QA: hanya menilai paper yang belum ter-rating (skor lama dipertahankan).
+//   - Drop Modul 7: menghapus JUGA data ekstraksi (jauh lebih destruktif).
+//
+// Dipakai user untuk memperbaiki panduan/rubrik rater & mendapat kappa yang lebih baik tanpa
+// mengulang ekstraksi PDF. Validitas: QA appraisal terpisah dari protokol ekstraksi — mengulang
+// penilaian TIDAK menyentuh data-item/framework (lihat CLAUDE.md "Validitas metodologi").
+// POST /api/sessions/{id}/m7/rerun-qa
+func (h *SessionHandler) RerunQA(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+
+	// Hanya di fase QA (M7_STEP3), SEBELUM QA di-approve ke sintesis. Bila sudah di M7_STEP4+,
+	// artefak sintesis/GRADE sudah bergantung pada QA — arahkan user memakai revisi/Drop.
+	if !strings.Contains(session.Status, "M7_STEP3") {
+		sendJSONError(w, http.StatusBadRequest, fmt.Sprintf("Jalankan-ulang QA hanya tersedia di fase QA (M7_STEP3). Status sekarang: %s. Bila sudah lewat, pakai tombol revisi Modul 7.", session.Status))
+		return
+	}
+
+	// 1) Bersihkan SELURUH state QA di sesi (threshold, kalibrasi, sensitivity, ringkasan) agar
+	//    runQAL3 memulai lagi dari tool selection (QAThreshold==nil) → kalibrasi (QACalibration==nil).
+	sessionColl := h.mongoRepo.GetSessionCollection()
+	_, err = sessionColl.UpdateOne(ctx, bson.M{"_id": id}, bson.M{
+		"$unset": bson.M{
+			"qa_threshold":               "",
+			"qa_threshold_justification": "",
+			"qa_calibration":             "",
+			"sensitivity_analysis":       "",
+			"synthesis_prep":             "",
+			"modul7_summary":             "",
+		},
+		"$set": bson.M{"status": "M7_STEP3_QA"},
+	})
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mereset state QA sesi")
+		return
+	}
+
+	// 2) Bersihkan SEMUA field QA per-paper (skor R1/R2, kategori, flag pilot) TANPA menyentuh
+	//    data ekstraksi (extracted/verified/fields[]/coverage tetap utuh).
+	coll := h.mongoRepo.GetExtractionCollection()
+	_, err = coll.UpdateMany(ctx, bson.M{"session_id": id}, bson.M{
+		"$unset": bson.M{
+			"qa_rated":             "",
+			"qa_total_score":       "",
+			"qa_final_category":    "",
+			"qa_calibration_pilot": "",
+			"qa_r1_score":          "",
+			"qa_r1_category":       "",
+			"qa_r1_reasoning":      "",
+			"qa_r1_evidence":       "",
+			"qa_r1_model":          "",
+			"qa_r2_score":          "",
+			"qa_r2_category":       "",
+			"qa_r2_reasoning":      "",
+			"qa_r2_evidence":       "",
+			"qa_r2_model":          "",
+		},
+	})
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal mereset field QA per-paper")
+		return
+	}
+
+	logger.Logf(id, "   [Rerun QA] User menjalankan ulang SELURUH proses QA dari awal (tool → kalibrasi → rating). Data ekstraksi dipertahankan.\n")
+
+	// 3) Picu pipeline (async) — sama seperti ResetModul7.
+	h.pipeline.ExecuteAsync(ctx, id)
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": "Seluruh proses QA dijalankan ulang dari awal (tool selection → kalibrasi → rating). Data ekstraksi dipertahankan. Pantau progres di Live Log.",
+	})
+}
+
 // ReratePaper re-rates a single paper using dual raters.
 // POST /api/sessions/{id}/m7/rerate-paper
 func (h *SessionHandler) ReratePaper(w http.ResponseWriter, req *http.Request) {
