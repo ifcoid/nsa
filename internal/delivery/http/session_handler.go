@@ -2601,6 +2601,28 @@ func similarityRatio(s1, s2 string) float64 {
 	return 1.0 - float64(dist)/float64(maxLen)
 }
 
+// ListSessions mengembalikan ringkasan semua sesi (id, topic, status, updated_at) urut
+// terbaru dulu — untuk picker "pilih sesi" setelah login. Resilient terhadap Mongo flaky.
+func (h *SessionHandler) ListSessions(w http.ResponseWriter, req *http.Request) {
+	var summaries []repository.SessionSummary
+	var err error
+	// Retry ringan: koneksi Atlas bisa timeout intermiten (kasus balqis/Salwa) — read berikut
+	// sering sukses pakai koneksi pool lain. Jangan langsung 503 pada gagal pertama.
+	for attempt := 0; attempt < 3; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		summaries, err = h.mongoRepo.ListSessions(ctx)
+		cancel()
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		sendJSONError(w, http.StatusServiceUnavailable, "Database timeout, silakan coba lagi")
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"sessions": summaries})
+}
+
 // RecalculateQA recalculates ERROR papers that have valid R1+R2 scores without
 // restarting the full QA pipeline. Only works when session is at M7_STEP3.
 func (h *SessionHandler) RecalculateQA(w http.ResponseWriter, req *http.Request) {
@@ -2623,19 +2645,32 @@ func (h *SessionHandler) RecalculateQA(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	fixedCount, err := modules.RecalculateQAErrors(ctx, h.mongoRepo, session)
+	fixedCount, needRerate, err := modules.RecalculateQAErrors(ctx, h.mongoRepo, session)
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Recalculation failed: %v", err))
 		return
 	}
 
-	msg := fmt.Sprintf("Recalculated %d ERROR papers with valid R1+R2 scores", fixedCount)
-	if fixedCount == 0 {
-		msg = "No ERROR papers found with valid R1+R2 scores to recalculate"
+	// Pesan actionable (xAI): jangan buntu "0 found". Bedakan tiga keadaan —
+	// (a) ada yang berhasil di-recalculate, (b) tak ada yang bisa di-recalculate TAPI ada paper
+	// ERROR yang gagal dinilai (rater tak menghasilkan skor) → arahkan ke "Lanjutkan QA",
+	// (c) memang tak ada paper ERROR sama sekali → sudah bersih, tinggal Approve.
+	var msg string
+	switch {
+	case fixedCount > 0:
+		msg = fmt.Sprintf("Berhasil recalculate %d paper ERROR yang punya skor R1+R2 lengkap.", fixedCount)
+		if needRerate > 0 {
+			msg += fmt.Sprintf(" Masih ada %d paper ERROR yang gagal dinilai (salah satu/kedua rater tak menghasilkan skor) — klik '▶️ Lanjutkan QA (Hanya Sisa PDF)' untuk menilai ulang paper tersebut.", needRerate)
+		}
+	case needRerate > 0:
+		msg = fmt.Sprintf("Tidak ada paper yang bisa di-recalculate. Ada %d paper ERROR yang gagal dinilai karena salah satu/kedua rater tak menghasilkan skor (mis. provider LLM error/timeout/overload saat QA). Recalculate HANYA memperbaiki paper yang sudah punya skor R1 & R2 lengkap. Untuk menilai ulang paper ERROR ini: klik '▶️ Lanjutkan QA (Hanya Sisa PDF)', atau perbaiki/ganti provider rater di Pengaturan LLM lalu jalankan ulang QA. Bila dibiarkan, paper ERROR diperlakukan UNRATED dan dikecualikan dari sintesis.", needRerate)
+	default:
+		msg = "Tidak ada paper ERROR — semua paper sudah berhasil dinilai. Anda bisa langsung Approve untuk lanjut ke Modul 8."
 	}
 
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"fixed_count": fixedCount,
+		"need_rerate": needRerate,
 		"message":     msg,
 		"kappa":       session.QAThreshold.Kappa,
 	})

@@ -105,6 +105,43 @@ func (r *MongoRepository) ListResumableSessions(ctx context.Context) ([]string, 
 	return ids, nil
 }
 
+// SessionSummary = ringkasan satu sesi untuk daftar/picker (bukan dokumen penuh).
+type SessionSummary struct {
+	ID        string    `json:"id" bson:"_id"`
+	Topic     string    `json:"topic" bson:"topic"`
+	Status    string    `json:"status" bson:"status"`
+	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
+}
+
+// ListSessions mengembalikan ringkasan SEMUA sesi (id, topic, status, updated_at), urut
+// terbaru dulu. Ringan (projeksi field kecil) — dipakai picker "pilih sesi" setelah login.
+// Backend bersifat per-user/lokal (satu DB = sesi milik user itu), jadi mendaftar semua sesi
+// di DB ini aman & tidak membocorkan data tenant lain.
+func (r *MongoRepository) ListSessions(ctx context.Context) ([]SessionSummary, error) {
+	collection := r.client.Database(r.dbName).Collection("slr_sessions")
+	opts := options.Find().
+		SetProjection(bson.M{"_id": 1, "topic": 1, "status": 1, "updated_at": 1}).
+		SetSort(bson.D{{Key: "updated_at", Value: -1}})
+	cur, err := collection.Find(ctx, bson.M{}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	out := []SessionSummary{}
+	for cur.Next(ctx) {
+		var s SessionSummary
+		if cur.Decode(&s) != nil {
+			continue
+		}
+		// Lewati sesi probe internal (e2e) agar tak muncul di daftar user.
+		if strings.HasPrefix(s.ID, "__") && strings.HasSuffix(s.ID, "__") {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out, cur.Err()
+}
+
 func isResumableStatus(status string) bool {
 	if status == "" || status == "INIT" || status == "COMPLETED" {
 		return false

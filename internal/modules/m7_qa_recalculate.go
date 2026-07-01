@@ -13,33 +13,41 @@ import (
 
 // RecalculateQAErrors fixes papers stuck in ERROR that have valid R1 AND R2 scores.
 // It recalculates the final category and score, then recomputes kappa and sensitivity
-// for the session. Returns the number of papers fixed.
-func RecalculateQAErrors(ctx context.Context, mongoRepo *repository.MongoRepository, session *model.SLRSession) (int, error) {
+// for the session.
+//
+// Returns (fixed, needRerate): `fixed` = ERROR papers salvaged (both scores present, only
+// the final category was missing); `needRerate` = ERROR papers that CANNOT be recalculated
+// because at least one rater produced no score (mis. provider LLM gagal/timeout). A paper is
+// set to ERROR *justru karena* skornya tak lengkap (lihat m7_qa.go), jadi recalc yang
+// mensyaratkan kedua skor >0 memang tak akan menyentuhnya — paper begitu HARUS dinilai ulang
+// ("Lanjutkan QA"), bukan di-recalculate. Kedua angka dikembalikan agar handler bisa memberi
+// pesan yang actionable (xAI), bukan buntu "0 fixed".
+func RecalculateQAErrors(ctx context.Context, mongoRepo *repository.MongoRepository, session *model.SLRSession) (int, int, error) {
 	if session.QAThreshold == nil {
-		return 0, fmt.Errorf("session has no QA threshold configured")
+		return 0, 0, fmt.Errorf("session has no QA threshold configured")
 	}
 
 	coll := mongoRepo.GetExtractionCollection()
 	cat := session.QAThreshold.Categorization
 	thr := session.QAThreshold.Threshold
 
-	// Find papers with qa_final_category = "ERROR" AND valid R1+R2 scores
+	// Ambil SEMUA paper qa_final_category = "ERROR" (tanpa syarat skor), lalu pilah:
+	// yang punya kedua skor -> bisa di-recalculate; yang tak lengkap -> perlu re-rating.
 	errCur, err := coll.Find(ctx, bson.M{
 		"session_id":        session.ID,
 		"qa_final_category": "ERROR",
-		"qa_r1_score":       bson.M{"$gt": 0},
-		"qa_r2_score":       bson.M{"$gt": 0},
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to query ERROR papers: %w", err)
+		return 0, 0, fmt.Errorf("failed to query ERROR papers: %w", err)
 	}
 
 	var errDocs []bson.M
 	if err := errCur.All(ctx, &errDocs); err != nil {
-		return 0, fmt.Errorf("failed to decode ERROR papers: %w", err)
+		return 0, 0, fmt.Errorf("failed to decode ERROR papers: %w", err)
 	}
 
 	fixedCount := 0
+	needRerate := 0
 	for _, ep := range errDocs {
 		r1sc, r1ok := toFloat(ep["qa_r1_score"])
 		r2sc, r2ok := toFloat(ep["qa_r2_score"])
@@ -56,13 +64,16 @@ func RecalculateQAErrors(ctx context.Context, mongoRepo *repository.MongoReposit
 				logger.Logf(session.ID, "      [Recalc] Fixed ERROR paper %s: R1=%.1f R2=%.1f avg=%.1f -> %s\n",
 					getStr(ep, "DOI", "doi"), r1sc, r2sc, avg, newCat)
 			}
+		} else {
+			// Skor tak lengkap: recalc tak bisa menolong; paper ini butuh dinilai ulang.
+			needRerate++
 		}
 	}
 
 	// Recompute kappa and sensitivity from all papers
 	allCur, err := coll.Find(ctx, bson.M{"session_id": session.ID})
 	if err != nil {
-		return fixedCount, fmt.Errorf("failed to query all papers for kappa: %w", err)
+		return fixedCount, needRerate, fmt.Errorf("failed to query all papers for kappa: %w", err)
 	}
 	var allDocs []bson.M
 	_ = allCur.All(ctx, &allDocs)
@@ -95,11 +106,11 @@ func RecalculateQAErrors(ctx context.Context, mongoRepo *repository.MongoReposit
 
 	// Persist session updates
 	if err := mongoRepo.UpdateSession(ctx, session); err != nil {
-		return fixedCount, fmt.Errorf("failed to update session: %w", err)
+		return fixedCount, needRerate, fmt.Errorf("failed to update session: %w", err)
 	}
 
-	logger.Logf(session.ID, "   [Recalc] Completed: %d papers fixed, kappa=%.3f, sensitivity=%s\n",
-		fixedCount, kappa, session.SensitivityAnalysis.Verdict)
+	logger.Logf(session.ID, "   [Recalc] Completed: %d fixed, %d perlu re-rating, kappa=%.3f, sensitivity=%s\n",
+		fixedCount, needRerate, kappa, session.SensitivityAnalysis.Verdict)
 
-	return fixedCount, nil
+	return fixedCount, needRerate, nil
 }

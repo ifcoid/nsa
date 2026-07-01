@@ -117,6 +117,7 @@ func (r *Router) registerRoutes() {
 	protected := http.NewServeMux()
 
 	// Session endpoints
+	protected.HandleFunc("GET /api/sessions", r.sessionHndlr.ListSessions)
 	protected.HandleFunc("POST /api/sessions", r.sessionHndlr.CreateSession)
 	protected.HandleFunc("POST /api/sessions/{id}/resume", r.sessionHndlr.ResumeSession)
 	protected.HandleFunc("GET /api/sessions/{id}", r.sessionHndlr.GetSession)
