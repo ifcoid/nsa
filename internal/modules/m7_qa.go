@@ -154,7 +154,7 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 		if err != nil {
 			return m.deps.llmError(ctx, "brain", "Memuat client QA anchors", err)
 		}
-		anchors, err := agent.NewExtractionAgent(brain).GenerateQAAnchors(ctx, tool, cat, justification)
+		anchors, err := agent.NewExtractionAgent(brain).GenerateQAAnchors(ctx, tool, cat, justification, buildQAResearchContext(session))
 		if err != nil {
 			return m.deps.llmError(ctx, "brain", "Generate QA anchors", err)
 		}
@@ -422,6 +422,43 @@ func computePilotKappa(pilots []model.QACalibrationPilot) float64 {
 		}
 	}
 	return cohensKappa(total, bothPass, bothFail, r1PassR2Fail, r1FailR2Pass)
+}
+
+// buildQAResearchContext merangkai konteks riset (topik + PICO + kolom framework) dari DATA
+// sesi agar anchor kalibrasi QA di-grounding ke DOMAIN riset user — bukan contoh generik
+// sosiologi/pendidikan. Multi-tenant: semua nilai berasal dari sesi (bisa diedit user), tanpa
+// hardcode aturan review-spesifik (lih. CLAUDE.md invariant Multi-tenant).
+func buildQAResearchContext(session *model.SLRSession) string {
+	var sb strings.Builder
+	if t := strings.TrimSpace(session.Topic); t != "" {
+		sb.WriteString("Judul/Topik riset: " + t + "\n")
+	}
+	if p := session.PICODefinitions; p != nil {
+		if v := strings.TrimSpace(p.P.Value); v != "" {
+			sb.WriteString("Population/Problem (P): " + v + "\n")
+		}
+		if v := strings.TrimSpace(p.I.Value); v != "" {
+			sb.WriteString("Intervention/Interest (I): " + v + "\n")
+		}
+		if v := strings.TrimSpace(p.C.Value); v != "" {
+			sb.WriteString("Comparison (C): " + v + "\n")
+		}
+		if v := strings.TrimSpace(p.O.Value); v != "" {
+			sb.WriteString("Outcome (O): " + v + "\n")
+		}
+	}
+	if fs := session.FrameworkSelection; fs != nil && len(fs.Columns) > 0 {
+		var cols []string
+		for _, c := range fs.Columns {
+			if n := strings.TrimSpace(c.Key); n != "" {
+				cols = append(cols, n)
+			}
+		}
+		if len(cols) > 0 {
+			sb.WriteString("Item data yang diekstrak (framework): " + strings.Join(cols, ", ") + "\n")
+		}
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 // formatAnchorContext formats anchor examples into a string for inclusion in prompts.

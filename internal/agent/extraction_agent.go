@@ -282,16 +282,31 @@ Keluarkan HANYA JSON MURNI tanpa markdown. Buka dengan '{' dan tutup dengan '}':
 
 // GenerateQAAnchors asks the brain LLM to produce 3 synthetic anchor examples (HIGH, MODERATE, LOW)
 // for calibrating the QA raters before full rating begins.
-func (a *ExtractionAgent) GenerateQAAnchors(ctx context.Context, tool, categorization, justification string) ([]model.QAAnchorExample, error) {
+func (a *ExtractionAgent) GenerateQAAnchors(ctx context.Context, tool, categorization, justification, researchContext string) ([]model.QAAnchorExample, error) {
+	rc := strings.TrimSpace(researchContext)
+	if rc == "" {
+		rc = "(konteks riset tidak tersedia — gunakan domain yang tersirat dari TOOL & JUSTIFIKASI di atas)"
+	}
 	systemPrompt := fmt.Sprintf(`Anda adalah ahli metodologi SLR yang bertugas membuat CONTOH ANCHOR (kalibrasi) untuk quality appraisal.
 
 TOOL yang digunakan: %s
 KATEGORISASI: %s
 JUSTIFIKASI TOOL: %s
 
+=== KONTEKS RISET (DOMAIN) — WAJIB DIPATUHI ===
+%s
+
 TUGAS: Buat 3 contoh sintetis (fictional) paper yang masing-masing mewakili kategori HIGH, MODERATE, dan LOW.
+
+ATURAN DOMAIN (KRITIS):
+- Ketiga contoh paper HARUS berada DALAM DOMAIN riset di atas (topik, populasi/dataset,
+  intervensi/metode, dan outcome yang RELEVAN dengan riset ini). JANGAN memakai contoh dari
+  domain lain (mis. sosiologi/pendidikan/gamifikasi/ANOVA) bila riset ini bukan tentang itu.
+- Pakai terminologi, desain studi, dataset, metrik validasi, dan istilah teknis yang KHAS
+  domain riset di atas, agar rater menilai paper NYATA di domain ini secara konsisten.
+
 Setiap contoh harus berisi:
-- Deskripsi singkat paper sintetis (1-2 kalimat tentang desain, metode, dan temuan)
+- Deskripsi singkat paper sintetis (1-2 kalimat tentang desain, metode, dan temuan) DI DOMAIN riset
 - Skor yang diharapkan (0-100, sesuai dengan kategorisasi di atas)
 - Penjelasan mengapa paper tersebut masuk kategori itu berdasarkan kriteria tool
 
@@ -302,7 +317,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
   {"category": "HIGH", "description": "...", "score": 85, "reasoning": "..."},
   {"category": "MODERATE", "description": "...", "score": 72, "reasoning": "..."},
   {"category": "LOW", "description": "...", "score": 45, "reasoning": "..."}
-]`, tool, categorization, justification)
+]`, tool, categorization, justification, rc)
 
 	userPrompt := "Buat 3 anchor examples (HIGH, MODERATE, LOW) berdasarkan tool dan kategorisasi di atas."
 
