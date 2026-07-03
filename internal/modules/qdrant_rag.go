@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -14,6 +15,51 @@ import (
 	"time"
 	"unicode"
 )
+
+// ResolveQdrantURL membaca QDRANT_URL (fallback QDRANT_ENDPOINT) lalu menormalkannya.
+// Semua jalur baca Qdrant (Sync, RAG, index) HARUS lewat sini agar konsisten.
+func ResolveQdrantURL() string {
+	u := os.Getenv("QDRANT_URL")
+	if u == "" {
+		u = os.Getenv("QDRANT_ENDPOINT")
+	}
+	return NormalizeQdrantURL(u)
+}
+
+// NormalizeQdrantURL self-heal kesalahan konfigurasi paling umum: Qdrant Cloud
+// menyajikan REST API di port 6333, tetapi user sering menyalin hostname dari
+// dashboard TANPA port — sehingga default ke 443 dan connect-nya TIMEOUT. Untuk host
+// *.cloud.qdrant.io tanpa port eksplisit, tambahkan :6333. Juga buang trailing slash
+// agar tidak jadi `//collections`. Host non-cloud dibiarkan apa adanya (bisa saja
+// sengaja di-proxy pada 443).
+func NormalizeQdrantURL(u string) string {
+	u = strings.TrimRight(strings.TrimSpace(u), "/")
+	if u == "" {
+		return u
+	}
+	parsed, err := url.Parse(u)
+	if err != nil || parsed.Host == "" {
+		return u
+	}
+	if parsed.Port() == "" && strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".cloud.qdrant.io") {
+		parsed.Host = parsed.Hostname() + ":6333"
+		return strings.TrimRight(parsed.String(), "/")
+	}
+	return u
+}
+
+// QdrantEndpointForMsg mengembalikan scheme://host:port (TANPA path/query/kredensial)
+// untuk dipakai di pesan error yang dilihat user — aman, tak membocorkan api-key.
+func QdrantEndpointForMsg(u string) string {
+	if u == "" {
+		return "(kosong)"
+	}
+	parsed, err := url.Parse(u)
+	if err != nil || parsed.Host == "" {
+		return u
+	}
+	return parsed.Scheme + "://" + parsed.Host
+}
 
 const maxFulltextChars = 24000 // budget konteks RAG screening (top-k) per paper
 const maxExtractChars = 48000  // budget konteks EKSTRAKSI M7 (lebih besar: Results/Discussion wajib utuh)
@@ -77,10 +123,7 @@ func BuildFulltextIndexCached(ctx context.Context) (map[string]string, bool, err
 }
 
 func BuildFulltextIndex(ctx context.Context) (index map[string]string, available bool, err error) {
-	qdrantURL := os.Getenv("QDRANT_URL")
-	if qdrantURL == "" {
-		qdrantURL = os.Getenv("QDRANT_ENDPOINT")
-	}
+	qdrantURL := ResolveQdrantURL()
 	if qdrantURL == "" {
 		return nil, false, nil // RAG tidak tersedia
 	}
@@ -544,10 +587,7 @@ func titleSim(a, b string) float64 {
 // kosong pakai article_id), dan menyiapkan indeks fallback kemiripan judul.
 // available=false bila Qdrant belum dikonfigurasi.
 func BuildFulltextRAG(ctx context.Context) (rag *FulltextRAG, available bool, err error) {
-	qdrantURL := os.Getenv("QDRANT_URL")
-	if qdrantURL == "" {
-		qdrantURL = os.Getenv("QDRANT_ENDPOINT")
-	}
+	qdrantURL := ResolveQdrantURL()
 	if qdrantURL == "" {
 		return nil, false, nil
 	}

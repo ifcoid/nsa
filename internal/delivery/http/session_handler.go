@@ -1240,7 +1240,7 @@ func (h *SessionHandler) DeleteQdrantPaper(w http.ResponseWriter, req *http.Requ
 	}
 
 	// 1. Panggil API Qdrant Delete
-	qdrantURL := os.Getenv("QDRANT_URL")
+	qdrantURL := modules.ResolveQdrantURL()
 	qdrantKey := os.Getenv("QDRANT_API_KEY")
 	if qdrantURL != "" {
 		var filterKey string
@@ -1720,11 +1720,9 @@ func (h *SessionHandler) GetSyncQdrantResult(w http.ResponseWriter, req *http.Re
 // doSyncQdrant = pekerjaan berat Sync-Qdrant di background. Kembalikan (synced, qdrantUnique,
 // mongoPapers, error) — bukan tulis HTTP.
 func (h *SessionHandler) doSyncQdrant(ctx context.Context, id string, session *model.SLRSession) (int, int, int, error) {
-	// Qdrant Configuration
-	qdrantURL := os.Getenv("QDRANT_URL")
-	if qdrantURL == "" {
-		qdrantURL = os.Getenv("QDRANT_ENDPOINT")
-	}
+	// Qdrant Configuration (env: QDRANT_URL / QDRANT_ENDPOINT + QDRANT_API_KEY).
+	// ResolveQdrantURL self-heal: tambah :6333 utk host *.cloud.qdrant.io tanpa port.
+	qdrantURL := modules.ResolveQdrantURL()
 	qdrantKey := os.Getenv("QDRANT_API_KEY")
 	if qdrantURL == "" {
 		// Mock testing mode jika environment Qdrant belum diset
@@ -1786,7 +1784,15 @@ func (h *SessionHandler) doSyncQdrant(ctx context.Context, id string, session *m
 
 			resp, err := client.Do(reqQdrant)
 			if err != nil {
-				return 0, 0, 0, fmt.Errorf("gagal terhubung ke Qdrant: %w", err)
+				keyState := "terisi"
+				if qdrantKey == "" {
+					keyState = "KOSONG"
+				}
+				return 0, 0, 0, fmt.Errorf("gagal terhubung ke Qdrant di %s (dibaca dari env var QDRANT_URL/QDRANT_ENDPOINT; QDRANT_API_KEY %s). "+
+					"Periksa: (1) URL WAJIB menyertakan port :6333 — mis. https://<id>.<region>.gcp.cloud.qdrant.io:6333 (tanpa port, koneksi ke 443 akan timeout); "+
+					"(2) cluster berstatus Running di dashboard cloud.qdrant.io (free-tier auto-suspend/hapus bila lama idle); "+
+					"(3) QDRANT_API_KEY cocok dengan cluster tsb. Backend lokal membaca ini dari file .env di folder tempat binary dijalankan (atau environment OS). Detail: %w",
+					modules.QdrantEndpointForMsg(qdrantURL), keyState, err)
 			}
 
 			if resp.StatusCode != 200 {
