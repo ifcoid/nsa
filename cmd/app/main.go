@@ -13,6 +13,7 @@ import (
 	httpapi "nsa/internal/delivery/http"
 	"nsa/internal/llm"
 	"nsa/internal/model"
+	"nsa/internal/modules"
 	"nsa/internal/orchestrator"
 	"nsa/internal/repository"
 
@@ -116,6 +117,11 @@ func main() {
 		}
 	}
 
+	// 4b. Pre-flight Qdrant (NON-FATAL): saat pertama dijalankan, beri tahu apakah
+	// Qdrant benar-benar bisa dihubungi — supaya user backend-lokal langsung tahu
+	// konfigurasi QDRANT_URL/API_KEY-nya benar/tidak TANPA harus sampai gagal di Sync.
+	checkQdrantStartup()
+
 	// 5. Inisialisasi Main Orchestrator (State Machine Pipeline)
 	// Kita perbarui pipeline agar menerima factory dinamis dan neo4j
 	pipeline := orchestrator.NewSLRPipeline(mongoRepo, llmFactory, neo4jRepo, neo4jConnErr)
@@ -147,6 +153,45 @@ func main() {
 	fmt.Println("\n====================================================")
 	fmt.Println("          SERVER BERHENTI                           ")
 	fmt.Println("====================================================")
+}
+
+// checkQdrantStartup melakukan probe konektivitas Qdrant saat startup (NON-FATAL) lalu
+// mencetak status yang jelas. Tujuannya: user backend-lokal langsung tahu apakah
+// QDRANT_URL/QDRANT_API_KEY sudah benar & cluster hidup, tanpa menunggu sampai Sync/RAG
+// gagal. Reuse normalisasi URL (self-heal :6333) dari package modules agar konsisten.
+func checkQdrantStartup() {
+	qURL := modules.ResolveQdrantURL()
+	if qURL == "" {
+		fmt.Println("⚠️  [Qdrant] QDRANT_URL/QDRANT_ENDPOINT belum diset — Sync Qdrant & RAG full-text NONAKTIF. Set di file .env bila butuh full-text.")
+		return
+	}
+	endpoint := modules.QdrantEndpointForMsg(qURL)
+	client := &http.Client{Timeout: 12 * time.Second}
+	req, err := http.NewRequest("GET", qURL+"/collections", nil)
+	if err != nil {
+		fmt.Printf("⚠️  [Qdrant] URL tidak valid (%s): %v\n", endpoint, err)
+		return
+	}
+	if key := os.Getenv("QDRANT_API_KEY"); key != "" {
+		req.Header.Set("api-key", key)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("❌ [Qdrant] TIDAK bisa dihubungi di %s: %v\n", endpoint, err)
+		fmt.Println("   → Sync/RAG akan gagal sampai diperbaiki. Cek: (1) URL menyertakan :6333; (2) cluster Running di cloud.qdrant.io; (3) QDRANT_API_KEY cocok.")
+		return
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == 200:
+		fmt.Printf("✅ [Qdrant] Terhubung di %s.\n", endpoint)
+	case resp.StatusCode == 401 || resp.StatusCode == 403:
+		fmt.Printf("❌ [Qdrant] Terhubung ke %s tapi API key DITOLAK (HTTP %d). Periksa QDRANT_API_KEY di .env.\n", endpoint, resp.StatusCode)
+	case resp.StatusCode == 404:
+		fmt.Printf("❌ [Qdrant] Cluster TIDAK DITEMUKAN di %s (HTTP 404). Cluster mungkin di-suspend/dihapus, atau URL salah. Cek dashboard cloud.qdrant.io.\n", endpoint)
+	default:
+		fmt.Printf("⚠️  [Qdrant] %s membalas HTTP %d (tak terduga). Sync/RAG mungkin bermasalah.\n", endpoint, resp.StatusCode)
+	}
 }
 
 // seedInitialData bertugas mengisi data default ke MongoDB agar sistem portabel langsung jalan
