@@ -1,5 +1,12 @@
 package model
 
+import (
+	"bytes"
+	"encoding/json"
+	"sort"
+	"strings"
+)
+
 // ===== Modul 8b: Bibliometric / SLNA (opsional) =====
 
 // BibliometricData = output L1 (data prep + thesaurus).
@@ -28,6 +35,75 @@ type ClusterInterpretation struct {
 type SLNAIntegration struct {
 	Markdown       string `bson:"markdown" json:"markdown"`
 	ConvergentGaps string `bson:"convergent_gaps" json:"convergent_gaps"`
+}
+
+// UnmarshalJSON toleran terhadap non-determinisme LLM: field yang SEHARUSNYA string
+// kadang dikembalikan sebagai ARRAY atau OBJECT (mis. convergent_gaps: [...] → dulu
+// crash "cannot unmarshal array into ... of type string", lapor balqis M8B_STEP4).
+// Juga MENYELAMATKAN markdown kosong: sebagian model menaruh tabel di key lain
+// (mis. tabel_validasi_tema) alih-alih di markdown. Hanya JSON (LLM parse) yang
+// terpengaruh — round-trip bson/Mongo tetap pakai field string biasa.
+func (s *SLNAIntegration) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	s.Markdown = flexJSONToString(raw["markdown"])
+	s.ConvergentGaps = flexJSONToString(raw["convergent_gaps"])
+	// Salvage: bila markdown kosong, ambil dari key alternatif yang sering dipakai model.
+	if strings.TrimSpace(s.Markdown) == "" {
+		for _, k := range []string{"tabel_validasi_tema", "table_markdown", "tabel", "validasi_tema", "table", "themes"} {
+			if v, ok := raw[k]; ok {
+				if salv := flexJSONToString(v); strings.TrimSpace(salv) != "" {
+					s.Markdown = salv
+					break
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// flexJSONToString mengubah nilai JSON APA PUN (string/array/object/angka/bool) menjadi
+// string yang terbaca — jaring pengaman untuk output LLM yang tak konsisten tipenya.
+func flexJSONToString(b json.RawMessage) string {
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 || string(b) == "null" {
+		return ""
+	}
+	switch b[0] {
+	case '"':
+		var str string
+		if json.Unmarshal(b, &str) == nil {
+			return str
+		}
+		return string(b)
+	case '[':
+		var arr []json.RawMessage
+		if json.Unmarshal(b, &arr) != nil {
+			return string(b)
+		}
+		parts := make([]string, 0, len(arr))
+		for _, el := range arr {
+			if s := strings.TrimSpace(flexJSONToString(el)); s != "" {
+				parts = append(parts, "- "+s)
+			}
+		}
+		return strings.Join(parts, "\n")
+	case '{':
+		var obj map[string]json.RawMessage
+		if json.Unmarshal(b, &obj) != nil {
+			return string(b)
+		}
+		parts := make([]string, 0, len(obj))
+		for k, v := range obj {
+			parts = append(parts, k+": "+flexJSONToString(v))
+		}
+		sort.Strings(parts) // urutan stabil (map iteration acak)
+		return strings.Join(parts, " | ")
+	default:
+		return strings.Trim(string(b), `"`)
+	}
 }
 
 type ModulBibliometricSummary struct {

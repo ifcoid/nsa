@@ -114,10 +114,11 @@ Per tema/finding SLR: cocokkan ke cluster bibliometric -> status CONVERGENT (sej
 SLR-ONLY (tema di SLR tak prominent di network) / BIB-ONLY (cluster tak terangkat di SLR).
 Tentukan research landscape positioning + CONVERGENT GAPS (gap yang muncul DI KEDUA: SLR synthesis + structural holes bibliometric — paling kuat untuk Future Research).
 
-Keluarkan HANYA JSON MURNI tanpa markdown:
+Keluarkan HANYA JSON MURNI tanpa markdown. KEDUA field WAJIB berupa STRING (bukan array/objek);
+bila ada beberapa poin, gabung jadi satu string (boleh pakai tabel markdown / baris "- ..."):
 {
-  "markdown": "tabel validasi tema (CONVERGENT/SLR-ONLY/BIB-ONLY) + positioning",
-  "convergent_gaps": "3 convergent gaps + trace evidence kedua method"
+  "markdown": "tabel validasi tema (CONVERGENT/SLR-ONLY/BIB-ONLY) + positioning — sebagai STRING markdown",
+  "convergent_gaps": "3 convergent gaps + trace evidence kedua method — sebagai STRING"
 }`
 	userPrompt := fmt.Sprintf("=== CLUSTER INTERPRETATION (bibliometric) ===\n%s\n\n=== RINGKASAN SINTESIS SLR (M8) ===\n%s", clusterMarkdown, slrSummary)
 	raw, err := a.client.Generate(ctx, systemPrompt, userPrompt)
