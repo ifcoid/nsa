@@ -1031,7 +1031,13 @@ func (m *M7Extraction) runGraphExtractionL5(ctx context.Context, session *model.
 			doi, _ = p["doi"].(string)
 		}
 
-		fields, _ := json.Marshal(p["m7_fields"])
+		// Ekstraksi menulis ke "fields" (bukan "m7_fields"); baca yang benar agar graph
+		// tidak dibangun dari data KOSONG (null). Fallback ke m7_fields utk kompatibilitas.
+		fieldData := p["fields"]
+		if fieldData == nil {
+			fieldData = p["m7_fields"]
+		}
+		fields, _ := json.Marshal(fieldData)
 
 		sysPrompt := `Anda adalah ahli neuro-symbolic AI yang bertugas membangun Knowledge Graph dari literatur ilmiah.
 Tugas Anda adalah membaca hasil ekstraksi sebuah paper, dan mengubahnya menjadi Nodes (simpul) dan Edges (relasi).

@@ -307,7 +307,7 @@ func (m *M9Manuscript) compileSummaryFromCatalog(session *model.SLRSession, tota
 		"SYNTHESIS PATH: %s | Framework: %s\n"+
 		"REFERENCES: %d entries in .bib (from included paper metadata).\n\n"+
 		"PRE-SUBMISSION (diisi penulis): Funding, Conflict of Interest, Author/ORCID, Cover letter, PROSPERO URL, Ethical statement.\n"+
-		"AI Assistance Declaration: ada (terbatas language/readability).\n\n"+
+		"AI Assistance Declaration: ada (AI = decision-support + human-in-the-loop + Cohen kappa, sesuai COPE/Elsevier).\n\n"+
 		"Pipeline SLR SELESAI.",
 		totalCitations, path, frameworkName(session), totalCitations)
 }

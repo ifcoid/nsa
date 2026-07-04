@@ -43,12 +43,12 @@ Contoh output JSON yang benar:
 {
   "inclusion_criteria": [
     "Artikel berfokus pada populasi X",
-    "Diterbitkan antara tahun 2018-2023",
-    "Ditulis dalam bahasa Inggris"
+    "Diterbitkan dalam rentang tahun <dari filter scope peneliti>",
+    "Ditulis dalam bahasa <dari filter scope>"
   ],
   "exclusion_criteria": [
     "Artikel berupa survey, review, atau meta-analisis",
-    "Penelitian dilakukan di luar wilayah Asia Tenggara"
+    "Penelitian di luar cakupan geografis <dari filter scope, bila ada>"
   ]
 }`
 

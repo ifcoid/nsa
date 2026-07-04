@@ -65,7 +65,7 @@ Parameter: (1) Type of analysis (co-occurrence/co-authorship/citation/bibliograp
 (7) Normalization (association strength default), (8) Clustering algorithm (LinLog/modularity),
 (9) Visualization (network/overlay/density — generate ketiganya). Setiap parameter WAJIB ada justifikasi.
 
-Keluarkan HANYA JSON MURNI tanpa markdown:
+Keluarkan HANYA JSON MURNI tanpa markdown. SEMUA field WAJIB berupa STRING (bukan array/objek):
 {
   "type_of_analysis": "Co-occurrence",
   "unit_of_analysis": "Author keywords",
@@ -92,7 +92,7 @@ klasifikasikan cluster dengan kriteria KUANTITATIF:
 - TIER 4 PERIPHERAL: size <5% + TLS rendah (niche/potential gap).
 Identifikasi BRIDGE keywords (muncul di >=2 cluster) + STRUCTURAL HOLES (2 cluster yang seharusnya terhubung tapi tidak).
 
-Keluarkan HANYA JSON MURNI tanpa markdown:
+Keluarkan HANYA JSON MURNI tanpa markdown. SEMUA field WAJIB berupa STRING (bukan array/objek):
 {
   "markdown": "interpretasi naratif per tier + bridge + structural holes",
   "table_markdown": "| Tier | Cluster Label | Size (%) | TLS | Top-5 Keywords | Interpretation |\n|...|"

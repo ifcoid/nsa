@@ -109,3 +109,26 @@ func flexJSONToString(b json.RawMessage) string {
 type ModulBibliometricSummary struct {
 	Markdown string `bson:"markdown" json:"markdown"`
 }
+
+// UnmarshalJSON: toleran non-determinisme LLM (field string kadang dibalas array/objek) —
+// kelas bug yang sama dgn SLNAIntegration. flexJSONToString meratakan apa pun jadi string.
+func (v *VOSViewerParams) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	v.TypeOfAnalysis = flexJSONToString(raw["type_of_analysis"])
+	v.UnitOfAnalysis = flexJSONToString(raw["unit_of_analysis"])
+	v.TableMarkdown = flexJSONToString(raw["table_markdown"])
+	return nil
+}
+
+func (c *ClusterInterpretation) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	c.Markdown = flexJSONToString(raw["markdown"])
+	c.TableMarkdown = flexJSONToString(raw["table_markdown"])
+	return nil
+}

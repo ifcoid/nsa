@@ -395,7 +395,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown, tanpa komentar tambahan:
 }
 
 CATATAN PENTING:
-- Jika design breakdown menunjukkan proporsi >50% adalah "studi komputasional", "deep learning", "model Mamba", "EEG classification tanpa RCT", maka tool haruslah CLAIM, TRIPOD-AI, atau ML Reproducibility Checklist, BUKAN MMAT.
+- Sesuaikan tool dengan DISTRIBUSI DESAIN STUDI aktual pada design breakdown. Contoh prinsip (BUKAN asumsi domain): bila mayoritas studi non-RCT/komputasional/tanpa kelompok pembanding, pilih tool yang cocok untuk desain itu (mis. checklist prediksi/reproducibility) alih-alih tool RCT/mixed-methods. Turunkan keputusan dari data, jangan dari asumsi topik.
 - Threshold untuk studi komputasional biasanya 60-70% (jika menggunakan CLAIM/TRIPOD-AI) karena sifatnya yang lebih teknis.
 - Jika tidak ada tool standar yang sesuai, isi tool dengan "CUSTOM_RUBRIC" dan beri justifikasi.`
 
@@ -508,7 +508,7 @@ Keluarkan HANYA JSON MURNI tanpa markdown:
 {
   "total_score": 78,
   "category": "MODERATE",
-  "items_summary": "Domain 1: Participants (18/20) - populasi jelas; Domain 2: Predictors (15/20) - variabel terdefinisi; Domain 3: Outcome (12/20) - kurang detail; Domain 4: Analysis (10/20) - bias selection; Domain 5: Overall (5/20) - moderate risk",
+  "items_summary": "<breakdown per DOMAIN sesuai rubrik tool yang dipakai: Domain 1: <nama domain rubrik> (<skor>/<maks>) - <catatan>; ... dst. Nama domain WAJIB dari rubrik tool, BUKAN contoh tetap>",
   "reasoning": "Penjelasan logis mengapa paper mendapat skor ini, mengacu ke rubrik per domain dan threshold kategorisasi",
   "evidence": "Kutipan langsung dari teks yang mendukung penilaian tiap domain: '[kutipan 1]' (Domain X), '[kutipan 2]' (Domain Y)"
 }

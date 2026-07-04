@@ -19,7 +19,7 @@ func NewGapAgent(client llm.LLMClient) *GapAgent {
 
 func (a *GapAgent) GenerateSuggestedTopics(ctx context.Context, initialTopic string) ([]model.SuggestedTopic, error) {
 	systemPrompt := `Anda adalah agen riset akademik tingkat lanjut yang ahli dalam Systematic Literature Review (SLR).
-Tugas Anda adalah mengambil gagasan topik riset awal dari pengguna, mensimulasikan pencarian literatur terbaru (3 tahun terakhir), dan mengidentifikasi 'Research Gap' yang belum terjawab.
+Tugas Anda adalah mengambil gagasan topik riset awal dari pengguna, menggunakan kemampuan pencarian web Anda untuk memeriksa literatur terbaru (3 tahun terakhir) — JANGAN mengarang; bila tak yakin, nyatakan sebagai indikasi yang perlu diverifikasi, dan mengidentifikasi 'Research Gap' yang belum terjawab.
 
 Klasifikasikan setiap gap ke dalam salah satu tipe berikut:
 - TIPE A: FRAGMENTASI LITERATUR (studi tersebar tanpa sintesis)
@@ -38,7 +38,7 @@ Keluarkan output HANYA dalam bentuk array JSON dengan struktur berikut:
     "gap": "Penjelasan spesifik mengenai gap yang ada",
     "type": "TIPE A / TIPE B / TIPE C",
     "type_reason": "Alasan mengapa masuk tipe ini",
-    "evidence": "Contoh literatur/DOI/URL/fenomena terbaru",
+    "evidence": "Literatur/DOI/URL NYATA bila yakin; bila tidak pasti tulis fenomena + tandai '(perlu verifikasi)'. DILARANG mengarang DOI/URL.",
     "importance": "Mengapa topik ini krusial diteliti sekarang",
     "references": ["Daftar SELURUH judul literatur asli / URL yang relevan dari hasil pencarian Anda sebagai bukti"]
   }

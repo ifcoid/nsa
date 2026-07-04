@@ -104,8 +104,8 @@ SEARCH EXECUTION:
 
 SANITY CHECK:
 - Paper-kunci: [...]
-- Volume verdict: reasonable
-- Go/no-go: PROCEED
+- Volume verdict: [reasonable/too-few/too-many — DARI DATA AKTUAL]
+- Go/no-go: [PROCEED/REVISE — jangan pra-isi; simpulkan dari volume & konsistensi]
 
 EXPORT:
 - Files: [...]
@@ -119,12 +119,12 @@ DEDUPLICATION:
 
 PICO-CONSISTENCY PREVIEW:
 - MATCH "WHAT COUNTS": [...]%
-- Verdict: PROCEED
+- Verdict: [PROCEED/BACK_TO_MODUL_3 — dari persentase match aktual]
 
 SCREENING DATABASE:
 - Collection: screening
 - Embedded criteria Row 1-5: ✓
-- Reason codes: ✓ (8 standard)
+- Reason codes: ✓ (dari kriteria sesi)
 - Kappa sheet: ✓
 - Dual-reviewer columns: ✓
 
