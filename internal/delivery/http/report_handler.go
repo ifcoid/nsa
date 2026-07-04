@@ -599,3 +599,30 @@ func (h *SessionHandler) liveSchemaMarkdown(ctx context.Context, id string) stri
 	}
 	return b.String()
 }
+
+// SchemaGuide menyajikan SKEMA LIVE (peta field) sesi sebagai file .md tersendiri —
+// selalu terkini karena di-introspeksi dari dokumen Mongo aktual. Read-only, credential-safe.
+func (h *SessionHandler) SchemaGuide(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	s, err := h.mongoRepo.GetSession(context.Background(), id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	var b strings.Builder
+	b.WriteString("# Skema Data (Live) — " + strSafe(s.Topic, "(tanpa topik)") + "\n\n")
+	b.WriteString("> Peta field di-introspeksi LANGSUNG dari dokumen Mongo sesi `" + s.ID + "` saat file ini dibuat,\n")
+	b.WriteString("> jadi SELALU terkini (bukan dokumentasi manual). `✓`=terisi, `✗`=kosong. Read-only; tanpa kredensial.\n\n")
+	b.WriteString("Koleksi: `slr_sessions` (`_id=\"" + s.ID + "\"`), `slr_screening`, `slr_extraction`. Qdrant `scientific_articles`; Neo4j filter `session_id`.\n\n")
+	b.WriteString(h.liveSchemaMarkdown(context.Background(), s.ID))
+	b.WriteString("\n_Untuk pemetaan field → bagian artikel & metodologi Q1: lihat GENERATEREPORT.md / GENERATEARTIKEL.md (repo publik ifcoid/nsa) atau Panduan Handoff._\n")
+
+	fname := fmt.Sprintf("schema_%s.md", s.ID)
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	_, _ = w.Write([]byte(b.String()))
+}
