@@ -88,17 +88,18 @@ func main() {
 	var neo4jRepo *repository.Neo4jRepository
 	var neo4jConnErr string
 
-	// Log diagnostik: apakah env vars terbaca?
+	// Pre-flight Neo4j/AuraDB (NON-FATAL): sumber KE-3 triangulasi verifikasi klaim
+	// (neuro-symbolic) + GraphRAG/SLNA. Tanpa ini, verifikasi jalan 2-sumber (Qdrant+
+	// Mongo) — masih valid tapi kurang kuat untuk Q1. Beri status jelas + cara aktivasi.
 	if neo4jURI == "" {
-		log.Println("⚠️  [Neo4j] NEO4JURI env kosong - Knowledge Graph (GraphRAG) tidak aktif.")
+		fmt.Println("⚠️  [Neo4j] Tidak aktif — NEO4JURI belum diset. Verifikasi klaim jalan 2-sumber (Qdrant+Mongo); SLNA/GraphRAG nonaktif.")
+		fmt.Println("   → Untuk triangulasi 3-sumber (disarankan Q1): buat instance di console.neo4j.io, lalu set NEO4JURI/NEO4JUSER/NEO4JPASSWORD.")
 		neo4jConnErr = "NEO4JURI env var kosong (tidak terbaca dari environment)"
 	} else {
 		maskedURI := neo4jURI
 		if len(maskedURI) > 10 {
 			maskedURI = maskedURI[:10] + "..."
 		}
-		log.Printf("[Neo4j] NEO4JURI terbaca: %s (user=%q, pass_len=%d)", maskedURI, neo4jUser, len(neo4jPass))
-
 		if neo4jUser == "" {
 			log.Println("⚠️  [Neo4j] NEO4JUSER env kosong")
 		}
@@ -110,9 +111,10 @@ func main() {
 		neo4jRepo, err = repository.NewNeo4jRepository(neo4jURI, neo4jUser, neo4jPass)
 		if err != nil {
 			neo4jConnErr = fmt.Sprintf("Neo4j connection failed (uri=%s, user=%q): %v", maskedURI, neo4jUser, err)
-			log.Printf("❌ [Neo4j] %s", neo4jConnErr)
+			fmt.Printf("❌ [Neo4j] TIDAK bisa dihubungi (%s): %v\n", maskedURI, err)
+			fmt.Println("   → Kemungkinan instance Aura di-PAUSE/DIHAPUS (free-tier auto-hapus ~30 hari idle) atau URI/kredensial salah. Cek console.neo4j.io, resume/buat ulang, perbarui NEO4JURI/USER/PASSWORD. Sementara: verifikasi 2-sumber.")
 		} else {
-			fmt.Println("✅ Berhasil terhubung ke Neo4j (GraphRAG Ready).")
+			fmt.Println("✅ [Neo4j] Terhubung (GraphRAG Ready) — triangulasi verifikasi klaim 3-sumber AKTIF.")
 			defer neo4jRepo.Close(ctx)
 		}
 	}

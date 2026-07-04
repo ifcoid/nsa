@@ -233,6 +233,37 @@ func buildAuditReport(session *model.SLRSession, identified, screenedTotal, extr
 		"Sistem memakai AI sebagai alat bantu keputusan untuk skrining, ekstraksi, appraisal, dan sintesis (dengan verifikasi manusia HITL + Cohen's κ). Disclosure harus menyatakan ini secara AKURAT.",
 		"Pastikan 'AI Assistance Declaration' di manuskrip menyebut peran AI sebagai decision-support ber-HITL + κ (bukan 'AI tidak dipakai untuk analisis'). Jejak xAI tiap keputusan tersimpan & dapat diekspor sebagai supplementary.")
 
+	// C12: triangulasi verifikasi klaim (neuro-symbolic) — apakah 3 sumber terpakai?
+	if ms != nil && len(ms.ClaimVerifications) > 0 {
+		total := len(ms.ClaimVerifications)
+		ver, neo := 0, 0
+		for _, c := range ms.ClaimVerifications {
+			if c.Sources >= 2 {
+				ver++
+			}
+			if c.Neo4jVerified {
+				neo++
+			}
+		}
+		pct := 0
+		if total > 0 {
+			pct = ver * 100 / total
+		}
+		switch {
+		case neo == 0:
+			add("C12", "Integritas", "Triangulasi verifikasi klaim (3-sumber)", "WARN",
+				fmt.Sprintf("%d/%d klaim terverifikasi ≥2 sumber (%d%%), TAPI Neo4j tak berkontribusi (0) — triangulasi berjalan 2-sumber (Qdrant+MongoDB).", ver, total, pct),
+				"Aktifkan Neo4j/AuraDB (set NEO4JURI/USER/PASSWORD, restart) lalu jalankan ulang M9 untuk triangulasi 3-sumber penuh — memperkuat defensibilitas Q1.")
+		case pct < 60:
+			add("C12", "Integritas", "Triangulasi verifikasi klaim (3-sumber)", "WARN",
+				fmt.Sprintf("Hanya %d/%d klaim (%d%%) terverifikasi ≥2 sumber (Neo4j aktif, kontribusi %d).", ver, total, pct, neo),
+				"Tinjau klaim berdukungan <2 sumber (lihat gerbang M9 / Paket Reproducibility); kuatkan atau lemahkan sesuai bukti.")
+		default:
+			add("C12", "Integritas", "Triangulasi verifikasi klaim (3-sumber)", "PASS",
+				fmt.Sprintf("%d/%d klaim (%d%%) terverifikasi ≥2 sumber; Neo4j aktif (kontribusi %d). Triangulasi 3-sumber penuh.", ver, total, pct, neo), "")
+		}
+	}
+
 	// --- Rangkum verdict ---
 	report := &model.AuditReport{Checks: checks, GeneratedAt: time.Now().Format(time.RFC3339)}
 	for _, c := range checks {
