@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"unicode"
 
@@ -152,6 +153,27 @@ func (m *M9Manuscript) generateWithMultiPass(ctx context.Context, ag *agent.Manu
 	return cleaned, nil
 }
 
+// syncEmbedEnv menjembatani embed_config DB (diisi user via web: "Simpan Endpoint & Lanjut")
+// ke ENV yang dibaca jalur RAG/hybrid (requireHybrid → CheckSearchBackend, SemanticSearch).
+// Tanpa ini, endpoint tersimpan di Mongo TAPI M9 membaca os.Getenv → "belum diset" → loop di
+// WAITING_EMBED walau user sudah memasukkan endpoint valid (lapor balqis). M6 sudah benar
+// (baca GetEmbedConfig langsung); ini menyamakan perilaku M9.
+func (m *M9Manuscript) syncEmbedEnv(ctx context.Context) {
+	ec := m.deps.MongoRepo.GetEmbedConfig(ctx)
+	if ec == nil {
+		return
+	}
+	if v := strings.TrimSpace(ec.Endpoint); v != "" {
+		os.Setenv("EMBED_ENDPOINT", v)
+	}
+	if v := strings.TrimSpace(ec.APIKey); v != "" {
+		os.Setenv("EMBED_API_KEY", v)
+	}
+	if v := strings.TrimSpace(ec.Model); v != "" {
+		os.Setenv("EMBED_MODEL", v)
+	}
+}
+
 // setSectionVerifications MENGGANTI entri verifikasi untuk satu section (idempoten saat
 // re-run/revisi) lalu menyimpan bukti triangulasi 3-sumber ke manuskrip (xAI durable).
 func setSectionVerifications(ms *model.Manuscript, section string, vrs []VerificationResult) {
@@ -220,6 +242,7 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 	logger.Log(session.ID, "   [L1-L4] Menulis Methods, Results, Discussion, Future Research...")
 	// Pra-syarat Q1: server verifikasi hybrid harus hidup SEBELUM menulis (hemat
 	// token Brain bila ternyata mati -> langsung jeda via runGroup).
+	m.syncEmbedEnv(ctx) // jembatani embed_config DB -> ENV sebelum cek hybrid (fix loop WAITING_EMBED)
 	if reason := requireHybrid(ctx); reason != "" {
 		return &EmbedBackendDownError{Reason: reason}
 	}
@@ -284,6 +307,7 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSession) error {
 	logger.Log(session.ID, "   [L5-L9] Menulis Introduction, Conclusions, Abstract, Title...")
 	// Pra-syarat Q1: server verifikasi hybrid harus hidup sebelum menulis.
+	m.syncEmbedEnv(ctx) // jembatani embed_config DB -> ENV sebelum cek hybrid (fix loop WAITING_EMBED)
 	if reason := requireHybrid(ctx); reason != "" {
 		return &EmbedBackendDownError{Reason: reason}
 	}
