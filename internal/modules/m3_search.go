@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"nsa/internal/agent"
 	"nsa/internal/llm"
 	"nsa/internal/logger"
@@ -12,6 +14,19 @@ import (
 
 type M3Search struct {
 	deps *ModuleDeps
+}
+
+
+// chosenDatabases mengembалikan daftar database yang DIPILIH di sesi (dari db_selection)
+// untuk di-inject ke SearchStringAgent — agar query adaptasi konsisten dgn keputusan sesi,
+// BUKAN hardcode WoS/PubMed/IEEE (protokol pencarian a-priori seragam).
+func chosenDatabases(session *model.SLRSession) string {
+	if session.DatabaseSelection != nil {
+		if d := strings.TrimSpace(session.DatabaseSelection.Decision); d != "" {
+			return d
+		}
+	}
+	return "Scopus"
 }
 
 func NewM3Search(deps *ModuleDeps) *M3Search {
@@ -153,7 +168,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		scopeBytes, _ := json.MarshalIndent(session.ScopeJustifications, "", "  ")
 
 		ssAgent := agent.NewSearchStringAgent(llmBrain)
-		ssResult, err := ssAgent.BuildSearchString(ctx, string(kwBytes), string(scopeBytes))
+		ssResult, err := ssAgent.BuildSearchString(ctx, string(kwBytes), string(scopeBytes), chosenDatabases(session))
 		if err != nil { return err }
 
 		session.SearchString = ssResult
@@ -183,7 +198,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		if err != nil { return err }
 
 		ssAgent := agent.NewSearchStringAgent(llmBrain)
-		ssResult, err := ssAgent.BuildSearchString(ctx, string(kwBytes), scopeContext)
+		ssResult, err := ssAgent.BuildSearchString(ctx, string(kwBytes), scopeContext, chosenDatabases(session))
 		if err != nil { return err }
 
 		session.SearchString = ssResult

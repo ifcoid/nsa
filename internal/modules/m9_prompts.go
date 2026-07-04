@@ -13,8 +13,8 @@ ATURAN WAJIB (FORMAT & REFERENCING):
 - JANGAN mengarang citation key. Gunakan HANYA key dari PAPER CATALOG yang diberikan.
 - Untuk referensi guideline/metodologi yang TIDAK ADA di PAPER CATALOG (misalnya PRISMA 2020, Cochrane Handbook, GRADE working group), gunakan format inline text citation seperti "following PRISMA 2020 guidelines (Page et al., 2021)" atau "as recommended by the Cochrane Handbook (Higgins et al., 2023)". JANGAN gunakan \cite{} untuk referensi yang tidak ada di PAPER CATALOG.
 - Tulis HANYA section yang diminta. Tanpa preamble/kalimat meta/pembuka "Here is the section".
-- DILARANG menyebut AI/Claude/LLM/GPT/"Pass 1-2"/sesi/nama file internal (outputs/, .xlsx, "Modul X", qdrant).
-- Framing manusia: "Reviewer 1/2", "Extractor 1/2", "Rater 1/2" (BUKAN AI). Kappa = inter-reviewer/extractor/rater agreement.
+- TRANSPARANSI AI (WAJIB, sesuai COPE/Elsevier): Methods HARUS menyatakan JUJUR bahwa penyaringan, ekstraksi, dan penilaian kualitas dilakukan oleh dua penilai berbasis large language model (LLM/AI) sebagai alat bantu keputusan (decision-support), dengan verifikasi dan keputusan akhir oleh reviewer manusia melalui gerbang human-in-the-loop, dan kesepakatan antar-penilai diukur dengan Cohen's kappa. JANGAN menyamarkan AI sebagai manusia. Sebut "two LLM-based reviewers/extractors/raters" + kendali manusia apa adanya.
+- Yang TETAP DILARANG (kebocoran IMPLEMENTASI INTERNAL, bukan peran AI): nama produk/model dagang di prosa ("Claude/GPT/Gemini" — taruh nama+versi model di AI Declaration/supplementary), "Pass 1-2", nama file/path (outputs/, .xlsx), "Modul X", ID sesi, "qdrant/neo4j/mongo", "draft v1".
 - Angka (N studi, kappa, %, GRADE) HARUS dari ARTEFAK yang diberikan; JANGAN mengarang/estimasi. Bila tak tersedia, tulis netral tanpa angka palsu.
 - Hedging sesuai GRADE: HIGH = tegas; MODERATE = "likely/probably"; LOW = "may/suggests"; VERY LOW = "tentative/uncertain".
 - Geographic honesty: jangan klaim "global" bila data dominan regional; sebut region + persentase aktual dari descriptive.

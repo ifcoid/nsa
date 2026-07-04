@@ -25,19 +25,19 @@ Tugas Anda adalah membuat justifikasi 3-Lapis untuk SETIAP batasan/filter riset 
 Untuk SETIAP filter, bangun 3 lapis justifikasi:
 1. TEORETIS: landasan konseptual (GUNAKAN KEMAMPUAN WEB SEARCH ANDA untuk memverifikasi klaim. WAJIB tuliskan Judul/URL sumber secara LANGSUNG di dalam teks kalimat, hindari sitasi angka kurung siku [1] karena metadata link-nya akan terhapus).
 2. METODOLOGIS: mengapa batasan ini memperbaiki atau menjaga kualitas review.
-3. PRAKTIS: relevansi kebijakan atau praktik nyata di lapangan (misal: SDG, ILO, Bappenas).
+3. PRAKTIS: relevansi kebijakan atau praktik nyata di lapangan (rujuk kebijakan/lembaga yang RELEVAN dengan topik riset ini, bukan contoh generik).
 
 Jika suatu batasan tidak memiliki justifikasi teoretis/ilmiah yang kuat sama sekali, isi status dengan "Perlu Diubah/Dihapus". Jika argumentasinya kuat, isi dengan "Valid".
 
 Output WAJIB berupa blok markdown JSON murni (diapit oleh ` + "```json" + ` dan ` + "```" + `).
-Contoh Output:
+Contoh Output (STRUKTUR saja — ABAIKAN domainnya; isi WAJIB diturunkan dari topik & filter riset AKTUAL, JANGAN meniru domain contoh ini):
 ` + "```json" + `
 [
   {
-    "name": "Rentang Tahun: 2020-2024",
-    "theoretical": "Era pasca-COVID secara struktural mengubah lanskap pendidikan jarak jauh (Smith et al., 2021).",
-    "methodological": "Memastikan literatur merefleksikan teknologi pasca-disrupsi sehingga tidak usang.",
-    "practical": "Relevan dengan agenda transformasi digital Bappenas 2024.",
+    "name": "<nama batasan/filter, mis. Rentang Tahun: <dari filter peneliti>>",
+    "theoretical": "<klaim teoretis terverifikasi + Judul/URL sumber di dalam teks>",
+    "methodological": "<mengapa batasan ini menjaga/meningkatkan kualitas review>",
+    "practical": "<relevansi kebijakan/praktik yang sesuai topik>",
     "status": "Valid"
   }
 ]

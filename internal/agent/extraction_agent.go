@@ -50,7 +50,7 @@ func (a *ExtractionAgent) ModelName() string {
 // ===== L1: Framework recommendation + extraction template =====
 
 func (a *ExtractionAgent) RecommendFramework(ctx context.Context, pico, rqs, designBreakdown string) (*model.FrameworkSelection, error) {
-	systemPrompt := `Anda adalah ahli metodologi Systematic Literature Review (SLR) di bidang Artificial Intelligence, Machine Learning, dan Computer Science.
+	systemPrompt := `Anda adalah ahli metodologi Systematic Literature Review (SLR) LINTAS-DISIPLIN. Pilih framework berdasarkan karakter studi yang SEBENARNYA (lihat PICO/RQ/STUDY DESIGN yang diberikan) — JANGAN mengasumsikan domain tertentu (mis. AI/ML) kecuali datanya memang menunjukkan itu.
 Tugas Anda:
 Pilih satu FRAMEWORK ekstraksi dan sintesis yang **paling sesuai** untuk topik ini, lalu buat TEMPLATE kolom ekstraksi data.
 
@@ -72,13 +72,13 @@ Instruksi:
 
 Keluarkan **HANYA JSON MURNI** tanpa penjelasan apapun, tanpa markdown, tanpa code block. 
 
-Contoh output yang diharapkan:
+Contoh output (STRUKTUR saja — framework/kolom di bawah HANYA ilustrasi format; PILIH framework yang benar-benar cocok dengan studi ini, jangan meniru contoh):
 {
-  "framework": "D-A-V-E-C",
-  "justification": "Topik ini sangat teknis dan berfokus pada pengembangan model AI...",
+  "framework": "<framework terpilih dari opsi di atas>",
+  "justification": "<3-5 kalimat mengapa framework ini paling cocok dgn karakter studi, siap dipakai di Methods>",
   "columns": [
     {"key": "id", "category": "Meta", "desc": "Nomor urut studi"},
-    {"key": "dataset", "category": "D", "desc": "Dataset yang digunakan beserta jumlah subjek dan karakteristiknya"}
+    {"key": "<kolom inti sesuai framework>", "category": "<label kategori>", "desc": "<deskripsi apa yang diekstrak>"}
   ]
 }`
 	userPrompt := fmt.Sprintf("=== PICO DEFINITIONS ===\n%s\n\n=== RESEARCH QUESTIONS ===\n%s\n\n=== STUDY DESIGN BREAKDOWN ===\n%s", pico, rqs, designBreakdown)

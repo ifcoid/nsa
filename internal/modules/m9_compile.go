@@ -17,7 +17,7 @@ Laporkan tiap subcheck sebagai PASS atau daftar issue spesifik + saran perbaikan
 A. Repetisi (Intro↔Discussion↔Conclusions; prior reviews Intro 5.2 vs Discussion 3.5 harus beda framing; gap Discussion 3.6 vs Future Research harus beda; implications Discussion vs Conclusions tak identik).
 B. Terminologi kanonikal konsisten + gaya SLR ("systematic review/extraction/synthesis/PICO"); tidak ada drift ScR ("scoping review/charting/PCC").
 C. Bahasa sesuai jalur (Jalur A tanpa "pooled effect"; Jalur B tanpa vote counting tanpa kualifikasi).
-D. AI-mention leak: scan "AI/Claude/LLM/GPT/Pass 1-2/AI-assisted" di semua section (KECUALI AI Declaration) — tiap match = issue.
+D. Transparansi AI vs kebocoran internal: menyebut peran AI/LLM sebagai alat bantu keputusan (decision-support) + human-in-the-loop + Cohen's kappa itu WAJIB & BENAR (BUKAN issue) — harus konsisten dengan AI Assistance Declaration. Yang JADI ISSUE hanya kebocoran IMPLEMENTASI INTERNAL: nama produk/model dagang di prosa ("Claude/GPT/Gemini"), "Pass 1-2", nama file/path, "Modul X", session id, "qdrant/neo4j/mongo". JANGAN menandai kata "AI/LLM/human-in-the-loop/kappa" sebagai issue.
 E. Konsistensi numerik (N, κ_TA, κ_FT, κ_extract, κ_rob, %, GRADE) antar Methods/Results/Abstract.
 F. Internal vocabulary/provenance leak (outputs/, .xlsx, "Modul X", session id, draft v1).
 G. Training-workflow voice leak.
