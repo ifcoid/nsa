@@ -219,6 +219,9 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("PUT /api/embed/config", r.llmHndlr.UpdateEmbedConfig)
 	protected.HandleFunc("GET /api/scopus/config", r.llmHndlr.GetScopusConfig)
 	protected.HandleFunc("PUT /api/scopus/config", r.llmHndlr.UpdateScopusConfig)
+	protected.HandleFunc("GET /api/zenodo/config", r.sessionHndlr.GetZenodoConfig)
+	protected.HandleFunc("PUT /api/zenodo/config", r.sessionHndlr.UpdateZenodoConfig)
+	protected.HandleFunc("POST /api/sessions/{id}/zenodo/deposit", r.sessionHndlr.ZenodoDeposit)
 
 	// Proposal endpoints
 	protected.HandleFunc("POST /api/proposal/sessions", r.proposalHndlr.CreateProposalSession)

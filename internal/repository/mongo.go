@@ -1039,3 +1039,23 @@ func (r *MongoRepository) ValidateCiteKeys(ctx context.Context, sessionID string
 	}
 	return valid, invalid, nil
 }
+
+// GetZenodoConfig mengembalikan konfig Zenodo (token deposit). Kosong bila belum diset.
+func (r *MongoRepository) GetZenodoConfig(ctx context.Context) *model.ZenodoConfig {
+	var cfg model.ZenodoConfig
+	err := r.client.Database(r.dbName).Collection("zenodo_config").
+		FindOne(ctx, bson.M{"_id": "default"}).Decode(&cfg)
+	if err != nil {
+		return &model.ZenodoConfig{}
+	}
+	return &cfg
+}
+
+// UpdateZenodoConfig menyimpan token Zenodo (upsert, _id="default").
+func (r *MongoRepository) UpdateZenodoConfig(ctx context.Context, cfg *model.ZenodoConfig) error {
+	cfg.ID = "default"
+	cfg.UpdatedAt = time.Now()
+	_, err := r.client.Database(r.dbName).Collection("zenodo_config").UpdateOne(ctx,
+		bson.M{"_id": "default"}, bson.M{"$set": cfg}, options.Update().SetUpsert(true))
+	return err
+}
