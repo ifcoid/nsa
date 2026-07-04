@@ -854,11 +854,15 @@ func CheckSearchBackend(ctx context.Context) (ok bool, hybrid bool, reason strin
 	}
 	resp, e := (&http.Client{Timeout: 15 * time.Second}).Do(req)
 	if e != nil {
-		return false, false, fmt.Sprintf("Server PEDE (%s) tak merespons: %v", healthURL, e)
+		hint := "Endpoint ini milik notebook embed_server_colab ANDA SENDIRI (bukan server pusat). Jalankan ulang notebook (Runtime GPU → Run all), salin endpoint BARU dari sel terakhir, lalu tempel via web."
+		if strings.Contains(strings.ToLower(e.Error()), "no such host") {
+			hint = "Tunnel Colab Anda (trycloudflare) sudah MATI/expired — URL ini milik notebook embed_server_colab ANDA SENDIRI, bukan server pusat backend. Tunnel trycloudflare bersifat sementara (putus saat Colab idle/disconnect ~90 mnt). Jalankan ULANG notebook, salin endpoint BARU, tempel via web, dan jaga tab Colab tetap hidup."
+		}
+		return false, false, fmt.Sprintf("Server embedding Anda (%s) tak bisa dihubungi: %v. %s", healthURL, e, hint)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return false, false, fmt.Sprintf("Server PEDE (%s) balas HTTP %d.", healthURL, resp.StatusCode)
+		return false, false, fmt.Sprintf("Server embedding Anda (%s) balas HTTP %d. Pastikan notebook embed_server_colab ANDA berjalan (Runtime GPU) & endpoint terbaru sudah ditempel via web.", healthURL, resp.StatusCode)
 	}
 	var h struct {
 		Status string `json:"status"`
