@@ -90,8 +90,9 @@ func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) e
 		session.Status = "M9_COMPILE"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	case "M9_COMPILE_APPROVED":
-		session.Status = "COMPLETED"
-		logger.Log(session.ID, "   [System] 🎉 MODUL 9 SELESAI — Manuskrip SLR final siap. Pipeline COMPLETED.")
+		// Manuskrip final siap → masuk GERBANG AUDIT (Modul 10) sebelum COMPLETED.
+		session.Status = "M10_STEP1_AUDIT"
+		logger.Log(session.ID, "   [System] Manuskrip SLR final siap → menjalankan Audit Pra-Submisi (Modul 10).")
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	default:

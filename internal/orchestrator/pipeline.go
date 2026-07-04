@@ -57,6 +57,7 @@ func NewSLRPipeline(mongo *repository.MongoRepository, factory *llm.LLMFactory, 
 		"M8_":  modules.NewM8Synthesis(deps),
 		"M8B_": modules.NewM8bBibliometric(deps),
 		"M9_":  modules.NewM9Manuscript(deps),
+		"M10_": modules.NewM10Audit(deps),
 	}
 
 	return &SLRPipeline{

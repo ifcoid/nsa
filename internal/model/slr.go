@@ -536,6 +536,7 @@ type SLRSession struct {
 	SLNAIntegration          *SLNAIntegration          `bson:"slna_integration,omitempty" json:"slna_integration,omitempty"`
 	ModulBibliometricSummary *ModulBibliometricSummary `bson:"modul_bibliometric_summary,omitempty" json:"modul_bibliometric_summary,omitempty"`
 	Manuscript               *Manuscript               `bson:"manuscript,omitempty" json:"manuscript,omitempty"`
+	AuditReport              *AuditReport              `bson:"audit_report,omitempty" json:"audit_report,omitempty"` // Modul 10: audit pra-submisi + atestasi
 	ManuscriptLang           string                    `bson:"manuscript_lang,omitempty" json:"manuscript_lang,omitempty"` // "id" (default, draft) atau "en" (submission)
 	InclusionCriteria        []string                  `bson:"inclusion_criteria" json:"inclusion_criteria"`
 	ExclusionCriteria        []string                  `bson:"exclusion_criteria" json:"exclusion_criteria"`
