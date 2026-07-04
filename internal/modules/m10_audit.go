@@ -537,6 +537,8 @@ func buildReproPackage(s *model.SLRSession, identified, screened, included, qaRa
 
 	fmt.Fprintf(&b, "## H. Pernyataan penggunaan AI\n")
 	b.WriteString("AI (LLM) dipakai sebagai alat bantu keputusan (decision-support) pada skrining, ekstraksi, penilaian kualitas/risiko bias, dan sintesis — SELALU dengan verifikasi manusia (HITL) di tiap gerbang; dua penilai AI independen dengan κ terukur; aturan simbolik dipadukan dengan penilaian neural (neuro-symbolic); provenance tiap panggilan tersimpan. AI bukan hakim tunggal; keputusan akhir tanggung jawab penulis.\n")
+	b.WriteString("\n## I. Ketersediaan data & arsip (Data Availability)\n")
+	b.WriteString("Untuk reproducibility permanen, deposit paket ini + protokol + laporan + manuskrip ke **Zenodo** (dapat DOI, versioned) dan daftarkan protokol a-priori di **PROSPERO/OSF**. Sitasi DOI Zenodo pada *Data Availability Statement* manuskrip. Rantai: protokol a-priori → data & keputusan (DB) → paket ini → arsip ber-DOI (Zenodo) → disitasi di artikel. Langkah lengkap ada di dokumen Panduan Handoff (Ruang Ekspor).\n")
 	return b.String()
 }
 
