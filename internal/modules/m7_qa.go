@@ -518,9 +518,13 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	}
 
-	// Fase 3: dual-rater QA per paper (batch).
-	cur, err := coll.Find(ctx, bson.M{"session_id": session.ID, "qa_rated": bson.M{"$ne": true}},
-		options.Find().SetLimit(int64(qaBatchSize)))
+	// Fase 3: dual-rater QA per paper (batch). Sertakan paper qa_final_category=ERROR agar
+	// DI-RE-ATTEMPT (dulu: rating gagal -> qa_rated=true + ERROR -> tak pernah dicoba lagi
+	// oleh "Lanjutkan QA" -> deadlock di gerbang audit M10; lapor balqis).
+	cur, err := coll.Find(ctx, bson.M{"session_id": session.ID, "$or": []bson.M{
+		{"qa_rated": bson.M{"$ne": true}},
+		{"qa_final_category": "ERROR"},
+	}}, options.Find().SetLimit(int64(qaBatchSize)))
 	if err != nil {
 		return err
 	}

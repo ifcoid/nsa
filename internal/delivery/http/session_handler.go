@@ -2769,6 +2769,87 @@ func (h *SessionHandler) RerunQA(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+// FixQAErrors (Modul 10): RATE ULANG studi yang qa_final_category=ERROR secara IN-PLACE
+// (tanpa mengulang M8/M9), lalu jalankan ulang audit M10. Resolusi Q1 yang BENAR untuk
+// paper yang gagal dinilai = coba nilai ulang (bukan diam-diam dikecualikan = selection
+// bias). Bila rater masih gagal (provider), paper tetap ERROR & audit tetap memblok —
+// user harus memperbaiki provider dulu. Lapor balqis (deadlock M10 karena paper ERROR).
+func (h *SessionHandler) FixQAErrors(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID required")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	if !strings.Contains(session.Status, "M10") {
+		sendJSONError(w, http.StatusBadRequest, fmt.Sprintf("Aksi ini hanya tersedia di gerbang Audit (Modul 10). Status sekarang: %s.", session.Status))
+		return
+	}
+	if session.QAThreshold == nil {
+		sendJSONError(w, http.StatusBadRequest, "QA belum dikonfigurasi; tak bisa menilai ulang.")
+		return
+	}
+	coll := h.mongoRepo.GetExtractionCollection()
+	cur, err := coll.Find(ctx, bson.M{"session_id": id, "qa_final_category": "ERROR"})
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Gagal membaca paper ERROR")
+		return
+	}
+	var errDocs []bson.M
+	_ = cur.All(ctx, &errDocs)
+	if len(errDocs) == 0 {
+		sendJSONError(w, http.StatusBadRequest, "Tidak ada studi berstatus ERROR untuk dinilai ulang.")
+		return
+	}
+
+	// Tandai sedang bekerja (tracker menampilkan spinner, bukan gerbang FAIL basi).
+	session.Status = "M10_STEP1_FIXING_ERRORS"
+	_ = h.mongoRepo.UpdateSession(ctx, session)
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{"started": true, "error_papers": len(errDocs)})
+
+	go func() {
+		bg := context.Background()
+		s, e := h.mongoRepo.GetSession(bg, id)
+		if e != nil {
+			return
+		}
+		factory := h.pipeline.GetLLMFactory()
+		logger.Logf(id, "   [Modul 10] Menilai ulang %d studi ERROR (in-place)...\n", len(errDocs))
+		for _, d := range errDocs {
+			pid := ""
+			if oid, ok := d["_id"].(primitive.ObjectID); ok {
+				pid = oid.Hex()
+			}
+			if pid == "" {
+				if doi, ok := d["DOI"].(string); ok {
+					pid = doi
+				}
+			}
+			if pid == "" {
+				continue
+			}
+			if _, rerr := modules.RerateSinglePaper(bg, h.mongoRepo, factory, s, pid); rerr != nil {
+				logger.Logf(id, "      [Rate ulang] paper %s gagal: %v\n", pid, rerr)
+			}
+		}
+		remaining, _ := coll.CountDocuments(bg, bson.M{"session_id": id, "qa_final_category": "ERROR"})
+		logger.Logf(id, "   [Modul 10] Selesai menilai ulang: %d/%d studi masih ERROR.\n", remaining, len(errDocs))
+		// Jalankan ulang audit M10 (tetap di M10, TIDAK mengulang M8/M9).
+		s2, e2 := h.mongoRepo.GetSession(bg, id)
+		if e2 != nil {
+			return
+		}
+		s2.Status = "M10_STEP1_AUDIT"
+		_ = h.mongoRepo.UpdateSession(bg, s2)
+		h.pipeline.ExecuteAsync(bg, id)
+	}()
+}
+
 // ReratePaper re-rates a single paper using dual raters.
 // POST /api/sessions/{id}/m7/rerate-paper
 func (h *SessionHandler) ReratePaper(w http.ResponseWriter, req *http.Request) {

@@ -161,6 +161,7 @@ func (r *Router) registerRoutes() {
 
 	// Modul 7 QA jalankan-ulang seluruh proses (tool → kalibrasi → rating), ekstraksi dipertahankan
 	protected.HandleFunc("POST /api/sessions/{id}/m7/rerun-qa", r.sessionHndlr.RerunQA)
+	protected.HandleFunc("POST /api/sessions/{id}/m10/fix-qa-errors", r.sessionHndlr.FixQAErrors)
 
 	// Modul 7 QA Re-rate single paper
 	protected.HandleFunc("POST /api/sessions/{id}/m7/rerate-paper", r.sessionHndlr.ReratePaper)
