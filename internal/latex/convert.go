@@ -58,8 +58,26 @@ func MarkdownToLatex(title, body string) string {
 			inTable = false
 		}
 	}
+	inCode := false
 	for _, ln := range lines {
 		t := strings.TrimSpace(ln)
+		// Blok kode ```...``` → verbatim (abaikan karakter khusus LaTeX seperti {,},_,& pada JSON).
+		if strings.HasPrefix(t, "```") {
+			closeList()
+			closeTable()
+			if !inCode {
+				out.WriteString("\\begin{verbatim}\n")
+				inCode = true
+			} else {
+				out.WriteString("\\end{verbatim}\n")
+				inCode = false
+			}
+			continue
+		}
+		if inCode {
+			out.WriteString(ln + "\n") // mentah, tanpa escape
+			continue
+		}
 		switch {
 		case t == "":
 			closeList()
@@ -111,6 +129,9 @@ func MarkdownToLatex(title, body string) string {
 	}
 	closeList()
 	closeTable()
+	if inCode {
+		out.WriteString("\\end{verbatim}\n")
+	}
 	out.WriteString("\n\\end{document}\n")
 	return out.String()
 }

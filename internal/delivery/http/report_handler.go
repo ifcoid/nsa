@@ -12,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
+	"nsa/internal/latex"
 	"nsa/internal/model"
 )
 
@@ -31,7 +32,15 @@ func (h *SessionHandler) GenerateReport(w http.ResponseWriter, req *http.Request
 		sendJSONError(w, http.StatusNotFound, "Session not found")
 		return
 	}
+	md := h.buildReportMarkdown(ctx, s)
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="laporan_slr.md"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(md))
+}
 
+// buildReportMarkdown merakit laporan SLR Markdown UTUH dari MongoDB (dipakai versi .md & .tex).
+func (h *SessionHandler) buildReportMarkdown(ctx context.Context, s *model.SLRSession) string {
 	var b strings.Builder
 	wln := func(format string, a ...interface{}) { b.WriteString(fmt.Sprintf(format, a...)); b.WriteString("\n") }
 	sec := func(title, md string) { // tampilkan hanya bila ada isi
@@ -199,12 +208,42 @@ func (h *SessionHandler) GenerateReport(w http.ResponseWriter, req *http.Request
 
 	wln("\n---\n*Laporan ini dihasilkan otomatis dari database. Untuk replikasi penuh, ekspor "+
 		"`slr_sessions`, `slr_screening`, `slr_extraction` (lihat GENERATEREPORT.md).*")
+	return b.String()
+}
 
-	fname := "laporan_slr.md"
-	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+// GenerateReportLatex menyajikan LAPORAN sebagai LaTeX (.tex) yang KONSISTEN dengan manuskrip:
+// memakai .bib REAL yang SAMA (session.manuscript.bibtex, dari paper catalog ber-cite-guard),
+// dengan \nocite{*} agar SEMUA referensi nyata tampil. Integritas: laporan & manuskrip merujuk
+// katalog referensi yang identik & nyata (bukan daftar terpisah/halusinasi). Read-only.
+func (h *SessionHandler) GenerateReportLatex(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	ctx := context.Background()
+	s, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	md := h.buildReportMarkdown(ctx, s)
+	title := "Laporan SLR — " + strSafe(s.Topic, "(tanpa topik)")
+	tex := latex.MarkdownToLatex(title, md)
+
+	// Sisipkan bibliografi REAL bersama (identik dgn manuskrip) sebelum \end{document}.
+	bib := ""
+	if s.Manuscript != nil {
+		bib = strings.TrimSpace(s.Manuscript.Bibtex)
+	}
+	if bib != "" {
+		inject := "\n\\clearpage\n\\nocite{*}\n\\bibliographystyle{unsrt}\n\\bibliography{references}\n"
+		tex = strings.Replace(tex, "\\end{document}", inject+"\\end{document}", 1)
+	}
+	w.Header().Set("Content-Type", "application/x-tex; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="laporan_slr.tex"`)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(b.String()))
+	_, _ = w.Write([]byte(tex))
 }
 
 // reportPrisma menghitung ulang angka PRISMA inti dari slr_screening (+ data_mining_log).
@@ -439,7 +478,7 @@ func (h *SessionHandler) HandoffGuide(w http.ResponseWriter, req *http.Request) 
 	w2("```")
 	w2("")
 	w2("## 3. Dua jalur pakai kit ini")
-	w2("- **Jalur cepat (TANPA database):** manuskrip LaTeX final SUDAH lengkap — unduh `.tex`+`.bib` dari Ruang Ekspor, `pdflatex`+`bibtex`, lalu suruh cowork-LLM menyempurnakan prosa langsung di `.tex`. Rantai tertutup tanpa akses DB.")
+	w2("- **Jalur cepat (TANPA database):** manuskrip LaTeX final SUDAH lengkap — unduh `.tex`+`.bib` dari Ruang Ekspor, compile (lihat §7), lalu suruh cowork-LLM menyempurnakan prosa langsung di `.tex`. Rantai tertutup tanpa akses DB.")
 	w2("- **Jalur regen penuh (dengan DB read-only):** untuk menulis ulang/memperkaya dari sumber, sambungkan ke DB (§2) lalu ikuti §4.")
 	w2("")
 	w2("## 4. Langkah regen penuh (untuk cowork LLM)")
@@ -466,6 +505,16 @@ func (h *SessionHandler) HandoffGuide(w http.ResponseWriter, req *http.Request) 
 	w2("5. Revisi berikutnya: fitur *New version* Zenodo (concept-DOI tetap, version-DOI baru) → jejak revisi terarsip.")
 	w2("")
 	w2("> **Rantai reproducibility tertutup:** Protokol a-priori (PROSPERO) → data & keputusan (DB read-only) → Paket Reproducibility → arsip permanen ber-DOI (Zenodo) → disitasi di manuskrip. Pihak ketiga memverifikasi dari DOI TANPA akses ke sistem asli.")
+	w2("")
+	w2("## 7. Compile LaTeX → PDF (TinyTeX)")
+	w2("Manuskrip DAN laporan konsisten **LaTeX + BibTeX** memakai katalog referensi NYATA yang sama (integritas sitasi). Untuk meng-compile:")
+	w2("1. **Install TinyTeX** (distribusi LaTeX ringan ~100MB, sekali pasang):")
+	w2("   - macOS/Linux: `wget -qO- \"https://yihui.org/tinytex/install-bin-unix.sh\" | sh`")
+	w2("   - Windows (PowerShell): `irm https://yihui.org/tinytex/install-bin-windows.bat -OutFile install.bat; ./install.bat`")
+	w2("   - via R: `install.packages('tinytex'); tinytex::install_tinytex()`")
+	w2("2. Taruh `.tex` + `references.bib` (untuk laporan) / `.bib` (untuk manuskrip) di folder yang SAMA, lalu:")
+	w2("   ```\n   pdflatex <file>.tex\n   bibtex <file>\n   pdflatex <file>.tex\n   pdflatex <file>.tex\n   ```")
+	w2("   Urutan itu wajib agar sitasi & daftar pustaka BibTeX ter-resolve; paket yang kurang di-install otomatis oleh TinyTeX. Tanpa install: unggah `.tex`+`.bib` ke **Overleaf** (compile di browser).")
 	w2("")
 	w2("_Dokumen ini di-generate otomatis dari sesi; credential-safe; read-only. Simpan bersama artefak sebagai satu handoff kit._")
 

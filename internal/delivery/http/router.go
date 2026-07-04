@@ -134,6 +134,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("PUT /api/sessions/{id}/framework/columns", r.sessionHndlr.SaveFrameworkColumns)
 	protected.HandleFunc("PUT /api/sessions/{id}/prior-reviews", r.sessionHndlr.SavePriorReviews)
 	protected.HandleFunc("GET /api/sessions/{id}/report", r.sessionHndlr.GenerateReport)
+	protected.HandleFunc("GET /api/sessions/{id}/report-tex", r.sessionHndlr.GenerateReportLatex)
 	protected.HandleFunc("GET /api/sessions/{id}/handoff-guide", r.sessionHndlr.HandoffGuide)
 	protected.HandleFunc("GET /api/sessions/{id}/schema-guide", r.sessionHndlr.SchemaGuide)
 	protected.HandleFunc("GET /api/sessions/{id}/screening-review", r.sessionHndlr.ScreeningReview)
