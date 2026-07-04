@@ -28,6 +28,9 @@ type AuditReport struct {
 	WarnCount   int          `bson:"warn_count" json:"warn_count"`
 	FailCount   int          `bson:"fail_count" json:"fail_count"`
 	GeneratedAt string       `bson:"generated_at" json:"generated_at"` // RFC3339
+	// Artefak yang DI-GENERATE deterministik dari state sesi (untuk submisi Q1):
+	ProtocolMarkdown     string `bson:"protocol_markdown,omitempty" json:"protocol_markdown,omitempty"`             // protokol a-priori gaya PROSPERO (dapat didaftarkan)
+	ReproPackageMarkdown string `bson:"repro_package_markdown,omitempty" json:"repro_package_markdown,omitempty"` // paket reproducibility / supplementary (PRISMA-S + κ + provenance)
 	// Atestasi HITL: diisi saat peneliti menyetujui gerbang (Approve M10).
 	AttestedBy string `bson:"attested_by,omitempty" json:"attested_by,omitempty"`
 	AttestedAt string `bson:"attested_at,omitempty" json:"attested_at,omitempty"`

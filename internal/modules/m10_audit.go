@@ -256,5 +256,234 @@ func buildAuditReport(session *model.SLRSession, identified, screenedTotal, extr
 		report.Verdict = "READY"
 		report.Summary = fmt.Sprintf("Semua %d cek lolos. Manuskrip layak submit Q1 setelah atestasi peneliti.", report.PassCount)
 	}
+
+	// Rakit artefak submisi DETERMINISTIK dari state sesi (tanpa LLM → reproducible).
+	report.ProtocolMarkdown = buildProtocolDoc(session)
+	report.ReproPackageMarkdown = buildReproPackage(session, identified, screenedTotal, extractedCount, qaRatedCount)
 	return report
+}
+
+// --- Perakit artefak submisi (deterministik) ---------------------------------
+
+func mdEsc(s string) string { return strings.TrimSpace(s) }
+
+// buildProtocolDoc merakit protokol a-priori gaya PROSPERO yang dapat didaftarkan,
+// murni dari data sesi (bisa diedit user via modul terkait → multi-tenant).
+func buildProtocolDoc(s *model.SLRSession) string {
+	var b strings.Builder
+	title := mdEsc(s.Topic)
+	if s.SelectedTopic != nil && strings.TrimSpace(s.SelectedTopic.Name) != "" {
+		title = mdEsc(s.SelectedTopic.Name)
+	}
+	fmt.Fprintf(&b, "# Protokol Systematic Literature Review (a-priori, gaya PROSPERO)\n\n")
+	fmt.Fprintf(&b, "> Dokumen ini dirakit otomatis dari protokol yang ditetapkan di awal sesi. Cocok untuk pendaftaran (mis. PROSPERO/OSF) sebelum atau saat submisi.\n\n")
+	fmt.Fprintf(&b, "## 1. Judul review\n%s\n\n", title)
+
+	fmt.Fprintf(&b, "## 2. Pertanyaan & tujuan review\n")
+	if len(s.ResearchQuestions) == 0 {
+		b.WriteString("_(belum ada RQ tersimpan)_\n")
+	}
+	for i, rq := range s.ResearchQuestions {
+		fmt.Fprintf(&b, "%d. **[%s]** %s\n", i+1, strings.TrimSpace(rq.Type), mdEsc(rq.Question))
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## 3. Kriteria kelayakan (PICO)\n")
+	if p := s.PICODefinitions; p != nil {
+		fmt.Fprintf(&b, "- **Population/Problem (P):** %s\n", mdEsc(p.P.Value))
+		fmt.Fprintf(&b, "- **Intervention (I):** %s\n", mdEsc(p.I.Value))
+		fmt.Fprintf(&b, "- **Comparison (C):** %s\n", mdEsc(p.C.Value))
+		fmt.Fprintf(&b, "- **Outcome (O):** %s\n", mdEsc(p.O.Value))
+	} else {
+		b.WriteString("_(PICO belum ditetapkan)_\n")
+	}
+	if len(s.InclusionCriteria) > 0 {
+		b.WriteString("\n**Kriteria inklusi:**\n")
+		for _, c := range s.InclusionCriteria {
+			fmt.Fprintf(&b, "- %s\n", mdEsc(c))
+		}
+	}
+	if len(s.ExclusionCriteria) > 0 {
+		b.WriteString("\n**Kriteria eksklusi:**\n")
+		for _, c := range s.ExclusionCriteria {
+			fmt.Fprintf(&b, "- %s\n", mdEsc(c))
+		}
+	}
+	if sf := s.ScopeFilters; sf != nil {
+		b.WriteString("\n**Batasan lingkup:** ")
+		fmt.Fprintf(&b, "Tahun: %s · Geografis: %s · Sektor: %s · Bahasa: %s%s\n",
+			def(sf.RentangTahun), def(sf.Geografis), def(sf.Sektor), def(sf.Bahasa),
+			ifStr(strings.TrimSpace(sf.Lainnya) != "", " · Lainnya: "+mdEsc(sf.Lainnya), ""))
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## 4. Sumber informasi & strategi pencarian\n")
+	if db := s.DatabaseSelection; db != nil {
+		fmt.Fprintf(&b, "**Database:** %s\n\n", def(db.Decision))
+		if strings.TrimSpace(db.JustifikasiFinal) != "" {
+			fmt.Fprintf(&b, "_Justifikasi:_ %s\n\n", mdEsc(db.JustifikasiFinal))
+		}
+	}
+	if ss := s.SearchString; ss != nil {
+		if strings.TrimSpace(ss.ScopusQuery) != "" {
+			fmt.Fprintf(&b, "**Kueri (Scopus, kanonik):**\n```\n%s\n```\n", strings.TrimSpace(ss.ScopusQuery))
+		}
+		for _, a := range ss.AdaptedStrings {
+			_ = a // adapted strings ada di paket reproducibility (lengkap per-DB)
+		}
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## 5. Ekstraksi data (form)\n")
+	if fw := s.FrameworkSelection; fw != nil && len(fw.Columns) > 0 {
+		fmt.Fprintf(&b, "Framework: **%s**. Item data yang diekstrak:\n\n", def(fw.Framework))
+		b.WriteString("| Kolom | Kategori | Deskripsi |\n|---|---|---|\n")
+		for _, c := range fw.Columns {
+			fmt.Fprintf(&b, "| %s | %s | %s |\n", mdEsc(c.Key), mdEsc(c.Category), mdEsc(c.Desc))
+		}
+	} else {
+		b.WriteString("_(form ekstraksi belum ditetapkan)_\n")
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## 6. Penilaian risiko bias / kualitas\n")
+	if qa := s.QAThreshold; qa != nil {
+		fmt.Fprintf(&b, "**Tool:** %s · **Ambang:** %.0f%% · **Kategorisasi:** %s\n\n", def(qa.Tool), qa.Threshold, def(qa.Categorization))
+		if strings.TrimSpace(qa.ToolJustification) != "" {
+			fmt.Fprintf(&b, "_Justifikasi tool:_ %s\n", mdEsc(qa.ToolJustification))
+		}
+	} else {
+		b.WriteString("_(tool QA belum ditetapkan)_\n")
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## 7. Strategi sintesis data\n")
+	if sp := s.SynthesisPathDecision; sp != nil {
+		fmt.Fprintf(&b, "Jalur sintesis: **%s**.\n", def(synthPathLabel(sp)))
+	} else {
+		b.WriteString("Narrative synthesis (default) kecuali homogenitas mendukung meta-analysis.\n")
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## 8. Amandemen protokol\n")
+	if n := len(s.ScreeningCorrections); n > 0 {
+		fmt.Fprintf(&b, "%d koreksi keputusan include/exclude pasca-screening tercatat (lihat Paket Reproducibility untuk alasan tiap koreksi).\n", n)
+	} else {
+		b.WriteString("Tidak ada amandemen protokol tercatat; protokol diterapkan seragam ke semua studi.\n")
+	}
+	return b.String()
+}
+
+// buildReproPackage merakit supplementary reproducibility (PRISMA-S + κ + provenance).
+func buildReproPackage(s *model.SLRSession, identified, screened, included, qaRated int) string {
+	var b strings.Builder
+	b.WriteString("# Paket Reproducibility (Supplementary)\n\n")
+	b.WriteString("> Dirakit deterministik dari state sesi. Lampirkan sebagai supplementary material untuk memenuhi standar reproducibility Q1 (PRISMA 2020 + PRISMA-S).\n\n")
+
+	fmt.Fprintf(&b, "## A. Ringkasan angka (PRISMA)\n")
+	fmt.Fprintf(&b, "| Tahap | n |\n|---|---|\n| Records identified | %d |\n| Records screened | %d |\n| Studies included (final) | %d |\n| Studies appraised (QA) | %d |\n\n", identified, screened, included, qaRated)
+
+	fmt.Fprintf(&b, "## B. Strategi pencarian lengkap (PRISMA-S)\n")
+	if ss := s.SearchString; ss != nil {
+		if strings.TrimSpace(ss.ScopusQuery) != "" {
+			fmt.Fprintf(&b, "**Scopus (kanonik):**\n```\n%s\n```\n", strings.TrimSpace(ss.ScopusQuery))
+		}
+		for _, a := range ss.AdaptedStrings {
+			fmt.Fprintf(&b, "\n**%s:**\n```\n%s\n```\n", mdEsc(a.Database), strings.TrimSpace(a.Query))
+		}
+		if len(ss.Filters) > 0 {
+			b.WriteString("\n**Filter diterapkan:** ")
+			var fs []string
+			for _, f := range ss.Filters {
+				fs = append(fs, mdEsc(f.Filter)+"="+mdEsc(f.Value))
+			}
+			b.WriteString(strings.Join(fs, "; ") + "\n")
+		}
+	} else if sl := s.SearchLog; sl != nil {
+		fmt.Fprintf(&b, "```\n%s\n```\nDatabases: %s\n", strings.TrimSpace(sl.SearchStringFinal), strings.Join(sl.Databases, ", "))
+	} else {
+		b.WriteString("_(strategi pencarian tak tersedia)_\n")
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## C. Reliabilitas antar-penilai (Cohen's κ)\n")
+	if cal := s.QACalibration; cal != nil {
+		fmt.Fprintf(&b, "- Kalibrasi QA (dual-rater): κ = **%.2f** (%s)\n", cal.PilotKappa, ifStr(cal.CalibrationPassed, "lulus", "belum lulus"))
+	}
+	if el := s.ExtractionLog; el != nil && el.ExtractionKappa > 0 {
+		fmt.Fprintf(&b, "- Verifikasi ekstraksi: κ = **%.2f** (sampel %d)\n", el.ExtractionKappa, el.VerifiedSample)
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## D. Form ekstraksi & rubrik QA\n")
+	if fw := s.FrameworkSelection; fw != nil && len(fw.Columns) > 0 {
+		fmt.Fprintf(&b, "Framework **%s** — %d item data (lihat Protokol §5).\n", def(fw.Framework), len(fw.Columns))
+	}
+	if qa := s.QAThreshold; qa != nil && strings.TrimSpace(qa.QARubric) != "" {
+		fmt.Fprintf(&b, "\n**Rubrik operasional QA (%s, ambang %.0f%%):**\n\n%s\n", def(qa.Tool), qa.Threshold, mdEsc(qa.QARubric))
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## E. Certainty of evidence (GRADE)\n")
+	if g := s.GradeEvidence; g != nil && strings.TrimSpace(g.TableMarkdown) != "" {
+		fmt.Fprintf(&b, "%s\n\n_Robustness:_ %s. %s\n", strings.TrimSpace(g.TableMarkdown), def(g.RobustnessVerdict), mdEsc(g.RobustnessSummary))
+	} else {
+		b.WriteString("_(tabel GRADE tak tersedia)_\n")
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## F. PRISMA 2020 (flow + checklist)\n")
+	if ms := s.Manuscript; ms != nil {
+		if strings.TrimSpace(ms.PrismaFlow) != "" {
+			fmt.Fprintf(&b, "**Flow:**\n```\n%s\n```\n", strings.TrimSpace(ms.PrismaFlow))
+		}
+		if strings.TrimSpace(ms.PrismaChecklist) != "" {
+			fmt.Fprintf(&b, "\n**Checklist 27-item:**\n\n%s\n", strings.TrimSpace(ms.PrismaChecklist))
+		}
+	}
+	b.WriteString("\n")
+
+	fmt.Fprintf(&b, "## G. Jejak keputusan (provenance)\n")
+	if n := len(s.ScreeningCorrections); n > 0 {
+		b.WriteString("Koreksi keputusan include/exclude pasca-screening (dengan alasan):\n\n")
+		b.WriteString("| Paper | Dari | Ke | Alasan |\n|---|---|---|---|\n")
+		for _, c := range s.ScreeningCorrections {
+			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", mdEsc(firstNonEmpty(c.Title, c.DOI, c.PaperID)), mdEsc(c.From), mdEsc(c.To), mdEsc(c.Reason))
+		}
+	} else {
+		b.WriteString("Tidak ada koreksi keputusan pasca-screening (protokol diterapkan seragam).\n")
+	}
+	b.WriteString("\nJejak lengkap tiap panggilan AI (model, prompt, keluaran) tersimpan pada log xAI sesi dan dapat diekspor.\n\n")
+
+	fmt.Fprintf(&b, "## H. Pernyataan penggunaan AI\n")
+	b.WriteString("AI (LLM) dipakai sebagai alat bantu keputusan (decision-support) pada skrining, ekstraksi, penilaian kualitas/risiko bias, dan sintesis — SELALU dengan verifikasi manusia (HITL) di tiap gerbang; dua penilai AI independen dengan κ terukur; aturan simbolik dipadukan dengan penilaian neural (neuro-symbolic); provenance tiap panggilan tersimpan. AI bukan hakim tunggal; keputusan akhir tanggung jawab penulis.\n")
+	return b.String()
+}
+
+// helper kecil
+func def(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "-"
+	}
+	return strings.TrimSpace(s)
+}
+func ifStr(cond bool, a, b string) string {
+	if cond {
+		return a
+	}
+	return b
+}
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return "-"
+}
+func synthPathLabel(sp *model.SynthesisPathDecision) string {
+	if sp == nil {
+		return ""
+	}
+	return sp.Verdict
 }
