@@ -351,3 +351,51 @@ mongoexport --uri "$MONGO_URI" --db "${DB_NAME:-slr_agentic_db}" \
 - [ ] Transparansi: provenance (`evidence`), atribusi model, `xai_log`, audit koreksi.
 
 Bila semua kotak terisi dari DB, laporannya **utuh, reproducible, dan transparan**.
+
+---
+
+## Field BARU — Modul 9 (xAI provenance) & Modul 10 (Audit & Defensibility Gate)
+
+> Ditambahkan setelah revisi M9/M10. Cowork-LLM yang regen dari DB WAJIB memakai
+> field ini agar laporan/manuskrip memuat bukti xAI + audit pra-submisi terbaru.
+
+### `slr_sessions.manuscript` — provenance penulisan (xAI)
+| Field (bson) | Tipe | Isi |
+|---|---|---|
+| `model_used` | string | Nama model Brain penulis section (atribusi xAI, mis. `groq (llama-3.3-70b)`) |
+| `claim_verifications` | array | Bukti triangulasi neuro-symbolic per klaim manuskrip |
+
+`claim_verifications[]` (satu per klaim):
+| Field | Tipe | Isi |
+|---|---|---|
+| `section` | string | Section manuskrip (Methods/Results/…) |
+| `claim` | string | Teks klaim |
+| `citation_key` | string | \cite key yang dirujuk |
+| `qdrant_verified` | bool | Klaim cocok semantik ke DOI tersitasi (Qdrant) |
+| `neo4j_verified` | bool | Didukung relasi di knowledge graph (Neo4j) |
+| `mongo_verified` | bool | Cocok dengan `key_findings` ekstraksi (MongoDB) |
+| `sources` | int | Jumlah sumber cocok; **≥2 = terverifikasi** |
+
+→ Untuk *Results/Discussion*: kutip HANYA klaim `sources>=2`; laporkan yang `<2` sebagai keterbatasan (jujur). Untuk supplementary: sertakan ringkasan `n terverifikasi / total`.
+
+### `slr_sessions.audit_report` — hasil Modul 10 (audit pra-submisi + artefak)
+| Field (bson) | Tipe | Isi |
+|---|---|---|
+| `checks` | array | Cek simbolik deterministik (lihat di bawah) |
+| `verdict` | string | `READY` / `READY_WITH_WARNINGS` / `NOT_READY` |
+| `summary` | string | Ringkasan verdict |
+| `pass_count`/`warn_count`/`fail_count` | int | Rekap status cek |
+| `generated_at` | string (RFC3339) | Waktu audit |
+| `protocol_markdown` | string | **Protokol a-priori gaya PROSPERO** (dapat didaftarkan) |
+| `repro_package_markdown` | string | **Paket Reproducibility** (PRISMA-S + κ + provenance + Data Availability/Zenodo) |
+| `attested_by` / `attested_at` | string | Jejak atestasi peneliti (HITL) |
+
+`checks[]`: `{ id, category (PRISMA/Reliabilitas/Kelengkapan/Pelaporan/Integritas), name, status (PASS/WARN/FAIL), detail, fix }`.
+
+→ `protocol_markdown` & `repro_package_markdown` adalah artefak SIAP-PAKAI (jangan digenerate ulang; ekspor apa adanya untuk Zenodo/PROSPERO). `audit_report.verdict` menandakan kesiapan submit.
+
+### Pernyataan AI (WAJIB akurat — COPE/Elsevier)
+Sistem memakai AI sebagai **decision-support** (skrining/ekstraksi/appraisal/sintesis) dengan **verifikasi manusia (HITL)** + **Cohen's κ** + neuro-symbolic. JANGAN menulis "AI tidak dipakai untuk analisis" (keliru). Deskripsikan peran AI + kendali manusia secara transparan di Methods + AI Assistance Declaration.
+
+### Data Availability / arsip
+Deposit `protocol_markdown` + `repro_package_markdown` + laporan + manuskrip ke **Zenodo** (dapat DOI) & daftarkan protokol di **PROSPERO/OSF**; sitasi DOI di *Data Availability Statement*.

@@ -403,3 +403,38 @@ substansi, etika, bahasa.
 
 Bila §2–§8 terpenuhi dari DB, naskahnya **utuh, etis, ber-teori, bebas jejak-AI, dan siap
 diaudit untuk Q1**.
+
+---
+
+## Update: Modul 10, verifikasi klaim, disclosure AI, & Zenodo (rantai reproducible)
+
+> Bagian ini menyesuaikan panduan dengan revisi terbaru sistem (M9 xAI + M10 Audit).
+> Field teknis lengkap ada di `GENERATEREPORT.md` (§ Field BARU).
+
+### 1. Dua jalur regenerasi
+- **Jalur cepat (tanpa DB):** manuskrip LaTeX final (`manuscript.latex`/`bibtex`) SUDAH lengkap — sempurnakan prosa langsung. Rantai tertutup tanpa akses database.
+- **Jalur penuh (DB read-only):** tulis ulang/perkaya dari sumber (Mongo/Qdrant/Neo4j) mengikuti panduan ini.
+
+### 2. Gunakan bukti verifikasi klaim (neuro-symbolic) — KUNCI defensibilitas Q1
+`manuscript.claim_verifications[]` memuat triangulasi tiap klaim ke Qdrant+Neo4j+MongoDB.
+- Di *Results/Discussion*: **kutip HANYA klaim dengan `sources>=2`**. Klaim `<2` → jangan diklaim tegas; laporkan sebagai keterbatasan (kejujuran evidential).
+- Di supplementary: sertakan ringkasan `n terverifikasi / total` + breakdown sumber. Ini bukti bahwa klaim tertaut bukti — reviewer Q1 menghargainya.
+
+### 3. Disclosure AI yang AKURAT (JANGAN menyamarkan AI)
+Sistem memakai AI sebagai **decision-support** untuk skrining, ekstraksi, penilaian kualitas/risiko bias, dan sintesis — SELALU dengan **verifikasi manusia (HITL)** di tiap gerbang, **dua penilai AI independen + Cohen's κ**, dan **neuro-symbolic** (aturan simbolik + neural).
+- **Methods HARUS mendeskripsikan ini secara transparan** (mis. "two LLM-based reviewers with human-in-the-loop verification; inter-rater agreement quantified via Cohen's kappa"). JANGAN menulis "AI tidak dipakai untuk analisis" atau menyamarkan rater AI sebagai manusia — itu misrepresentasi & risiko integritas (COPE/Elsevier).
+- Sertakan **AI Assistance Declaration** yang jujur + rujuk provenance (log xAI) sebagai supplementary.
+
+### 4. Artefak Modul 10 (siap pakai — jangan digenerate ulang)
+Dari `session.audit_report`:
+- `protocol_markdown` = **Protokol a-priori gaya PROSPERO** → daftarkan di PROSPERO/OSF (idealnya sebelum/saat submit).
+- `repro_package_markdown` = **Paket Reproducibility** (PRISMA-S: search string per-DB, κ screening/ekstraksi/QA, form+rubrik, GRADE, PRISMA flow+checklist, jejak keputusan, pernyataan AI).
+- `verdict` (`READY`/`READY_WITH_WARNINGS`/`NOT_READY`) = status kesiapan submit; selesaikan bloker sebelum submit.
+
+### 5. Deposit Zenodo + Data Availability Statement (reproducible + DOI)
+1. Deposit satu paket ke **Zenodo** (login via ORCID → New upload): protokol + paket reproducibility + laporan + manuskrip `.tex`/`.bib` + Panduan Handoff. (Opsional: ekspor read-only data ekstraksi/screening — HAPUS kredensial.)
+2. Metadata + lisensi (mis. CC-BY-4.0) → Publish → dapat **DOI** (`10.5281/zenodo.XXXXXXX`).
+3. Tulis **Data Availability Statement** di manuskrip: "Protocol, extraction data, and reproducibility package are openly available at Zenodo, DOI: 10.5281/zenodo.XXXXXXX." + tautkan registrasi PROSPERO/OSF.
+4. Revisi berikutnya → *New version* Zenodo (concept-DOI tetap, version-DOI baru).
+
+**Rantai reproducible tertutup:** protokol a-priori (PROSPERO) → data & keputusan HITL (DB) → paket reproducibility → arsip ber-DOI (Zenodo) → disitasi di manuskrip. Pihak ketiga memverifikasi dari DOI tanpa akses sistem asli.
