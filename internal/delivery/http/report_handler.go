@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -374,4 +375,78 @@ func mdCell(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// HandoffGuide merakit "Panduan Handoff Cowork-LLM": dokumen credential-SAFE yang mengarahkan
+// LLM lain (Claude/GPT di sesi/tool lain) untuk meregenerasi/menyempurnakan artikel+laporan
+// LaTeX dari DATA sesi ini. TIDAK pernah memuat kredensial asli — hanya placeholder + pointer.
+func (h *SessionHandler) HandoffGuide(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	s, err := h.mongoRepo.GetSession(context.Background(), id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "slr_agentic_db"
+	}
+	lang := strSafe(s.ManuscriptLang, "id")
+
+	var b strings.Builder
+	w2 := func(f string, a ...interface{}) { b.WriteString(fmt.Sprintf(f, a...)); b.WriteString("\n") }
+
+	w2("# Panduan Handoff Cowork-LLM — %s", strSafe(s.Topic, "(tanpa topik)"))
+	w2("")
+	w2("> Dokumen ini menyerahkan hasil SLR agar dapat DILANJUTKAN/DISEMPURNAKAN bersama LLM lain")
+	w2("> (mis. Claude/GPT di sesi terpisah) yang diberi akses **read-only** ke database Anda.")
+	w2("> Session: `%s` · Status: %s · Bahasa manuskrip: %s", s.ID, s.Status, lang)
+	w2("")
+	w2("## ⚠️ Keamanan (WAJIB dibaca)")
+	w2("Dokumen ini **TIDAK memuat kredensial** apa pun. Isi placeholder `<...>` di bawah dengan")
+	w2("kredensial Anda SENDIRI (jangan commit/kirim ke pihak lain). Semua akses cukup **READ-ONLY**.")
+	w2("")
+	w2("## 1. Sumber data (pointer sesi ini)")
+	w2("| Store | Peran | Lokasi / kunci |")
+	w2("|---|---|---|")
+	w2("| MongoDB | State SLR + keputusan HITL + provenance | DB `%s`, koleksi `slr_sessions` (`_id=\"%s\"`), `slr_screening`, `slr_extraction` |", dbName, s.ID)
+	w2("| Qdrant | Full-text embedding (RAG bukti/sitasi) | collection **`scientific_articles`** (payload: `title`,`doi`,`article_id`,`content`) — GLOBAL lintas-sesi, filter per DOI studi included |")
+	w2("| Neo4j (opsional) | Knowledge graph / SLNA | node per studi (label Paper/Author/Method/Dataset/Metric), relasi antar-entitas — filter `session_id=\"%s\"` |", s.ID)
+	w2("")
+	w2("## 2. Template koneksi (isi kredensial Anda — JANGAN bagikan)")
+	w2("```bash")
+	w2("# MongoDB (Atlas / lokal)")
+	w2("export MONGO_URI=\"<mongodb+srv://USER:PASS@host/>\"   # read-only user disarankan")
+	w2("export DB_NAME=\"%s\"", dbName)
+	w2("# Qdrant")
+	w2("export QDRANT_URL=\"<https://<id>.<region>.gcp.cloud.qdrant.io:6333>\"")
+	w2("export QDRANT_API_KEY=\"<api-key>\"")
+	w2("# Neo4j / AuraDB (opsional)")
+	w2("export NEO4JURI=\"<neo4j+s://<id>.databases.neo4j.io>\"")
+	w2("export NEO4JUSER=\"neo4j\"; export NEO4JPASSWORD=\"<password>\"")
+	w2("```")
+	w2("")
+	w2("## 3. Cara meregenerasi / menyempurnakan (untuk cowork LLM)")
+	w2("1. **Titik awal**: manuskrip LaTeX final sudah ada — unduh `.tex` + `.bib` dari Ruang Ekspor, jalankan `pdflatex` + `bibtex`.")
+	w2("2. **Untuk memperkaya/menulis ulang**: tarik data lengkap dari MongoDB (koleksi di §1). Semua angka PRISMA/κ **dihitung ulang dari keputusan FINAL di DB** — jangan mengarang.")
+	w2("3. **Untuk verifikasi klaim/sitasi**: cari full-text di Qdrant `scientific_articles` (semantic search) sebelum menulis klaim; kutip HANYA yang tertaut bukti (lihat `claim_verifications` pada `manuscript`).")
+	w2("4. **Ikuti protokol a-priori** (jangan HARKing): framework ekstraksi & kriteria sudah tetap di `slr_sessions`. Jangan ubah protokol mengikuti data.")
+	w2("5. **Gaya Q1 / anti-AI-tell**: tanpa em-dash/emoji/kata over-AI; deskripsikan proses AI-assisted-HITL secara TRANSPARAN di Methods (jangan menyamarkan AI sebagai manusia).")
+	w2("6. **Panduan detail** (pemetaan field → bagian artikel, gate etika, pertanyaan Scopus AI): ikuti `GENERATEARTIKEL.md` & `GENERATEREPORT.md` (repo `ifcoid/nsa`).")
+	w2("")
+	w2("## 4. Artefak yang menyertai (dari Ruang Ekspor)")
+	w2("- Manuskrip: `.tex` (LaTeX), `.bib` (BibTeX), `.md` (final).")
+	w2("- Laporan lengkap `.md` (naratif per-modul + PRISMA + ekstraksi).")
+	w2("- Protokol a-priori (PROSPERO/OSF) + Paket Reproducibility (PRISMA-S + κ + provenance).")
+	w2("")
+	w2("_Dokumen ini di-generate otomatis dari sesi; credential-safe; read-only. Simpan bersama artefak sebagai satu handoff kit._")
+
+	fname := fmt.Sprintf("handoff_%s.md", s.ID)
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	_, _ = w.Write([]byte(b.String()))
 }
