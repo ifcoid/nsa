@@ -453,6 +453,55 @@ func buildReproPackage(s *model.SLRSession, identified, screened, included, qaRa
 	} else {
 		b.WriteString("Tidak ada koreksi keputusan pasca-screening (protokol diterapkan seragam).\n")
 	}
+	// Bukti triangulasi klaim (neuro-symbolic) — xAI: mana yang lolos ≥2 sumber.
+	if ms := s.Manuscript; ms != nil && len(ms.ClaimVerifications) > 0 {
+		total := len(ms.ClaimVerifications)
+		ver, q, ne, mo := 0, 0, 0, 0
+		var weak []model.ClaimVerification
+		for _, c := range ms.ClaimVerifications {
+			if c.Sources >= 2 {
+				ver++
+			} else {
+				weak = append(weak, c)
+			}
+			if c.QdrantVerified {
+				q++
+			}
+			if c.Neo4jVerified {
+				ne++
+			}
+			if c.MongoVerified {
+				mo++
+			}
+		}
+		fmt.Fprintf(&b, "\n**Verifikasi klaim (triangulasi neuro-symbolic):** %d/%d klaim terverifikasi ≥2 sumber (Qdrant=%d, Neo4j=%d, MongoDB=%d).",
+			ver, total, q, ne, mo)
+		if ms.ModelUsed != "" {
+			fmt.Fprintf(&b, " Model penulis: %s.", mdEsc(ms.ModelUsed))
+		}
+		b.WriteString("\n")
+		if len(weak) > 0 {
+			fmt.Fprintf(&b, "\nKlaim dengan dukungan <2 sumber (%d) — ditinjau/dilemahkan saat penulisan (P2):\n\n", len(weak))
+			b.WriteString("| Section | Klaim | Sumber cocok |\n|---|---|---|\n")
+			for i, c := range weak {
+				if i >= 25 {
+					fmt.Fprintf(&b, "| … | _(%d klaim lain)_ | |\n", len(weak)-25)
+					break
+				}
+				var src []string
+				if c.QdrantVerified {
+					src = append(src, "Qdrant")
+				}
+				if c.Neo4jVerified {
+					src = append(src, "Neo4j")
+				}
+				if c.MongoVerified {
+					src = append(src, "MongoDB")
+				}
+				fmt.Fprintf(&b, "| %s | %s | %s |\n", mdEsc(c.Section), mdEsc(clip(c.Claim, 140)), def(strings.Join(src, "+")))
+			}
+		}
+	}
 	b.WriteString("\nJejak lengkap tiap panggilan AI (model, prompt, keluaran) tersimpan pada log xAI sesi dan dapat diekspor.\n\n")
 
 	fmt.Fprintf(&b, "## H. Pernyataan penggunaan AI\n")
@@ -461,6 +510,14 @@ func buildReproPackage(s *model.SLRSession, identified, screened, included, qaRa
 }
 
 // helper kecil
+func clip(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) > n {
+		return s[:n] + "…"
+	}
+	return s
+}
+
 func def(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return "-"

@@ -20,4 +20,20 @@ type Manuscript struct {
 	Final           string `bson:"final" json:"final"`   // manuscript_final.md
 	Latex           string `bson:"latex" json:"latex"`   // manuscript_final.tex
 	Summary         string `bson:"summary" json:"summary"` // modul9_summary
+	// xAI provenance M9 (atribusi model + bukti verifikasi klaim neuro-symbolic).
+	ModelUsed          string              `bson:"model_used,omitempty" json:"model_used,omitempty"`                     // nama model Brain penulis section
+	ClaimVerifications []ClaimVerification `bson:"claim_verifications,omitempty" json:"claim_verifications,omitempty"` // hasil triangulasi 3-sumber per klaim
+}
+
+// ClaimVerification = bukti xAI: hasil triangulasi neuro-symbolic satu klaim manuskrip
+// terhadap Qdrant (semantik) + Neo4j (knowledge graph) + MongoDB (ekstraksi). Klaim
+// dianggap terverifikasi bila Sources>=2. Disimpan agar dapat diaudit/diekspor (Q1).
+type ClaimVerification struct {
+	Section        string `bson:"section,omitempty" json:"section,omitempty"`
+	Claim          string `bson:"claim" json:"claim"`
+	CitationKey    string `bson:"citation_key,omitempty" json:"citation_key,omitempty"`
+	QdrantVerified bool   `bson:"qdrant_verified" json:"qdrant_verified"`
+	Neo4jVerified  bool   `bson:"neo4j_verified" json:"neo4j_verified"`
+	MongoVerified  bool   `bson:"mongo_verified" json:"mongo_verified"`
+	Sources        int    `bson:"sources" json:"sources"`
 }

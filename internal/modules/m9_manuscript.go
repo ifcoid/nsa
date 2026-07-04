@@ -109,7 +109,7 @@ func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) e
 //	then asks LLM to remove/flag unverified claims and strengthen verified ones.
 //
 // Pass 3: Style cleanup -- removes AI-like phrasing, em dashes, and redundancies.
-func (m *M9Manuscript) generateWithMultiPass(ctx context.Context, ag *agent.ManuscriptAgent, session *model.SLRSession, systemPrompt, userBundle, lang string, citations []PaperCitation) (string, error) {
+func (m *M9Manuscript) generateWithMultiPass(ctx context.Context, ag *agent.ManuscriptAgent, session *model.SLRSession, section, systemPrompt, userBundle, lang string, citations []PaperCitation) (string, error) {
 	// The allowed-keys list is supplied to passes 2 and 3 so the LLM corrects \cite{}
 	// against the real bibliography instead of inventing decorated/descriptive keys.
 	allowedKeys := buildAllowedKeysList(citations)
@@ -128,6 +128,9 @@ func (m *M9Manuscript) generateWithMultiPass(ctx context.Context, ag *agent.Manu
 	if err != nil {
 		return "", err
 	}
+	// xAI: SIMPAN bukti verifikasi per-section (durable + dapat diekspor), bukan hanya
+	// dipakai sekali lalu dibuang. Menutup celah audit M9 (klaim mana yang gagal triangulasi).
+	setSectionVerifications(session.Manuscript, section, verResults)
 	verSummary := formatVerificationResults(verResults)
 	verifiedDraft, err := ag.Write(ctx, promptVerification+lang, draft+allowedKeys+verSummary)
 	if err != nil {
@@ -147,6 +150,32 @@ func (m *M9Manuscript) generateWithMultiPass(ctx context.Context, ag *agent.Manu
 	cleaned, stats := sanitizeCitations(finalDraft, citations)
 	logCiteGuard(session.ID, systemPrompt, stats)
 	return cleaned, nil
+}
+
+// setSectionVerifications MENGGANTI entri verifikasi untuk satu section (idempoten saat
+// re-run/revisi) lalu menyimpan bukti triangulasi 3-sumber ke manuskrip (xAI durable).
+func setSectionVerifications(ms *model.Manuscript, section string, vrs []VerificationResult) {
+	if ms == nil {
+		return
+	}
+	kept := ms.ClaimVerifications[:0]
+	for _, cv := range ms.ClaimVerifications {
+		if cv.Section != section {
+			kept = append(kept, cv)
+		}
+	}
+	ms.ClaimVerifications = kept
+	for _, vr := range vrs {
+		ms.ClaimVerifications = append(ms.ClaimVerifications, model.ClaimVerification{
+			Section:        section,
+			Claim:          vr.Claim,
+			CitationKey:    vr.CitationKey,
+			QdrantVerified: vr.QdrantVerified,
+			Neo4jVerified:  vr.Neo4jVerified,
+			MongoVerified:  vr.MongoVerified,
+			Sources:        vr.Sources,
+		})
+	}
 }
 
 // logCiteGuard surfaces what the deterministic citation guard changed so it is
@@ -202,6 +231,7 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 	if session.Manuscript == nil {
 		session.Manuscript = &model.Manuscript{}
 	}
+	session.Manuscript.ModelUsed = brain.ModelName() // atribusi xAI (nama model asli)
 	bundle := m.artifactBundle(session)
 	lang := langDirective(session)
 
@@ -216,28 +246,28 @@ func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSes
 	userCtx := bundle + m.prismaContext(ctx, session) + paperBundle + fulltextCtx
 
 	// Multi-pass: Methods
-	methods, err := m.generateWithMultiPass(ctx, ag, session, promptMethods, userCtx, lang, citations)
+	methods, err := m.generateWithMultiPass(ctx, ag, session, "Methods", promptMethods, userCtx, lang, citations)
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Methods (3-pass)")
 
 	// Multi-pass: Results
-	results, err := m.generateWithMultiPass(ctx, ag, session, promptResults, userCtx+sectionCtx("METHODS (sudah ditulis)", methods), lang, citations)
+	results, err := m.generateWithMultiPass(ctx, ag, session, "Results", promptResults, userCtx+sectionCtx("METHODS (sudah ditulis)", methods), lang, citations)
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Results (3-pass)")
 
 	// Multi-pass: Discussion
-	discussion, err := m.generateWithMultiPass(ctx, ag, session, promptDiscussion, userCtx+sectionCtx("RESULTS (sudah ditulis -- jangan diulang)", results), lang, citations)
+	discussion, err := m.generateWithMultiPass(ctx, ag, session, "Discussion", promptDiscussion, userCtx+sectionCtx("RESULTS (sudah ditulis -- jangan diulang)", results), lang, citations)
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Discussion (3-pass)")
 
 	// Multi-pass: Future Research
-	future, err := m.generateWithMultiPass(ctx, ag, session, promptFuture, userCtx+sectionCtx("DISCUSSION (limitations -- agenda harus beda/actionable)", discussion), lang, citations)
+	future, err := m.generateWithMultiPass(ctx, ag, session, "Future Research", promptFuture, userCtx+sectionCtx("DISCUSSION (limitations -- agenda harus beda/actionable)", discussion), lang, citations)
 	if err != nil {
 		return err
 	}
@@ -263,6 +293,9 @@ func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSes
 	}
 	ag := agent.NewManuscriptAgent(brain)
 	ms := session.Manuscript
+	if ms != nil {
+		ms.ModelUsed = brain.ModelName() // atribusi xAI (nama model asli)
+	}
 	bundle := m.artifactBundle(session)
 	lang := langDirective(session)
 
@@ -277,21 +310,21 @@ func (m *M9Manuscript) generateGroupB(ctx context.Context, session *model.SLRSes
 	userCtx := bundle + m.prismaContext(ctx, session) + paperBundle + fulltextCtx
 
 	// Multi-pass: Introduction
-	intro, err := m.generateWithMultiPass(ctx, ag, session, promptIntro, userCtx+sectionCtx("RESULTS (untuk tune preview, JANGAN bocorkan angka spesifik di Intro)", trim(ms.Results, 4000)), lang, citations)
+	intro, err := m.generateWithMultiPass(ctx, ag, session, "Introduction", promptIntro, userCtx+sectionCtx("RESULTS (untuk tune preview, JANGAN bocorkan angka spesifik di Intro)", trim(ms.Results, 4000)), lang, citations)
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Introduction (3-pass)")
 
 	// Multi-pass: Conclusions
-	conclusions, err := m.generateWithMultiPass(ctx, ag, session, promptConclusions, userCtx+sectionCtx("DISCUSSION", trim(ms.Discussion, 5000))+sectionCtx("FUTURE RESEARCH", trim(ms.FutureResearch, 2500)), lang, citations)
+	conclusions, err := m.generateWithMultiPass(ctx, ag, session, "Conclusions", promptConclusions, userCtx+sectionCtx("DISCUSSION", trim(ms.Discussion, 5000))+sectionCtx("FUTURE RESEARCH", trim(ms.FutureResearch, 2500)), lang, citations)
 	if err != nil {
 		return err
 	}
 	logger.Log(session.ID, "      ✓ Conclusions (3-pass)")
 
 	// Multi-pass: Abstract
-	abstract, err := m.generateWithMultiPass(ctx, ag, session, promptAbstract, userCtx+sectionCtx("METHODS", trim(ms.Methods, 3000))+sectionCtx("RESULTS", trim(ms.Results, 4000))+sectionCtx("DISCUSSION", trim(ms.Discussion, 3000)), lang, citations)
+	abstract, err := m.generateWithMultiPass(ctx, ag, session, "Abstract", promptAbstract, userCtx+sectionCtx("METHODS", trim(ms.Methods, 3000))+sectionCtx("RESULTS", trim(ms.Results, 4000))+sectionCtx("DISCUSSION", trim(ms.Discussion, 3000)), lang, citations)
 	if err != nil {
 		return err
 	}
