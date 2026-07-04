@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"nsa/internal/model"
@@ -417,6 +419,12 @@ func (h *SessionHandler) HandoffGuide(w http.ResponseWriter, req *http.Request) 
 	w2("| Qdrant | Full-text embedding (RAG bukti/sitasi) | collection **`scientific_articles`** (payload: `title`,`doi`,`article_id`,`content`) — GLOBAL lintas-sesi, filter per DOI studi included |")
 	w2("| Neo4j (opsional) | Knowledge graph / SLNA | node per studi (label Paper/Author/Method/Dataset/Metric), relasi antar-entitas — filter `session_id=\"%s\"` |", s.ID)
 	w2("")
+	w2("### 1a. Skema AKTUAL sesi ini (auto-generated — selalu terkini, bukan dokumentasi manual)")
+	w2("> Tabel di bawah di-introspeksi LANGSUNG dari dokumen Mongo sesi Anda saat file ini dibuat,")
+	w2("> jadi mustahil basi. `✓`=terisi, `✗`=kosong.")
+	w2("")
+	b.WriteString(h.liveSchemaMarkdown(context.Background(), s.ID))
+	w2("")
 	w2("## 2. Template koneksi (isi kredensial Anda — JANGAN bagikan)")
 	w2("```bash")
 	w2("# MongoDB (Atlas / lokal)")
@@ -465,4 +473,129 @@ func (h *SessionHandler) HandoffGuide(w http.ResponseWriter, req *http.Request) 
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	_, _ = w.Write([]byte(b.String()))
+}
+
+// bsonValType mendeskripsikan tipe & keterisian nilai bson secara ringkas (untuk schema live).
+func bsonValType(v interface{}) (typ string, populated bool) {
+	switch x := v.(type) {
+	case nil:
+		return "kosong", false
+	case string:
+		return "teks", strings.TrimSpace(x) != ""
+	case bool:
+		return "boolean", true
+	case int32, int64, int, float64, float32:
+		return "angka", true
+	case primitive.ObjectID:
+		return "id", true
+	case primitive.DateTime, primitive.Timestamp:
+		return "tanggal", true
+	case primitive.A:
+		return fmt.Sprintf("array (%d item)", len(x)), len(x) > 0
+	case []interface{}:
+		return fmt.Sprintf("array (%d item)", len(x)), len(x) > 0
+	case primitive.M:
+		return fmt.Sprintf("objek (%d field)", len(x)), len(x) > 0
+	case map[string]interface{}:
+		return fmt.Sprintf("objek (%d field)", len(x)), len(x) > 0
+	default:
+		return "nilai", v != nil
+	}
+}
+
+// knownFieldNote memberi keterangan singkat untuk field sesi yang penting (sisanya "-").
+var knownFieldNote = map[string]string{
+	"topic": "topik riset", "foundation": "fondasi teori (M1)", "pico_definitions": "PICO (M2)",
+	"research_questions": "RQ (M2)", "scope_filters": "batas lingkup", "scope_justifications": "justifikasi scope",
+	"inclusion_criteria": "kriteria inklusi", "exclusion_criteria": "kriteria eksklusi", "keywords": "keyword PICO (M3)",
+	"database_selection": "pilihan database (M3)", "search_string": "search string (M3)", "search_log": "log pencarian",
+	"data_mining_log": "identifikasi+dedup (M4)", "screening_setup": "setup screening + reason_codes (M5)",
+	"framework_selection": "framework ekstraksi (M7 L1)", "extraction_log": "log+κ ekstraksi (M7 L2)",
+	"qa_threshold_justification": "tool+ambang QA (M7 L3)", "qa_calibration": "kalibrasi QA + κ pilot (M7 L3)",
+	"synthesis_path_decision": "jalur sintesis (M8)", "synthesis_results": "hasil sintesis (M8)",
+	"grade_evidence_table": "GRADE + robustness (M8)", "slna_integration": "SLNA bibliometric (M8b)",
+	"manuscript": "manuskrip final + xAI (M9) — lihat sub-field", "audit_report": "audit pra-submisi + artefak (M10) — lihat sub-field",
+	"fulltext_kappa": "κ full-text screening (M6)", "manuscript_lang": "bahasa manuskrip",
+}
+
+// liveSchemaMarkdown men-introspeksi dokumen Mongo AKTUAL (sesi + 1 ekstraksi) lalu memancarkan
+// peta field yang SELALU TERKINI — tak bergantung pada dokumentasi manual yang bisa basi.
+func (h *SessionHandler) liveSchemaMarkdown(ctx context.Context, id string) string {
+	var b strings.Builder
+	var raw bson.M
+	if err := h.mongoRepo.GetSessionCollection().FindOne(ctx, bson.M{"_id": id}).Decode(&raw); err != nil {
+		return "_(schema live tak tersedia: " + err.Error() + ")_\n"
+	}
+	keys := make([]string, 0, len(raw))
+	for k := range raw {
+		if k == "xai_log" || k == "fulltext_screening_log" { // berat/verbose, lewati
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	b.WriteString("| Field (`slr_sessions`) | Tipe | Terisi | Keterangan |\n|---|---|---|---|\n")
+	for _, k := range keys {
+		typ, pop := bsonValType(raw[k])
+		note := knownFieldNote[k]
+		if note == "" {
+			note = "-"
+		}
+		mark := "✗"
+		if pop {
+			mark = "✓"
+		}
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", k, typ, mark, note)
+	}
+	// Sub-field manuscript & audit_report (artefak inti).
+	expand := func(title, key string, notes map[string]string) {
+		if m, ok := raw[key].(bson.M); ok && len(m) > 0 {
+			sub := make([]string, 0, len(m))
+			for sk := range m {
+				sub = append(sub, sk)
+			}
+			sort.Strings(sub)
+			fmt.Fprintf(&b, "\n**`%s.*`** (%s):\n\n| Sub-field | Tipe | Terisi | Keterangan |\n|---|---|---|---|\n", key, title)
+			for _, sk := range sub {
+				typ, pop := bsonValType(m[sk])
+				mark := "✗"
+				if pop {
+					mark = "✓"
+				}
+				n := notes[sk]
+				if n == "" {
+					n = "-"
+				}
+				fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", sk, typ, mark, n)
+			}
+		}
+	}
+	expand("manuskrip M9", "manuscript", map[string]string{
+		"latex": "LaTeX final (.tex)", "bibtex": "BibTeX (.bib)", "final": "markdown final",
+		"model_used": "nama model penulis (xAI)", "claim_verifications": "bukti triangulasi klaim (xAI)",
+		"prisma_flow": "PRISMA flow tervalidasi", "prisma_checklist": "PRISMA 27-item", "coherence_audit": "audit koherensi",
+	})
+	expand("audit M10", "audit_report", map[string]string{
+		"checks": "cek simbolik", "verdict": "READY/WITH_WARNINGS/NOT_READY", "protocol_markdown": "protokol PROSPERO",
+		"repro_package_markdown": "paket reproducibility", "attested_by": "atestasi peneliti", "attested_at": "waktu atestasi",
+	})
+	// Satu dokumen ekstraksi (field per-paper).
+	var ext bson.M
+	if err := h.mongoRepo.GetExtractionCollection().FindOne(ctx, bson.M{"session_id": id}).Decode(&ext); err == nil && len(ext) > 0 {
+		ek := make([]string, 0, len(ext))
+		for k := range ext {
+			ek = append(ek, k)
+		}
+		sort.Strings(ek)
+		b.WriteString("\n**`slr_extraction.*`** (contoh 1 dokumen — struktur per-paper):\n\n| Field | Tipe | Terisi |\n|---|---|---|\n")
+		for _, k := range ek {
+			typ, pop := bsonValType(ext[k])
+			mark := "✗"
+			if pop {
+				mark = "✓"
+			}
+			fmt.Fprintf(&b, "| `%s` | %s | %s |\n", k, typ, mark)
+		}
+	}
+	return b.String()
 }
