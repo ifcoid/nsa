@@ -259,6 +259,11 @@ func (r *MongoRepository) GetExtractionCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_extraction")
 }
 
+// GetFiguresCollection menyimpan figur bibliometrik/SLNA (di-generate PEDE, diunggah via UI).
+func (r *MongoRepository) GetFiguresCollection() *mongo.Collection {
+	return r.client.Database(r.dbName).Collection("slr_figures")
+}
+
 func (r *MongoRepository) GetScreeningCollection() *mongo.Collection {
 	return r.client.Database(r.dbName).Collection("slr_screening")
 }
