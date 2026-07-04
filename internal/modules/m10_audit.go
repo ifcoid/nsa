@@ -463,6 +463,32 @@ func buildReproPackage(s *model.SLRSession, identified, screened, included, qaRa
 	}
 	b.WriteString("\n")
 
+	fmt.Fprintf(&b, "## E2. Sintesis (naratif / meta-analisis)\n")
+	if sr := s.SynthesisResults; sr != nil && strings.TrimSpace(sr.Markdown) != "" {
+		fmt.Fprintf(&b, "_Jalur: %s._\n\n%s\n", def(sr.Path), strings.TrimSpace(sr.Markdown))
+		if strings.TrimSpace(sr.ForestPlotScript) != "" {
+			fmt.Fprintf(&b, "\n**Skrip forest plot (reproducible):**\n```\n%s\n```\n", strings.TrimSpace(sr.ForestPlotScript))
+		}
+	} else {
+		b.WriteString("_(sintesis tak tersedia)_\n")
+	}
+	b.WriteString("\n")
+
+	// SLNA/bibliometric = metode reproducibility-kritis (parameter VOSviewer + thesaurus).
+	if s.VOSViewerParams != nil || s.BibliometricData != nil || s.SLNAIntegration != nil {
+		fmt.Fprintf(&b, "## E3. Bibliometrik / SLNA (parameter & metode)\n")
+		if bd := s.BibliometricData; bd != nil {
+			fmt.Fprintf(&b, "- Records dianalisis: %d · Pendekatan: %s\n", bd.RecordsAnalyzed, def(bd.Approach))
+		}
+		if vp := s.VOSViewerParams; vp != nil && strings.TrimSpace(vp.TableMarkdown) != "" {
+			fmt.Fprintf(&b, "\n**Parameter VOSviewer (9-parameter, siap-Methods):**\n\n%s\n", strings.TrimSpace(vp.TableMarkdown))
+		}
+		if si := s.SLNAIntegration; si != nil && strings.TrimSpace(si.Markdown) != "" {
+			fmt.Fprintf(&b, "\n**Integrasi SLNA:**\n\n%s\n", strings.TrimSpace(si.Markdown))
+		}
+		b.WriteString("\n")
+	}
+
 	fmt.Fprintf(&b, "## F. PRISMA 2020 (flow + checklist)\n")
 	if ms := s.Manuscript; ms != nil {
 		if strings.TrimSpace(ms.PrismaFlow) != "" {
@@ -470,6 +496,9 @@ func buildReproPackage(s *model.SLRSession, identified, screened, included, qaRa
 		}
 		if strings.TrimSpace(ms.PrismaChecklist) != "" {
 			fmt.Fprintf(&b, "\n**Checklist 27-item:**\n\n%s\n", strings.TrimSpace(ms.PrismaChecklist))
+		}
+		if strings.TrimSpace(ms.CoherenceAudit) != "" {
+			fmt.Fprintf(&b, "\n**Audit koherensi manuskrip:**\n\n%s\n", strings.TrimSpace(ms.CoherenceAudit))
 		}
 	}
 	b.WriteString("\n")

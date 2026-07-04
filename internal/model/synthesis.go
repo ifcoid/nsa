@@ -14,6 +14,7 @@ type DescriptiveAnalysis struct {
 	Figures                []Figure `bson:"figures" json:"figures"`
 	HeterogeneityVerdict   string   `bson:"heterogeneity_verdict" json:"heterogeneity_verdict"` // LOW/MODERATE/HIGH/VERY HIGH
 	HeterogeneityNarrative string   `bson:"heterogeneity_narrative" json:"heterogeneity_narrative"`
+	ModelUsed              string   `bson:"model_used,omitempty" json:"model_used,omitempty"` // atribusi xAI (heterogeneity LLM)
 }
 
 // SynthesisPathDecision = output L2 fase 1 (synthesis_path_decision).

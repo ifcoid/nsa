@@ -245,6 +245,7 @@ func (m *M8bBibliometric) runThesaurusL1(ctx context.Context, session *model.SLR
 		return m.deps.llmError(ctx, "brain", "Memuat client thesaurus M8b", err)
 	}
 
+	bd.ModelUsed = m.brainModelName(ctx)
 	mergedTerms := strings.Count(bd.ThesaurusKeywords, "\n")
 	bd.LogMarkdown = fmt.Sprintf("## Bibliometric Log\n\n- Records dianalisis: **%d**\n- Thesaurus entries (keywords): ~%d\n- Unique raw keywords: %d\n- Approach: %s",
 		len(papers), mergedTerms, len(freq), bd.Approach)
@@ -272,6 +273,9 @@ func (m *M8bBibliometric) runParamsL2(ctx context.Context, session *model.SLRSes
 	if err != nil {
 		return m.deps.llmError(ctx, "brain", "Menyusun parameter VOSviewer", err)
 	}
+	if params != nil {
+		params.ModelUsed = m.brainModelName(ctx)
+	}
 	session.VOSViewerParams = params
 	logger.Log(session.ID, "   [System] 9-parameter tersusun. Menunggu user menjalankan VOSviewer + paste hasil.")
 	session.Status = "M8B_STEP2_WAITING_VOSVIEWER"
@@ -294,6 +298,9 @@ func (m *M8bBibliometric) runInterpretL3(ctx context.Context, session *model.SLR
 	ci, err := agent.NewBibliometricAgent(brain).InterpretClusters(ctx, session.BibliometricInput)
 	if err != nil {
 		return m.deps.llmError(ctx, "brain", "Interpretasi cluster", err)
+	}
+	if ci != nil {
+		ci.ModelUsed = m.brainModelName(ctx)
 	}
 	session.ClusterInterpretation = ci
 	session.Status = "M8B_STEP3_WAITING_APPROVAL"
@@ -323,6 +330,9 @@ func (m *M8bBibliometric) runIntegrationL4(ctx context.Context, session *model.S
 	integ, err := agent.NewBibliometricAgent(brain).IntegrateSLNA(ctx, clusterMd, slrSummary)
 	if err != nil {
 		return err
+	}
+	if integ != nil {
+		integ.ModelUsed = m.brainModelName(ctx)
 	}
 	session.SLNAIntegration = integ
 
@@ -416,4 +426,18 @@ func extractTitleTerms(text string) []string {
 		terms = append(terms, bigram)
 	}
 	return terms
+}
+
+// brainModelName mengembalikan "provider (model)" untuk atribusi xAI (mirror m8_grade).
+func (m *M8bBibliometric) brainModelName(ctx context.Context) string {
+	p, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
+	cfg, _ := m.deps.MongoRepo.GetLLMConfig(ctx, p)
+	if cfg != nil {
+		n := cfg.ProviderName
+		if cfg.DefaultModel != "" {
+			n += " (" + cfg.DefaultModel + ")"
+		}
+		return n
+	}
+	return p
 }

@@ -213,6 +213,7 @@ func (m *M8Synthesis) runDescriptiveL1(ctx context.Context, session *model.SLRSe
 		if h, e := agent.NewSynthesisAgent(brain).Heterogeneity(ctx, string(descJSON), priorVerdict); e == nil && h != nil {
 			da.HeterogeneityVerdict = h.Verdict
 			da.HeterogeneityNarrative = h.Narrative
+			da.ModelUsed = m.brainModelName(ctx)
 		} else if e != nil {
 			logger.Logf(session.ID, "   [WARN] Heterogeneity LLM gagal: %v (pakai verdict M7).\n", e)
 		}
@@ -348,4 +349,18 @@ func fmtCounts(counts map[string]int) string {
 		parts = append(parts, fmt.Sprintf("%s=%d", k, v))
 	}
 	return strings.Join(parts, "; ")
+}
+
+// brainModelName mengembalikan "provider (model)" untuk atribusi xAI (mirror m8_grade).
+func (m *M8Synthesis) brainModelName(ctx context.Context) string {
+	p, _ := m.deps.LLMFactory.RoleProviders(ctx, "brain")
+	cfg, _ := m.deps.MongoRepo.GetLLMConfig(ctx, p)
+	if cfg != nil {
+		n := cfg.ProviderName
+		if cfg.DefaultModel != "" {
+			n += " (" + cfg.DefaultModel + ")"
+		}
+		return n
+	}
+	return p
 }

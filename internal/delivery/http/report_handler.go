@@ -181,6 +181,9 @@ func (h *SessionHandler) buildReportMarkdown(ctx context.Context, s *model.SLRSe
 		sec("GRADE — Certainty of Evidence", fmt.Sprintf("%s\n\n**Robustness:** %s — %s\n\n%s",
 			g.TableMarkdown, g.RobustnessVerdict, g.RobustnessSummary, g.ConfidenceStatements))
 	}
+	if s.InterpretationPackage != nil {
+		sec("Interpretasi Terpadu (Modul 8 → Modul 9)", s.InterpretationPackage.Markdown)
+	}
 	if s.ModulBibliometricSummary != nil {
 		sec("Bibliometrik / SLNA (opsional)", jsonPretty(s.ModulBibliometricSummary))
 	}
@@ -201,6 +204,8 @@ func (h *SessionHandler) buildReportMarkdown(ctx context.Context, s *model.SLRSe
 			}
 		}
 		sec("Daftar Pustaka", m.References)
+		sec("Kepatuhan PRISMA 2020 (checklist 27-item)", m.PrismaChecklist)
+		sec("Audit Koherensi Manuskrip", m.CoherenceAudit)
 	}
 
 	// ── 9. Lampiran transparansi ───────────────────────────────────────────────
@@ -349,8 +354,56 @@ func (h *SessionHandler) reportTransparency(ctx context.Context, s *model.SLRSes
 		b.WriteString("- Ekstraksi (Reviewer 1): " + strSafe(s.ExtractionLog.ModelExtraction, "-") + "\n")
 		b.WriteString("- Verifikasi (Reviewer 2): " + strSafe(s.ExtractionLog.ModelRefineProtocol, "-") + "\n")
 	}
+	if s.DescriptiveAnalysis != nil && s.DescriptiveAnalysis.ModelUsed != "" {
+		b.WriteString("- Analisis deskriptif/heterogenitas: " + s.DescriptiveAnalysis.ModelUsed + "\n")
+	}
+	if s.SynthesisPathDecision != nil && s.SynthesisPathDecision.ModelUsed != "" {
+		b.WriteString("- Keputusan jalur sintesis: " + s.SynthesisPathDecision.ModelUsed + "\n")
+	}
 	if s.SynthesisResults != nil && s.SynthesisResults.ModelUsed != "" {
 		b.WriteString("- Sintesis: " + s.SynthesisResults.ModelUsed + "\n")
+	}
+	if s.GradeEvidence != nil && s.GradeEvidence.ModelUsed != "" {
+		b.WriteString("- GRADE certainty: " + s.GradeEvidence.ModelUsed + "\n")
+	}
+	if s.InterpretationPackage != nil && s.InterpretationPackage.ModelUsed != "" {
+		b.WriteString("- Interpretasi (Modul 8): " + s.InterpretationPackage.ModelUsed + "\n")
+	}
+	if s.BibliometricData != nil && s.BibliometricData.ModelUsed != "" {
+		b.WriteString("- Bibliometrik/thesaurus (Modul 8b): " + s.BibliometricData.ModelUsed + "\n")
+	}
+	if s.VOSViewerParams != nil && s.VOSViewerParams.ModelUsed != "" {
+		b.WriteString("- Parameter VOSviewer (Modul 8b): " + s.VOSViewerParams.ModelUsed + "\n")
+	}
+	if s.ClusterInterpretation != nil && s.ClusterInterpretation.ModelUsed != "" {
+		b.WriteString("- Interpretasi cluster (Modul 8b): " + s.ClusterInterpretation.ModelUsed + "\n")
+	}
+	if s.SLNAIntegration != nil && s.SLNAIntegration.ModelUsed != "" {
+		b.WriteString("- Integrasi SLNA (Modul 8b): " + s.SLNAIntegration.ModelUsed + "\n")
+	}
+	if s.Manuscript != nil && s.Manuscript.ModelUsed != "" {
+		b.WriteString("- Penulisan manuskrip (Modul 9): " + s.Manuscript.ModelUsed + "\n")
+	}
+
+	// Triangulasi klaim (xAI neuro-symbolic): ringkasan verifikasi ≥2 sumber.
+	if s.Manuscript != nil && len(s.Manuscript.ClaimVerifications) > 0 {
+		verified := 0
+		for _, cv := range s.Manuscript.ClaimVerifications {
+			if cv.Sources >= 2 {
+				verified++
+			}
+		}
+		total := len(s.Manuscript.ClaimVerifications)
+		b.WriteString(fmt.Sprintf("\n**Verifikasi klaim (triangulasi Qdrant/Neo4j/Mongo):** %d/%d klaim terverifikasi ≥2 sumber.\n", verified, total))
+		if verified < total {
+			b.WriteString("| Section | Klaim | Sumber | Sitasi |\n|---|---|---|---|\n")
+			for _, cv := range s.Manuscript.ClaimVerifications {
+				if cv.Sources >= 2 {
+					continue
+				}
+				b.WriteString(fmt.Sprintf("| %s | %s | %d | %s |\n", mdCell(cv.Section), mdCell(cv.Claim), cv.Sources, mdCell(cv.CitationKey)))
+			}
+		}
 	}
 
 	if len(s.ScreeningCorrections) > 0 {
