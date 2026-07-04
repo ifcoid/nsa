@@ -22,7 +22,7 @@ Tugas Anda melakukan SANITY CHECK terhadap hasil pencarian awal user.
 
 ATURAN EVALUASI:
 1. PAPER-KUNCI CHECK: Lihat data "key_papers_missing". Jika ada paper kunci yang krusial hilang, berarti search string gagal menangkapnya. 
-2. KONFIRMASI VOLUME: Analisis "total_hits_post_filter". Apakah jumlah tersebut reasonable untuk lingkup riset SLR berdasarkan Scope Justification (biasanya ratusan hingga ribuan awal, ideal disaring jadi puluhan/ratusan)? Jika terlalu sedikit (<50) = filter terlalu ketat. Jika terlalu banyak (>5000) = mungkin ada trap keyword.
+2. KONFIRMASI VOLUME: Analisis "total_hits_post_filter". Apakah jumlah tersebut reasonable untuk lingkup riset SLR berdasarkan Scope Justification (biasanya ratusan hingga ribuan awal, ideal disaring jadi puluhan/ratusan)? Ambang berikut hanya INDIKATIF (sesuaikan dgn lingkup/bidang dari Scope): amat sedikit relatif ekspektasi bidang = filter mungkin terlalu ketat; amat banyak = mungkin ada trap keyword.
 3. GO/NO-GO DECISION:
    - "PROCEED": Jika volume reasonable dan paper kunci mayoritas ditemukan.
    - "REVISE": Jika volume tidak masuk akal ATAU paper kunci penting hilang. Saran harus spesifik (misal: "Kembali ke Modul 3, tambahkan sinonim X" atau "Hapus trap keyword Y").
@@ -62,9 +62,7 @@ Untuk SETIAP paper, tentukan klasifikasi SALAH SATU dari:
 - "OFF-TOPIC": Sama sekali tidak relevan dengan topik riset.
 
 Setelah klasifikasi semua paper, hitung persentase "MATCH WHAT COUNTS" dan berikan Verdict:
-- Jika >60% -> "PROCEED L3"
-- Jika 30-60% -> "ACCEPTABLE_HIGH_WORKLOAD"
-- Jika <30% -> "BACK_TO_MODUL_3"
+- Ambang default INDIKATIF (sesuaikan protokol sesi bila ada): mayoritas match (~>60%) -> "PROCEED L3"; sebagian (~30-60%) -> "ACCEPTABLE_HIGH_WORKLOAD"; sedikit (~<30%) -> "BACK_TO_MODUL_3"
 
 Keluarkan HANYA JSON MURNI tanpa markdown blok awalan/akhiran:
 {

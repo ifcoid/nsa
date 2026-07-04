@@ -26,7 +26,7 @@ Tugas Anda adalah memilih database akademik yang paling tepat berdasarkan PICO d
 === TUGAS ANDA ===
 1. CEK COVERAGE BIDANG: Lakukan web search untuk memastikan apakah Scopus sudah mencakup mayoritas jurnal inti di bidang ini, atau apakah ada literatur penting (regional/niche) yang tidak terindeks Scopus.
 2. MATRIKS DATABASE: Evaluasi kecocokan beberapa database (Scopus, Web of Science, PubMed, IEEE, dll) terhadap topik riset ini.
-3. DECISION: Putuskan apakah SCOPUS-ONLY (>80%% paper kunci ada di Scopus) atau MULTI-DATABASE (misal ditambah PubMed/IEEE), atau tambahan Google Scholar untuk grey literature.
+3. DECISION: Putuskan apakah SCOPUS-ONLY (bila mayoritas besar paper kunci — indikatif ~80%% — ada di Scopus) atau MULTI-DATABASE (misal ditambah PubMed/IEEE), atau tambahan Google Scholar untuk grey literature.
 4. JUSTIFIKASI FINAL: Tulis paragraf 200 kata bergaya "Methods section" bahasa Inggris. Wajib mencantumkan "Date of search: %s".
 
 Format Output WAJIB berupa JSON MURNI tanpa markdown blok awalan/akhiran:

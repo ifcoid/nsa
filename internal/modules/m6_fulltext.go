@@ -84,6 +84,13 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 	logger.Logf(session.ID, "   [Reviewer] R1=%s (fb %s) | R2=%s | Supervisor=%s\n", roles.Reviewer1, roles.Reviewer1Fallback, roles.Reviewer2, supName)
 
 	opDefs := m.operationalDefsContext(session)
+	// Reason codes tahap abstrak DARI SESI (multi-tenant: user bisa edit) di-inject ke
+	// full-text reviewer agar konsisten, bukan hardcode. Kode full-text-spesifik
+	// (METHODS-UNCLEAR dll.) tetap ditambahkan di dalam prompt agent.
+	reasonCodes := ""
+	if session.ScreeningSetup != nil {
+		reasonCodes = strings.Join(session.ScreeningSetup.ReasonCodes, ", ")
+	}
 
 	// 3. Bangun indeks RAG full-text dari Qdrant (sekali per batch run), beserta
 	//    vektor dense tiap chunk untuk pemilihan top-k semantik.
@@ -182,11 +189,11 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 		// R1: percobaan cepat primary -> fallback GIGIH (cohere andal). Tidak men-skip
 		// paper: kalau benar-benar mentok, batch DIJEDA (return error) supaya bisa
 		// di-Resume & paper yang SAMA dicoba ulang — screening tetap runut/lengkap.
-		res1, err1 := reviewWithRetry(ctx, scR1, opDefs, title, fulltext,
+		res1, err1 := reviewWithRetry(ctx, scR1, opDefs, reasonCodes, title, fulltext,
 			[]time.Duration{8 * time.Second, 20 * time.Second}, session.ID, "R1", roles.Reviewer1)
 		if res1 == nil || err1 != nil {
 			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer1Fallback); e == nil {
-				res1, err1 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, title, fulltext,
+				res1, err1 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, reasonCodes, title, fulltext,
 					[]time.Duration{15 * time.Second, 30 * time.Second, 60 * time.Second, 120 * time.Second}, session.ID, "R1-fallback", roles.Reviewer1Fallback)
 			}
 		}
@@ -198,11 +205,11 @@ func (m *M6Acquisition) runFullTextScreeningBatch(ctx context.Context, session *
 
 		// R2: percobaan primary -> fallback gigih (kini R2 PUNYA fallback). Sama: tak
 		// men-skip; mentok total -> batch dijeda & resumable.
-		res2, err2 := reviewWithRetry(ctx, scR2, opDefs, title, fulltext,
+		res2, err2 := reviewWithRetry(ctx, scR2, opDefs, reasonCodes, title, fulltext,
 			[]time.Duration{10 * time.Second, 30 * time.Second}, session.ID, "R2", roles.Reviewer2)
 		if res2 == nil || err2 != nil {
 			if llmFb, e := m.deps.LLMFactory.CreateClient(ctx, roles.Reviewer2Fallback); e == nil {
-				res2, err2 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, title, fulltext,
+				res2, err2 = reviewWithRetry(ctx, agent.NewScreeningAgent(llmFb), opDefs, reasonCodes, title, fulltext,
 					[]time.Duration{15 * time.Second, 30 * time.Second, 60 * time.Second, 120 * time.Second}, session.ID, "R2-fallback", roles.Reviewer2Fallback)
 			}
 		}
@@ -338,7 +345,7 @@ func (m *M6Acquisition) evaluateFullTextBatch(ctx context.Context, session *mode
 // reviewWithRetry mencoba FullTextReviewPaper dengan exponential backoff + jitter.
 // Log diperjelas: tag peran, PROVIDER, lama waktu, dan KLASIFIKASI sebab gagal
 // (TIMEOUT / rate-limit / respons-rusak) agar mudah didiagnosis dari UI.
-func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, title, ft string, delays []time.Duration, sessionID, tag, provider string) (*model.ScreeningPerspective, error) {
+func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, reasonCodes, title, ft string, delays []time.Duration, sessionID, tag, provider string) (*model.ScreeningPerspective, error) {
 	var res *model.ScreeningPerspective
 	var err error
 	for i := 0; i <= len(delays); i++ {
@@ -346,7 +353,7 @@ func reviewWithRetry(ctx context.Context, ag *agent.ScreeningAgent, opDefs, titl
 		// saat memproses full text panjang beserta reasoning-nya agar tidak keburu timeout.
 		start := time.Now()
 		attemptCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
-		res, err = ag.FullTextReviewPaper(attemptCtx, opDefs, title, ft)
+		res, err = ag.FullTextReviewPaper(attemptCtx, opDefs, reasonCodes, title, ft)
 		cancel()
 		took := time.Since(start)
 		if err == nil && res != nil {

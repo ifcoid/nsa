@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"nsa/internal/llm"
 	"nsa/internal/model"
@@ -67,17 +66,10 @@ Keluarkan HANYA JSON tanpa blok markdown atau teks pengantar.`
 
 	userPrompt := fmt.Sprintf("Konteks Topik & Gap:\n%s\n\nPrior Reviews Matrix (Literatur Terdahulu):\n%s", topicContext, priorMatrixContext)
 
-	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("pico_agent gagal berkomunikasi dengan LLM: %w", err)
-	}
-
-	cleanJSON := CleanJSONResponse(rawResponse)
-
 	var definitions model.PICODefinitions
-	err = json.Unmarshal([]byte(cleanJSON), &definitions)
+	rawResponse, err := GenerateJSON(ctx, a.llmProvider, systemPrompt, userPrompt, &definitions, 2)
 	if err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON dari LLM (%w). Raw response: %s", err, rawResponse)
+		return nil, fmt.Errorf("pico_agent gagal (LLM/parse JSON) (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &definitions, nil

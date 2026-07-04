@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"nsa/internal/llm"
 	"nsa/internal/model"
@@ -67,15 +66,10 @@ Wajib menghasilkan JSON MURNI tanpa blok markdown awalan/akhiran:
 
 	userPrompt := fmt.Sprintf("=== PICO DEFINITIONS ===\n%s", pico)
 
-	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("keywords_agent gagal memanggil LLM: %w", err)
-	}
-
-	cleanJSON := CleanJSONResponse(rawResponse)
 	var result model.KeywordsDevelopment
-	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON Keywords (%w). Raw: %s", err, ClipRaw(rawResponse))
+	rawResponse, err := GenerateJSON(ctx, a.llmProvider, systemPrompt, userPrompt, &result, 2)
+	if err != nil {
+		return nil, fmt.Errorf("keywords_agent gagal (LLM/parse JSON) (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &result, nil

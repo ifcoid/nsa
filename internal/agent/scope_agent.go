@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"nsa/internal/llm"
 	"nsa/internal/model"
@@ -45,17 +44,10 @@ Contoh Output (STRUKTUR saja — ABAIKAN domainnya; isi WAJIB diturunkan dari to
 
 	userPrompt := fmt.Sprintf("=== PICO DEFINITIONS ===\n%s\n\n=== SCOPE FILTERS (BATASAN YANG AKAN DIJUSTIFIKASI) ===\n%s", picoContext, filtersContext)
 
-	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, "", fmt.Errorf("scope_agent gagal memanggil LLM: %w", err)
-	}
-
-	cleanJSON := CleanJSONResponse(rawResponse)
-
 	var result []model.ScopeJustification
-	err = json.Unmarshal([]byte(cleanJSON), &result)
+	rawResponse, err := GenerateJSON(ctx, a.llmProvider, systemPrompt, userPrompt, &result, 2)
 	if err != nil {
-		return nil, rawResponse, fmt.Errorf("gagal parsing JSON dari LLM (%w). Raw response: %s", err, rawResponse)
+		return nil, rawResponse, fmt.Errorf("scope_agent gagal (LLM/parse JSON) (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return result, rawResponse, nil

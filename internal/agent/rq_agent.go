@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"nsa/internal/llm"
 	"nsa/internal/model"
@@ -48,17 +47,10 @@ Output WAJIB berupa JSON array dengan struktur:
 
 	userPrompt := fmt.Sprintf("=== SELECTED TOPIC ===\n%s\n\n=== PRIOR REVIEWS MATRIX ===\n%s\n\n=== PICO DEFINITIONS ===\n%s\n\n=== SCOPE JUSTIFICATIONS ===\n%s", topic, matrix, pico, scope)
 
-	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, "", fmt.Errorf("rq_agent gagal memanggil LLM: %w", err)
-	}
-
-	cleanJSON := CleanJSONResponse(rawResponse)
-
 	var result []model.ResearchQuestion
-	err = json.Unmarshal([]byte(cleanJSON), &result)
+	rawResponse, err := GenerateJSON(ctx, a.llmProvider, systemPrompt, userPrompt, &result, 2)
 	if err != nil {
-		return nil, rawResponse, fmt.Errorf("gagal parsing JSON RQ (%w). Raw: %s", err, ClipRaw(rawResponse))
+		return nil, rawResponse, fmt.Errorf("rq_agent gagal (LLM/parse JSON) (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return result, rawResponse, nil

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"nsa/internal/llm"
 	"nsa/internal/model"
@@ -76,16 +75,10 @@ Keluarkan HANYA JSON MURNI berformat persis seperti ini tanpa blok markdown atau
 
 	userPrompt := fmt.Sprintf("=== RESEARCH QUESTIONS ===\n%s\n\n=== PRIOR REVIEWS MATRIX ===\n%s\n\n=== PICO DEFINITIONS ===\n%s\n\n=== SCOPE JUSTIFICATIONS ===\n%s", rqs, matrix, pico, scope)
 
-	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("finer_agent gagal memanggil LLM: %w", err)
-	}
-
-	cleanJSON := CleanJSONResponse(rawResponse)
-	
 	var res FinerResult
-	if err := json.Unmarshal([]byte(cleanJSON), &res); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON FINER (%w). Raw: %s", err, ClipRaw(rawResponse))
+	rawResponse, err := GenerateJSON(ctx, a.llmProvider, systemPrompt, userPrompt, &res, 2)
+	if err != nil {
+		return nil, fmt.Errorf("finer_agent gagal (LLM/parse JSON) (%w). Raw: %s", err, ClipRaw(rawResponse))
 	}
 
 	return &res, nil

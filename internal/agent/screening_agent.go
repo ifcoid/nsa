@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"nsa/internal/llm"
 	"nsa/internal/model"
 )
@@ -187,7 +189,10 @@ Keluarkan HANYA JSON MURNI tanpa blok markdown dengan struktur berikut:
 // FullTextReviewPaper melakukan screening tahap FULL-TEXT (Modul 6 L2) berbasis RAG.
 // `fulltext` adalah konten teks artikel yang diambil dari Qdrant (vektorisasi PEDE).
 // Reviewer WAJIB hanya menyimpulkan dari konten RAG ini (anti-halusinasi).
-func (a *ScreeningAgent) FullTextReviewPaper(ctx context.Context, operationalDefs, title, fulltext string) (*model.ScreeningPerspective, error) {
+func (a *ScreeningAgent) FullTextReviewPaper(ctx context.Context, operationalDefs, reasonCodes, title, fulltext string) (*model.ScreeningPerspective, error) {
+	if strings.TrimSpace(reasonCodes) == "" {
+		reasonCodes = "P-NOMATCH, I-NOMATCH, O-NOMATCH, STUDY-DESIGN, LANGUAGE, DUPLICATE, NO-ABSTRACT, OTHER"
+	}
 	systemPrompt := fmt.Sprintf(`Anda adalah Reviewer Independen untuk FULL-TEXT screening Systematic Literature Review.
 Anda menilai berdasarkan ISI FULL-TEXT (bukan sekadar abstract).
 
@@ -200,7 +205,7 @@ ATURAN ANTI-HALUSINASI (WAJIB):
 - Jika teks tidak cukup untuk memutuskan suatu komponen, gunakan "UNCERTAIN".
 
 REASON CODES (12; pakai PERSIS salah satu jika EXCLUDE):
-- 8 dari tahap abstrak: P-NOMATCH, I-NOMATCH, O-NOMATCH, STUDY-DESIGN, LANGUAGE, DUPLICATE, NO-ABSTRACT, OTHER
+- Kode tahap abstrak (DARI SESI, pakai PERSIS): %s
 - 4 tambahan full-text: METHODS-UNCLEAR (deskripsi metodologi tak cukup), NO-EMPIRICAL-DATA (konseptual tanpa data empiris), DUPLICATE-POSTHOC (overlap dataset/konten), POOR-QUALITY (kualitas metodologis ekstrem rendah, mis. predatory)
 
 Analisis tiap artikel: (1) STUDY DESIGN dari bagian Methods, (2) POPULATION vs WHAT COUNTS, (3) INTERVENTION/EXPOSURE, (4) OUTCOME + alat ukur, (5) RED FLAGS metodologis untuk QA Modul 7 (sample kecil tanpa power analysis? confounder tak ditangani? follow-up kurang? missing data tak dilaporkan?).
@@ -214,7 +219,7 @@ Keluarkan HANYA JSON MURNI tanpa blok markdown:
   "reason_code": "salah satu dari 12 reason code jika EXCLUDE, '-' jika INCLUDE/UNCERTAIN",
   "evidence": "Kutipan kalimat dari Methods/Results sebagai bukti. Awali red flags QA dengan 'QA_RED:' jika ada.",
   "confidence": "HIGH" atau "MEDIUM" atau "LOW"
-}`, operationalDefs)
+}`, operationalDefs, reasonCodes)
 
 	userPrompt := fmt.Sprintf("Title: %s\n\n=== FULL-TEXT (KONTEKS RAG, satu-satunya sumber yang boleh dipakai) ===\n%s", title, fulltext)
 

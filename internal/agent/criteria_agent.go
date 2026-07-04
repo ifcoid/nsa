@@ -2,9 +2,7 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"nsa/internal/llm"
 	"nsa/internal/model"
@@ -79,22 +77,10 @@ Struktur JSON harus tepat seperti ini:
 
 // Handler internal untuk eksekusi ke LLM dan parsing JSON (DRY Principle)
 func (a *CriteriaAgent) callLLMAndParse(ctx context.Context, systemPrompt, userPrompt string) (*CriteriaResult, error) {
-	rawResponse, err := a.llmProvider.Generate(ctx, systemPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("criteria_agent gagal memanggil LLM: %w", err)
-	}
-
-	// Bersihkan bungkusan markdown jika LLM keras kepala menyertakannya
-	cleanJSON := strings.TrimSpace(rawResponse)
-	cleanJSON = strings.TrimPrefix(cleanJSON, "```json")
-	cleanJSON = strings.TrimPrefix(cleanJSON, "```")
-	cleanJSON = strings.TrimSuffix(cleanJSON, "```")
-	cleanJSON = strings.TrimSpace(cleanJSON)
-
 	var result CriteriaResult
-	err = json.Unmarshal([]byte(cleanJSON), &result)
+	rawResponse, err := GenerateJSON(ctx, a.llmProvider, systemPrompt, userPrompt, &result, 2)
 	if err != nil {
-		return nil, fmt.Errorf("criteria_agent gagal unmarshal JSON. Raw: %s, Error: %w", ClipRaw(rawResponse), err)
+		return nil, fmt.Errorf("criteria_agent gagal (LLM/parse JSON). Raw: %s, Error: %w", ClipRaw(rawResponse), err)
 	}
 
 	return &result, nil
