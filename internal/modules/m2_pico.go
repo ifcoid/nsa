@@ -114,7 +114,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP2_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   1. Lihat document sesi Anda, buka field 'prior_reviews_matrix'.")
 		logger.Log(session.ID, "   2. Verifikasi tabel 'reviews' dan 'synthesis_novelty'.")
 		logger.Log(session.ID, "   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M2_STEP2_APPROVED' lalu Update.")
@@ -185,7 +185,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP3_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   1. Lihat document sesi Anda, buka field 'pico_definitions'.")
 		logger.Log(session.ID, "   2. Verifikasi 3 lapisan PICO (Operational Definitions & Canonical Term).")
 		logger.Log(session.ID, "   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M2_STEP3_APPROVED' lalu Update.")
@@ -239,10 +239,10 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 
 	case "M2_STEP3_5_WAITING_FILTERS":
 		logger.Log(session.ID, "   [System] Sesi dikunci. Anda WAJIB melengkapi parameter filter dasar riset!")
-		logger.Log(session.ID, "   Silakan buka MongoDB Compass:")
-		logger.Log(session.ID, "   1. Buka document sesi Anda, cari object 'scope_filters'.")
+		logger.Log(session.ID, "   Lengkapi lewat panel di web (tak perlu buka database):")
+		logger.Log(session.ID, "   Isi/koreksi bagian ini lewat editor di panel web.")
 		logger.Log(session.ID, "   2. Ganti semua teks '[ISI DI SINI...]' dengan parameter riset Anda.")
-		logger.Log(session.ID, "   3. Ubah 'status' menjadi 'M2_STEP3_5_FILTERS_PROVIDED' lalu Update.")
+		logger.Log(session.ID, "   3. Sistem lanjut otomatis setelah Anda menyetujui/mengisi di web.")
 		return nil
 
 	case "M2_STEP3_5_FILTERS_PROVIDED":
@@ -292,7 +292,7 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP4_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   1. Lihat document sesi Anda, buka field 'scope_justifications'.")
 		logger.Log(session.ID, "   2. Verifikasi 3 lapisan justifikasi (Teoretis, Metodologis, Praktis).")
 		logger.Log(session.ID, "   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M2_STEP4_APPROVED' lalu Update.")
@@ -388,8 +388,8 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP5_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
-		logger.Log(session.ID, "   1. Buka document sesi Anda, cari array 'research_questions'.")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
+		logger.Log(session.ID, "   Isi/koreksi bagian ini lewat editor di panel web.")
 		logger.Log(session.ID, "   2. Verifikasi 1 Primary RQ dan 3 Secondary RQs beserta traceability-nya.")
 		logger.Log(session.ID, "   3a. Jika SUDAH sempurna (dan is_orphan: false semua), ubah 'status' menjadi 'M2_STEP5_APPROVED' lalu Update.")
 		logger.Log(session.ID, "   3b. Jika TIDAK sesuai (atau ada orphan), ubah 'status' menjadi 'M2_STEP5_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback' lalu Update.")
@@ -473,8 +473,8 @@ func (m *M2Pico) Execute(ctx context.Context, session *model.SLRSession) error {
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M2_STEP6_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi masih dikunci. Silakan buka MongoDB Compass:")
-		logger.Log(session.ID, "   1. Buka document sesi Anda, cari 'finer_novelty_check' dan 'modul2_summary'.")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
+		logger.Log(session.ID, "   Isi/koreksi bagian ini lewat editor di panel web.")
 		logger.Log(session.ID, "   2. Verifikasi evaluasi FINER dan ringkasan Modul 2.")
 		logger.Log(session.ID, "   3a. Jika SUDAH lulus dan sempurna, ubah 'status' menjadi 'M2_STEP6_APPROVED' lalu Update.")
 		logger.Log(session.ID, "   3b. Jika BUTUH REVISI, ubah 'status' menjadi 'M2_STEP6_NEEDS_REVISION' dan isi keluhan Anda di field 'feedback'.")

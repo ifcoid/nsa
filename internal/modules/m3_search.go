@@ -50,8 +50,8 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M3_STEP1_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
-		logger.Log(session.ID, "   1. Buka document sesi Anda, cari 'database_selection'.")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
+		logger.Log(session.ID, "   Isi/koreksi bagian ini lewat editor di panel web.")
 		logger.Log(session.ID, "   2. Verifikasi matriks database dan justifikasi finalnya.")
 		logger.Log(session.ID, "   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M3_STEP1_APPROVED'.")
 		logger.Log(session.ID, "   3b. Jika BUTUH REVISI, ubah 'status' ke 'M3_STEP1_NEEDS_REVISION' dan isi 'feedback'.")
@@ -108,8 +108,8 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M3_STEP2_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
-		logger.Log(session.ID, "   1. Buka document sesi Anda, cari array 'keywords'.")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
+		logger.Log(session.ID, "   Isi/koreksi bagian ini lewat editor di panel web.")
 		logger.Log(session.ID, "   2. Verifikasi kesesuaian main_synonyms dan AVOID list untuk setiap P, I, C, dan O.")
 		logger.Log(session.ID, "   3a. Jika SUDAH sesuai, ubah 'status' menjadi 'M3_STEP2_APPROVED'.")
 		logger.Log(session.ID, "   3b. Jika BUTUH REVISI, ubah 'status' ke 'M3_STEP2_NEEDS_REVISION' dan isi 'feedback'.")
@@ -163,8 +163,8 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M3_STEP3_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
-		logger.Log(session.ID, "   1. Buka document sesi Anda, cari objek 'search_string'.")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
+		logger.Log(session.ID, "   Isi/koreksi bagian ini lewat editor di panel web.")
 		logger.Log(session.ID, "   2. Verifikasi sintaks query Scopus (wildcard, quotation, kurung, OR/AND).")
 		logger.Log(session.ID, "   3. Verifikasi array 'filters' memiliki justifikasi.")
 		logger.Log(session.ID, "   4a. Jika SUDAH tepat, ubah 'status' menjadi 'M3_STEP3_APPROVED'.")
@@ -226,9 +226,9 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		logger.Log(session.ID, "   [System] FASE 2: INSTRUKSI EKSEKUSI MANUAL DI SCOPUS")
 		logger.Log(session.ID, "   1. Buka Scopus Advanced Search.")
 		logger.Log(session.ID, "   2. Masukkan search_string final Anda dan aplikasikan filter.")
-		logger.Log(session.ID, "   3. Buka MongoDB Compass, isi field 'feedback' dengan hasil pencarian Anda.")
+		logger.Log(session.ID, "   3. Masukkan hasil pencarian Anda lewat kolom di panel web.")
 		logger.Log(session.ID, "      (Contoh isi: 'Scopus pre-filter: 500, post-filter: 150')")
-		logger.Log(session.ID, "   4. Ubah status menjadi 'M3_STEP4_EVALUATION' lalu klik Update.")
+		logger.Log(session.ID, "   4. Sistem lanjut otomatis setelah Anda menyetujui/mengisi di web.")
 		
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
@@ -269,7 +269,7 @@ func (m *M3Search) Execute(ctx context.Context, session *model.SLRSession) error
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M3_STEP4_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   1. Cari 'search_log' dan 'modul3_summary'.")
 		logger.Log(session.ID, "   2. Verifikasi update policy dan total hits di search_log.")
 		logger.Log(session.ID, "   3a. Jika SUDAH tepat, ubah 'status' menjadi 'M3_STEP4_APPROVED'.")

@@ -47,7 +47,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M5_STEP1_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   1. Periksa dokumen 'screener_briefing'.")
 		logger.Log(session.ID, "   2. Baca 'validation_gap' dan 'briefing_doc'.")
 		logger.Log(session.ID, "   3a. Jika 'decision' merekomendasikan 'REVISE_M2', ubah status ke 'M5_STEP1_NEEDS_REVISION'.")
@@ -305,7 +305,7 @@ func (m *M5Screening) Execute(ctx context.Context, session *model.SLRSession) er
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M5_STEP2_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Kalibrasi GAGAL (Kappa < 0.60). Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   [System] Kalibrasi GAGAL (Kappa < 0.60). Tindak lanjuti lewat panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   1. Buka collection 'slr_screening', filter data dengan 'Agreement: DISAGREE'.")
 		logger.Log(session.ID, "   2. Lakukan Root-Cause Analysis (lihat notes dari AI).")
 		logger.Log(session.ID, "   3. Jika kriteria salah, perbaiki 'screener_briefing' Anda.")

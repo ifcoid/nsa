@@ -56,7 +56,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M4_STEP1_WAITING_INPUT":
-		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan eksekusi di Scopus lalu buka MongoDB Compass:")
+		logger.Log(session.ID, "   [System] Sesi menunggu: jalankan pencarian di Scopus, lalu masukkan hasilnya lewat panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   1. Cari dokumen 'data_mining_log.initial_sample'.")
 		logger.Log(session.ID, "   2. Ganti SEMUA placeholder '[ISI DISINI...]' dengan data aktual dari hasil Scopus Anda.")
 		logger.Log(session.ID, "   3. Jika sudah lengkap terisi, ubah 'status' menjadi 'M4_STEP1_EVALUATE' dan Update.")
@@ -89,7 +89,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M4_STEP1_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   1. Periksa 'data_mining_log.sanity_check'.")
 		logger.Log(session.ID, "   2. Baca 'volume_analysis', 'decision', dan 'recommendation'.")
 		logger.Log(session.ID, "   3a. Jika 'PROCEED' dan Anda setuju, ubah 'status' menjadi 'M4_STEP1_APPROVED'.")
@@ -116,7 +116,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		logger.Log(session.ID, "   1. Export seluruh hasil pencarian ke bentuk CSV dari masing-masing database (Scopus, IEEE, PubMed).")
 		logger.Log(session.ID, "   2. [PENTING] Buka CSV tersebut di Excel, tambahkan kolom baru bernama 'Database' dan isi sesuai sumbernya (misal: 'Scopus' untuk semua baris Scopus).")
 		logger.Log(session.ID, "   3. Pastikan kolom-kolom inti tercantum: Title, Abstract, Year, DOI, Document Type.")
-		logger.Log(session.ID, "   4. Buka MongoDB Compass.")
+		logger.Log(session.ID, "   4. Gunakan panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   5. Buat collection baru bernama 'slr_papers'.")
 		logger.Log(session.ID, "   6. Gunakan fitur 'Add Data -> Import File' untuk MENGGABUNGKAN (menumpuk) semua CSV tersebut ke dalam 'slr_papers'.")
 		logger.Log(session.ID, "   7. Setelah semua CSV ditumpuk, ubah status menjadi 'M4_STEP2_PROCESS' dan Update.")
@@ -308,8 +308,8 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M4_STEP2_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
-		logger.Log(session.ID, "   1. Buka document sesi Anda, cek 'data_mining_log' bagian quality, dedup, & pico_preview.")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
+		logger.Log(session.ID, "   Isi/koreksi bagian ini lewat editor di panel web.")
 		logger.Log(session.ID, "   2. Jika 'match_counts_pct' > 60% dan verdict PROCEED L3, ubah status ke 'M4_STEP2_APPROVED'.")
 		logger.Log(session.ID, "   3. Jika 'match_counts_pct' < 30%, ubah status ke 'M4_STEP2_NEEDS_REVISION'.")
 		return nil
@@ -435,7 +435,7 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 
 	case "M4_STEP3_WAITING_APPROVAL":
-		logger.Log(session.ID, "   [System] Sesi dikunci. Silakan buka MongoDB Compass:")
+		logger.Log(session.ID, "   [System] Sesi menunggu masukan Anda — lengkapi lewat panel di web (tak perlu buka database).")
 		logger.Log(session.ID, "   1. Periksa collection 'slr_screening' pastikan data post-dedup masuk beserta kolom reviewer.")
 		logger.Log(session.ID, "   2. Periksa dokumen 'screening_setup' & 'modul4_summary'.")
 		logger.Log(session.ID, "   3. Ubah status ke 'M4_STEP3_APPROVED' jika semua valid.")
