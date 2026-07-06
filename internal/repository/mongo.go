@@ -191,6 +191,42 @@ func (r *MongoRepository) SaveSessionUnsetting(ctx context.Context, session *mod
 	return err
 }
 
+// ManuscriptFlags melaporkan ketersediaan artefak manuskrip TANPA menarik isi manuskrip
+// (yang bisa ratusan KB → timeout Atlas lambat). Memakai aggregation $project yang hanya
+// mengembalikan 3 boolean. Dipakai diagnostic (yang jika tidak, memuat via GetSessionLite
+// yang meng-exclude `manuscript` → has_manuscript SELALU false-negative — menyesatkan
+// diagnosis bug). has=true bila field string non-kosong.
+func (r *MongoRepository) ManuscriptFlags(ctx context.Context, sessionID string) (hasManuscript, hasLatex, hasBibtex, hasFinal bool) {
+	collection := r.client.Database(r.dbName).Collection("slr_sessions")
+	nonEmpty := func(f string) bson.M {
+		return bson.M{"$gt": []interface{}{bson.M{"$strLenCP": bson.M{"$ifNull": []interface{}{"$manuscript." + f, ""}}}, 0}}
+	}
+	cur, err := collection.Aggregate(ctx, []bson.M{
+		{"$match": bson.M{"_id": sessionID}},
+		{"$project": bson.M{
+			"has_manuscript": bson.M{"$ne": []interface{}{bson.M{"$ifNull": []interface{}{"$manuscript", nil}}, nil}},
+			"has_latex":      nonEmpty("latex"),
+			"has_bibtex":     nonEmpty("bibtex"),
+			"has_final":      nonEmpty("final"),
+		}},
+	})
+	if err != nil {
+		return false, false, false, false
+	}
+	defer cur.Close(ctx)
+	var docs []struct {
+		HasManuscript bool `bson:"has_manuscript"`
+		HasLatex      bool `bson:"has_latex"`
+		HasBibtex     bool `bson:"has_bibtex"`
+		HasFinal      bool `bson:"has_final"`
+	}
+	if err := cur.All(ctx, &docs); err != nil || len(docs) == 0 {
+		return false, false, false, false
+	}
+	d := docs[0]
+	return d.HasManuscript, d.HasLatex, d.HasBibtex, d.HasFinal
+}
+
 // GetDB returns the underlying mongo.Database for direct collection access.
 func (r *MongoRepository) GetDB() *mongo.Database {
 	return r.client.Database(r.dbName)

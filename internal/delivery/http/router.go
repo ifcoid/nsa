@@ -197,6 +197,8 @@ func (r *Router) registerRoutes() {
 	// Modul 9 Manuscript downloads
 	protected.HandleFunc("GET /api/sessions/{id}/manuscript/download-tex", r.sessionHndlr.DownloadTex)
 	protected.HandleFunc("GET /api/sessions/{id}/manuscript/download-bib", r.sessionHndlr.DownloadBib)
+	protected.HandleFunc("GET /api/sessions/{id}/manuscript/download-md", r.sessionHndlr.DownloadMd)
+	protected.HandleFunc("GET /api/sessions/{id}/manuscript/meta", r.sessionHndlr.ManuscriptMeta)
 
 	// LLM config endpoints
 	protected.HandleFunc("GET /api/llm/health", r.llmHndlr.CheckHealth)

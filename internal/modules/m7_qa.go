@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"regexp"
 	"strconv"
 	"strings"
@@ -130,6 +131,16 @@ func abs64(x float64) float64 {
 
 // ===== QA Calibration: anchor examples + pilot batch + kappa check =====
 
+// qaToolFingerprint mengikat anchor examples ke tool QA yang disetujui. Berubahnya tool/
+// justifikasi/kategorisasi menghasilkan fingerprint berbeda → anchor lama (yang merujuk tool
+// lama) diregenerasi. Cukup fnv (bukan kripto): hanya untuk deteksi perubahan, bukan keamanan.
+func qaToolFingerprint(tool, cat, justification string) string {
+	h := fnv.New64a()
+	norm := func(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+	_, _ = h.Write([]byte(norm(tool) + "\x00" + norm(cat) + "\x00" + norm(justification)))
+	return strconv.FormatUint(h.Sum64(), 16)
+}
+
 func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRSession) error {
 	coll := m.deps.MongoRepo.GetExtractionCollection()
 	tool := session.QAThreshold.Tool
@@ -145,6 +156,25 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 		}
 	}
 	cal := session.QACalibration
+	// Anchor/tool coherence: anchor examples HARUS mencerminkan tool yang DISETUJUI. Bila tool
+	// (atau justifikasi/kategorisasi) berubah setelah anchors dibuat, anchor lama merujuk tool
+	// LAMA (kasus Sindy: anchors "ML Reproducibility Checklist" padahal tool = CUSTOM_RUBRIC).
+	// Deteksi via fingerprint → reset calibration (regen anchors + attempts=0) agar konsisten.
+	fp := qaToolFingerprint(tool, cat, justification)
+	if cal.ToolFingerprint != fp {
+		// Regenerasi HANYA bila anchors sudah ada tapi tak cocok tool (tool berubah, ATAU sesi
+		// legacy tanpa fingerprint — self-heal kasus Sindy: anchors "ML Reproducibility Checklist"
+		// padahal tool CUSTOM_RUBRIC). Sesi baru (belum ada anchors) cukup set fingerprint, senyap.
+		if len(cal.Anchors) > 0 {
+			logger.Logf(session.ID, "   [Kalibrasi QA] Anchor tak cocok tool aktif → regenerasi anchors & reset attempts (fingerprint %q→%q).\n", cal.ToolFingerprint, fp)
+			cal.Anchors = nil
+			cal.PilotResults = nil
+			cal.Attempts = 0
+			cal.CalibrationPassed = false
+			cal.RefinementNote = ""
+		}
+		cal.ToolFingerprint = fp
+	}
 	cal.Attempts++
 
 	// Phase 1: Generate anchor examples (only on first attempt or if no anchors yet).
@@ -349,11 +379,40 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 	cal.PilotResults = pilotResults
 
 	// Phase 3: Compute pilot kappa.
+	// VALIDITAS DULU (xAI/metodologi): Cohen's kappa hanya sahih bila ADA cukup pasangan
+	// penilaian LENGKAP (kedua rater menghasilkan kategori). Bila mayoritas pilot ERROR
+	// (rater gagal — provider 429/tak terjangkau), kappa=0.000 itu ARTEFAK "tak ada data",
+	// BUKAN ketidaksepakatan → JANGAN dilaporkan sebagai gagal-kalibrasi dan JANGAN
+	// force-proceed. Halt ke gate yang bisa dipulihkan + reset attempts (percobaan ini tak
+	// menghitung karena rater tak menilai). (Kasus Sindy: kappa 0.000 attempt 18/3.)
+	validPairs := 0
+	for _, p := range pilotResults {
+		if p.R1Category != "" && p.R2Category != "" {
+			validPairs++
+		}
+	}
+	minValidPairs := (len(pilotResults) + 1) / 2 // butuh mayoritas pilot menghasilkan pasangan lengkap
+	if minValidPairs < 2 {
+		minValidPairs = 2
+	}
+	if validPairs < minValidPairs {
+		cal.CalibrationPassed = false
+		cal.PilotKappa = 0
+		cal.Attempts = 0 // percobaan tak-sahih tak dihitung → cegah counter membengkak (18/3)
+		msg := fmt.Sprintf("Kalibrasi QA tidak sahih: hanya %d dari %d pilot menghasilkan pasangan penilaian lengkap (rater gagal — kemungkinan provider 429/overload atau endpoint tak terjangkau). Cohen's kappa tidak dapat dihitung/dilaporkan dalam kondisi ini. Perbaiki/ganti provider rater (R1: %s, R2: %s) di Pengaturan LLM, lalu Ulangi Kalibrasi.",
+			validPairs, len(pilotResults), cal.R1Model, cal.R2Model)
+		session.QACalibration = cal
+		session.Status = "M7_STEP3_NEEDS_REVISION"
+		session.SystemError = msg
+		logger.Logf(session.ID, "      [HALT] %s\n", msg)
+		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	}
+
 	pilotKappa := computePilotKappa(pilotResults)
 	cal.PilotKappa = pilotKappa
 
-	logger.Logf(session.ID, "   [Kalibrasi QA] Pilot kappa: %.3f (threshold: %.2f, attempt %d/%d)\n",
-		pilotKappa, qaCalibrationKappaThreshold, cal.Attempts, cal.MaxAttempts)
+	logger.Logf(session.ID, "   [Kalibrasi QA] Pilot kappa: %.3f (threshold: %.2f, attempt %d/%d, pasangan sahih %d/%d)\n",
+		pilotKappa, qaCalibrationKappaThreshold, cal.Attempts, cal.MaxAttempts, validPairs, len(pilotResults))
 
 	if pilotKappa >= qaCalibrationKappaThreshold {
 		cal.CalibrationPassed = true

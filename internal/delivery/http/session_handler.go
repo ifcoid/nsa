@@ -3033,6 +3033,12 @@ func (h *SessionHandler) GetSessionDiagnostic(w http.ResponseWriter, req *http.R
 		hist = hist[len(hist)-50:] // 50 baris log terakhir
 	}
 
+	// has_manuscript AKURAT: `s` dimuat via GetSessionLite (manuscript di-EXCLUDE) → s.Manuscript
+	// SELALU nil di sini. Pakai ManuscriptFlags (aggregation ringan, 3 bool) agar diagnostic tak
+	// false-negative (kesalahan ini pernah menyesatkan diagnosis — manuskrip ADA tapi dilaporkan
+	// tidak ada). has_final/latex/bibtex membedakan "manuskrip lengkap" vs "parsial/gagal".
+	hasMs, hasTex, hasBib, hasFinal := h.mongoRepo.ManuscriptFlags(ctx, id)
+
 	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
 		"found":           true,
 		"session_id":      id,
@@ -3043,7 +3049,10 @@ func (h *SessionHandler) GetSessionDiagnostic(w http.ResponseWriter, req *http.R
 		"embed_error":     s.EmbedError,
 		"feedback":        s.Feedback,
 		"flags": map[string]bool{
-			"has_manuscript":          s.Manuscript != nil,
+			"has_manuscript":          hasMs,
+			"has_manuscript_latex":    hasTex,
+			"has_manuscript_bibtex":   hasBib,
+			"has_manuscript_final":    hasFinal,
 			"has_framework_selection": s.FrameworkSelection != nil,
 			"has_pico":                s.PICODefinitions != nil,
 			"has_screening_setup":     s.ScreeningSetup != nil,
@@ -4062,4 +4071,57 @@ func (h *SessionHandler) DownloadBib(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="references.bib"`)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(session.Manuscript.Bibtex))
+}
+
+// DownloadMd menyajikan manuscript_final.md (16-section). Seperti DownloadTex/Bib, memuat
+// sesi PENUH (GetSession) — BUKAN poll Lite yang meng-exclude `manuscript`.
+func (h *SessionHandler) DownloadMd(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	session, err := h.mongoRepo.GetSession(context.Background(), id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	if session.Manuscript == nil || session.Manuscript.Final == "" {
+		sendJSONError(w, http.StatusNotFound, "Manuscript final not yet generated")
+		return
+	}
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="manuscript_final.md"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(session.Manuscript.Final))
+}
+
+// ManuscriptMeta melaporkan KETERSEDIAAN artefak manuskrip via GetSession PENUH. Krusial
+// karena poll GetSession memakai GetSessionLite yang meng-EXCLUDE `manuscript` dari proyeksi
+// (perf), sehingga `session.manuscript` di frontend SELALU kosong → tak bisa dipakai untuk
+// menilai apakah manuskrip benar-benar ada. Ruang Ekspor memanggil ini SEKALI saat render
+// (bukan per-poll) untuk gating tombol yang akurat + self-heal sesi lama yang sudah COMPLETED.
+func (h *SessionHandler) ManuscriptMeta(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	session, err := h.mongoRepo.GetSession(context.Background(), id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	ms := session.Manuscript
+	has := func(s string) bool { return ms != nil && strings.TrimSpace(s) != "" }
+	latex, bibtex, final := "", "", ""
+	if ms != nil {
+		latex, bibtex, final = ms.Latex, ms.Bibtex, ms.Final
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]bool{
+		"has_manuscript": ms != nil,
+		"has_latex":      has(latex),
+		"has_bibtex":     has(bibtex),
+		"has_final":      has(final),
+	})
 }

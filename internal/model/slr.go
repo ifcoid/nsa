@@ -686,6 +686,10 @@ type QACalibration struct {
 	CalibrationPassed bool                 `bson:"calibration_passed" json:"calibration_passed"`
 	Attempts          int                  `bson:"attempts" json:"attempts"`
 	MaxAttempts       int                  `bson:"max_attempts" json:"max_attempts"` // default 3
+	// ToolFingerprint = hash tool+categorization+justification saat Anchors dibuat. Bila tool QA
+	// diganti (mis. ML Reproducibility Checklist -> CUSTOM_RUBRIC), fingerprint tak cocok ->
+	// Anchors DIREGENERASI & Attempts direset (anchor lama merujuk tool lama = inkonsisten).
+	ToolFingerprint string `bson:"tool_fingerprint,omitempty" json:"tool_fingerprint,omitempty"`
 	RefinementNote    string               `bson:"refinement_note,omitempty" json:"refinement_note,omitempty"`
 	// Transparency fields: model names used during calibration.
 	R1Model      string `bson:"r1_model,omitempty" json:"r1_model,omitempty"`           // model name used for Rater 1
