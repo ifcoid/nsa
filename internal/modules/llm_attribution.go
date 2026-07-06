@@ -66,6 +66,23 @@ func (d *ModuleDeps) roleLabel(ctx context.Context, role string) string {
 	return "belum dikonfigurasi"
 }
 
+// errSignalText mengembalikan teks error ter-lowercase untuk KLASIFIKASI sinyal provider,
+// TAPI memotong lampiran "Raw: <respons LLM mentah>". Sebagian error (mis. parse QAResult)
+// menyertakan respons mentah paper ke dalam pesan; teks itu bisa memuat substring polos
+// seperti "500"/"429"/"quota"/"dial tcp"/"overload" yang BUKAN sinyal dari provider →
+// klasifikasi jadi salah-atribusi (mis. parse error di-cap "provider overload 503/429",
+// persis yang membingungkan pelapor). Klasifikasi HARUS dari SEBAB error, bukan payload LLM.
+func errSignalText(err error) string {
+	s := strings.ToLower(err.Error())
+	for _, marker := range []string{" raw:", "raw:", "respons mentah", "response:"} {
+		if i := strings.Index(s, marker); i >= 0 {
+			s = s[:i]
+			break
+		}
+	}
+	return s
+}
+
 // isLLMConnectivityError menandai error yang berarti endpoint LLM TAK TERJANGKAU (server
 // mati / base URL salah / DNS gagal / koneksi di-reset) — ini SISTEMIK, bukan kegagalan
 // konten per-item. Dipakai untuk fail-fast: percuma meneruskan item lain yang pasti gagal
@@ -74,7 +91,7 @@ func isLLMConnectivityError(err error) bool {
 	if err == nil {
 		return false
 	}
-	s := strings.ToLower(err.Error())
+	s := errSignalText(err)
 	for _, sig := range []string{
 		"connection refused", "actively refused", "dial tcp", "no such host",
 		"connection reset", "connectex", "network is unreachable", "no route to host",
@@ -94,7 +111,7 @@ func isContextOverflowError(err error) bool {
 	if err == nil {
 		return false
 	}
-	s := strings.ToLower(err.Error())
+	s := errSignalText(err)
 	for _, sig := range []string{
 		"stream kosong", "context window", "context length", "maximum context",
 		"context_length_exceeded", "too many tokens", "tokens exceed", "reduce the length",
@@ -115,7 +132,7 @@ func isServerOverloadError(err error) bool {
 	if err == nil {
 		return false
 	}
-	s := strings.ToLower(err.Error())
+	s := errSignalText(err)
 	for _, sig := range []string{
 		"503", "502", "500", "504", "service unavailable", "bad gateway",
 		"internal server error", "gateway timeout", "overloaded", "overload",
@@ -140,7 +157,7 @@ func isSystemicLLMError(err error) bool {
 	if isLLMConnectivityError(err) || isServerOverloadError(err) || isContextOverflowError(err) {
 		return true
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "provider merespons dengan error")
+	return strings.Contains(errSignalText(err), "provider merespons dengan error")
 }
 
 // llmError membungkus error pemanggilan LLM dengan atribusi xAI yang konsisten:

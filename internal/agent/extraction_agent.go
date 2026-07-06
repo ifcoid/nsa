@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"nsa/internal/llm"
@@ -493,6 +495,107 @@ type QAResult struct {
 	ItemsSummary string  `json:"items_summary"`
 	Reasoning    string  `json:"reasoning"` // Penjelasan logis mengapa paper ini mendapat skor/kategori tersebut
 	Evidence     string  `json:"evidence"`  // Bukti atau kutipan dari teks yang mendukung
+}
+
+// UnmarshalJSON toleran: sebagian rater (mis. mistral-large-latest) mengembalikan
+// items_summary / reasoning / evidence sebagai OBJEK/array per-domain, bukan string —
+// interpretasi wajar dari "breakdown per domain". Tanpa toleransi ini, unmarshal gagal
+// keras ("json: cannot unmarshal object into Go struct field QAResult.items_summary of
+// type string") yang oleh runQA dianggap kegagalan SISTEMIK → HALT QA di SEMUA paper.
+// Ratakan struktur apa pun ke teks yang bisa dibaca; total_score juga toleran number/string.
+func (q *QAResult) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		TotalScore   json.RawMessage `json:"total_score"`
+		Category     string          `json:"category"`
+		ItemsSummary json.RawMessage `json:"items_summary"`
+		Reasoning    json.RawMessage `json:"reasoning"`
+		Evidence     json.RawMessage `json:"evidence"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	q.Category = aux.Category
+	q.TotalScore = flexJSONFloat(aux.TotalScore)
+	q.ItemsSummary = flattenJSONText(aux.ItemsSummary)
+	q.Reasoning = flattenJSONText(aux.Reasoning)
+	q.Evidence = flattenJSONText(aux.Evidence)
+	return nil
+}
+
+// flexJSONFloat menerima number ("78") maupun string ("78" / "78%").
+func flexJSONFloat(raw json.RawMessage) float64 {
+	if len(raw) == 0 {
+		return 0
+	}
+	var f float64
+	if json.Unmarshal(raw, &f) == nil {
+		return f
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "%"))
+		if v, err := strconv.ParseFloat(s, 64); err == nil {
+			return v
+		}
+	}
+	return 0
+}
+
+// flattenJSONText meratakan nilai JSON apa pun (string/obj/array/number) ke teks terbaca.
+// String → apa adanya; objek → "key: value; ..." (kunci diurutkan agar deterministik demi
+// reproducibility); array → gabung dengan "; ".
+func flattenJSONText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil { // fast-path: sudah string
+		return s
+	}
+	var v interface{}
+	if json.Unmarshal(raw, &v) != nil {
+		return strings.TrimSpace(string(raw))
+	}
+	return flattenJSONValue(v)
+}
+
+func flattenJSONValue(v interface{}) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64) // hindari "78.000000"
+	case []interface{}:
+		parts := make([]string, 0, len(t))
+		for _, e := range t {
+			if s := strings.TrimSpace(flattenJSONValue(e)); s != "" {
+				parts = append(parts, s)
+			}
+		}
+		return strings.Join(parts, "; ")
+	case map[string]interface{}:
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			val := strings.TrimSpace(flattenJSONValue(t[k]))
+			if val == "" {
+				parts = append(parts, k)
+			} else {
+				parts = append(parts, k+": "+val)
+			}
+		}
+		return strings.Join(parts, "; ")
+	default:
+		return fmt.Sprintf("%v", t)
+	}
 }
 
 func (a *ExtractionAgent) AppraiseQuality(ctx context.Context, tool, categorization, justification, title, fulltext string) (*QAResult, error) {
