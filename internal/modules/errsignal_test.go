@@ -30,3 +30,16 @@ func TestErrClassifiers_RealSignalStillDetected(t *testing.T) {
 		t.Fatalf("connectivity asli tak terdeteksi")
 	}
 }
+
+// Regresi tiket Sindy: nvidia balas gRPC ResourceExhausted ("Worker local total request
+// limit reached") di tengah stream. Harus dikenali SISTEMIK (overload/kuota) agar QA
+// fail-fast dgn gate yg bisa dipulihkan — BUKAN grind loop re-attempt ERROR tanpa henti.
+func TestResourceExhausted_IsSystemicOverload(t *testing.T) {
+	err := fmt.Errorf("gagal setelah 3 retries: gagal membaca stream: error dari provider di tengah stream: ResourceExhausted: Worker local total request limit reached (284/48)")
+	if !isServerOverloadError(err) {
+		t.Fatalf("ResourceExhausted/request limit tak dikenali sbg overload")
+	}
+	if !isSystemicLLMError(err) {
+		t.Fatalf("ResourceExhausted tak dikenali sistemik → QA akan loop")
+	}
+}

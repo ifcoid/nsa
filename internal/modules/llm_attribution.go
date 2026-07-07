@@ -126,8 +126,12 @@ func isContextOverflowError(err error) bool {
 
 // isServerOverloadError menandai kegagalan SISI SERVER provider yang bersifat sementara &
 // SISTEMIK (akan berulang identik untuk tiap item): 5xx (mis. 503 Service Unavailable dari
-// gateway inference user), 429/rate-limit, atau "overloaded". Beda dari connectivity (server
-// tak terjangkau sama sekali) — di sini server MEMBALAS tapi sedang tak sanggup melayani.
+// gateway inference user), 429/rate-limit, "overloaded", atau kuota/limit request habis
+// (gRPC ResourceExhausted, mis. nvidia "Worker local total request limit reached"). Beda
+// dari connectivity (server tak terjangkau sama sekali) — di sini server MEMBALAS tapi
+// sedang tak sanggup melayani. PENTING utk hot-loop QA: tanpa deteksi ini, error rate-limit
+// yang persisten tak dianggap sistemik → paper ERROR di-RE-ATTEMPT tanpa henti (loop
+// "nyangkut") alih-alih membuka gate yang bisa dipulihkan user (ganti/tunggu provider).
 func isServerOverloadError(err error) bool {
 	if err == nil {
 		return false
@@ -137,6 +141,8 @@ func isServerOverloadError(err error) bool {
 		"503", "502", "500", "504", "service unavailable", "bad gateway",
 		"internal server error", "gateway timeout", "overloaded", "overload",
 		"429", "rate limit", "rate-limit", "too many requests", "quota",
+		"resourceexhausted", "resource exhausted", "request limit reached",
+		"request limit", "insufficient_quota",
 	} {
 		if strings.Contains(s, sig) {
 			return true
