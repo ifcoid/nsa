@@ -224,6 +224,16 @@ func (m *M7Extraction) Execute(ctx context.Context, session *model.SLRSession) e
 			bson.M{"$set": bson.M{"qa_rated": false}})
 		session.Status = "M7_STEP3_QA"
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
+	case "M7_STEP3_QA_BLOCKED":
+		// Gerbang HITL: QA dijeda karena rater provider GAGAL SISTEMIK (rate-limit/overload/
+		// ResourceExhausted, context overflow, atau endpoint tak terjangkau) — akan berulang
+		// identik di tiap paper. Tahan di sini (passive, TIDAK me-reset apa pun) sampai user
+		// memperbaiki/ganti provider rater di Pengaturan LLM lalu 'Ulangi QA' (reviseStep →
+		// M7_STEP3_QA: re-attempt HANYA paper ERROR, pertahankan rating & kalibrasi yang sudah
+		// ada via ResetQAErrors). Lihat 'system_error' utk detail + nama model. BEDA TEGAS dari
+		// M7_STEP3_NEEDS_REVISION (reset PENUH: wipe semua qa_rated + tool + kalibrasi).
+		logger.Log(session.ID, "   [System] ⛔ QA dijeda: rater provider gagal sistemik. Perbaiki/ganti provider rater di Pengaturan LLM lalu 'Ulangi QA' (lihat system_error).")
+		return nil
 	case "M7_STEP3_WAITING_APPROVAL":
 		logger.Log(session.ID, "   [System] Tinjau 'qa_threshold_justification' + 'sensitivity_analysis'. Approve / revisi.")
 		return nil

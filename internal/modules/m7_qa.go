@@ -343,7 +343,7 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 			msg := fmt.Sprintf("Kalibrasi QA dihentikan pada pilot '%s': rater %s (%s) gagal sistemik — %s. Penyebab ini berulang di semua pilot, jadi dihentikan agar tak menumpuk kappa sampah. %s.",
 				clipErr(title), calRater, calModel, clipErr(calSysErr.Error()), hint)
 			session.QACalibration = cal
-			session.Status = "M7_STEP3_NEEDS_REVISION"
+			session.Status = "M7_STEP3_QA_BLOCKED"
 			session.SystemError = msg
 			logger.Logf(session.ID, "      [HALT] %s\n", msg)
 			return m.deps.MongoRepo.UpdateSession(ctx, session)
@@ -402,7 +402,7 @@ func (m *M7Extraction) runQACalibration(ctx context.Context, session *model.SLRS
 		msg := fmt.Sprintf("Kalibrasi QA tidak sahih: hanya %d dari %d pilot menghasilkan pasangan penilaian lengkap (rater gagal — kemungkinan provider 429/overload atau endpoint tak terjangkau). Cohen's kappa tidak dapat dihitung/dilaporkan dalam kondisi ini. Perbaiki/ganti provider rater (R1: %s, R2: %s) di Pengaturan LLM, lalu Ulangi Kalibrasi.",
 			validPairs, len(pilotResults), cal.R1Model, cal.R2Model)
 		session.QACalibration = cal
-		session.Status = "M7_STEP3_NEEDS_REVISION"
+		session.Status = "M7_STEP3_QA_BLOCKED"
 		session.SystemError = msg
 		logger.Logf(session.ID, "      [HALT] %s\n", msg)
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
@@ -691,7 +691,7 @@ func (m *M7Extraction) runQAL3(ctx context.Context, session *model.SLRSession) e
 					}
 					msg := fmt.Sprintf("QA dihentikan pada paper '%s': rater %s (%s) gagal sistemik — %s. Penyebab ini akan berulang di SEMUA paper, jadi proses dihentikan agar tidak menghasilkan rating ERROR massal. %s.",
 						clipErr(title), sysRater, sysModel, clipErr(sysErr.Error()), hint)
-					session.Status = "M7_STEP3_NEEDS_REVISION"
+					session.Status = "M7_STEP3_QA_BLOCKED"
 					session.SystemError = msg
 					logger.Logf(session.ID, "      [HALT] %s\n", msg)
 					return m.deps.MongoRepo.UpdateSession(ctx, session)
