@@ -332,6 +332,35 @@ memberi umpan-balik agar user tahu prosesnya jalan dan bisa mengevaluasi modelny
   (mis. `🤖 3/16…`), aktifkan lagi hanya saat selesai/error. Tambahkan **guard server**
   (job in-flight → jangan mulai job baru) sebagai jaring kedua.
 
+## Setiap tiket = SINYAL UX, bukan cuma bug kode (perbaiki akar + tutup celah UX)
+
+Tiap laporan bug biasanya menandai DUA kegagalan: (1) bug teknis, DAN (2) UX yang membuat
+user TERPAKSA melapor — errornya tak jelas, tak proaktif, atau menyesatkan. Setelah
+memperbaiki akar teknis, **WAJIB tanya**: *"kenapa user sampai harus melapor? bisakah UX
+membuatnya swa-jelas / bisa-pulih / tercegah?"* lalu tutup celah itu juga. Tiga mode
+kegagalan UX yang BERULANG (dari tiket nyata) — cek ketiganya tiap menangani tiket:
+
+- **Reaktif → proaktif:** error mahal (provider rusak/rate-limited) baru ketahuan setelah
+  user investasi waktu berjam-jam. Sediakan gerbang PRA-jalan (mis. **pre-flight** role LLM
+  sebelum run panjang; validasi konfig sebelum commit).
+- **State diam → terlihat:** job macet/loop yang cuma tampak "spinner abadi" + token status
+  diam. Beri sinyal **no-progress/stall** (mis. deteksi baris log yang tak lagi *novel*),
+  jangan biarkan user menyimpulkan "hang" lalu lapor.
+- **Pesan menyesatkan/false-negative → jujur & akurat:** hint SALAH, atau klaim "hilang/
+  gagal" pada kondisi yang BELUM pasti (mis. data ter-strip dari poll `GetSessionLite`),
+  LEBIH BURUK dari diam — user diarahkan ke tindakan salah (buang kuota, regen yang tak
+  perlu). Bedakan **ada / terkonfirmasi-absen / UNKNOWN**; jangan menyuruh perbaikan
+  destruktif saat statusnya cuma "unknown". (lih. "Debugging: CEK STATE DATABASE DULU")
+
+**Pesan error yang benar di BACKEND TAK berguna bila UI tak menampilkannya.** Jangan berhenti
+di "backend set `system_error`" — verifikasi error benar-benar **SURFACE di UI end-to-end**
+(status yang dipakai HALT harus punya cabang render yang menampilkannya). Pelajaran
+(2026-07-07): HALT QA di-set `M7_STEP3_NEEDS_REVISION`, tapi frontend merendernya sebagai
+pasif "Sedang merevisi…" (pesan HILANG) DAN status itu memicu **reset destruktif** saat
+`resumeSession` jalan tiap reload → obatnya status gerbang KHUSUS (mis. `*_BLOCKED`, passive,
+tak me-reset) yang tampil jelas + recoverable, meniru `M7_STEP2_VERIFY_BLOCKED`. Selaras
+dengan seksi **Reproducible Error (xAI)** & **UX WAJIB untuk operasi AI yang lama**.
+
 ## Model pengujian (penting)
 
 Korektnya **perilaku** TIDAK bisa diklaim hanya dari unit test + build hijau. **User =
