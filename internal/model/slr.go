@@ -350,6 +350,12 @@ type DedupBreakdown struct {
 	PerDatabaseTotal  map[string]int `bson:"per_database_total" json:"per_database_total"`
 	PerDatabaseUnique map[string]int `bson:"per_database_unique" json:"per_database_unique"`
 	PerDatabaseDups   map[string]int `bson:"per_database_dups" json:"per_database_dups"`
+	// PreDedupWarning terisi bila M4 mencurigai INPUT sudah dide-dup SEBELUM masuk slr_papers
+	// (mis. 0 duplikat padahal ≥2 database sumber — hampir mustahil pada pencarian nyata).
+	// PRISMA "records identified" lalu mencerminkan data PASCA-dedup, bukan hasil pencarian
+	// mentah → angka identified/duplicates kurang valid untuk Q1. Disurfacing ke UI (bukan
+	// ditelan) agar user bisa mengimpor data MENTAH. Kasus balqis (slr_balqis).
+	PreDedupWarning string `bson:"pre_dedup_warning,omitempty" json:"pre_dedup_warning,omitempty"`
 }
 
 type PICOPreviewItem struct {

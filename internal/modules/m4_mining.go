@@ -263,6 +263,22 @@ func (m *M4Mining) Execute(ctx context.Context, session *model.SLRSession) error
 		}
 		logger.Logf(session.ID, "   [Info] Total post-dedup: %d unik (%s)\n", dedup.TotalUnique, strings.Join(uniqueParts, ", "))
 
+		// Integritas PRISMA: bila 0 duplikat padahal input berasal dari ≥2 database sumber,
+		// hampir pasti data SUDAH dide-dup SEBELUM masuk slr_papers (mis. di Zotero/Rayyan/
+		// PEDE). Akibatnya "records identified" = jumlah PASCA-dedup, "duplicates removed" = 0
+		// → PRISMA flow tak mencerminkan hasil pencarian mentah (kurang valid utk Q1). JANGAN
+		// telan diam-diam — surfacing ke user agar impor data MENTAH. Kasus balqis (slr_balqis).
+		distinctDBs := 0
+		for db, cnt := range dedup.PerDatabaseTotal {
+			if cnt > 0 && db != "Unknown" {
+				distinctDBs++
+			}
+		}
+		if dedup.TotalDuplicates == 0 && distinctDBs >= 2 {
+			dedup.PreDedupWarning = fmt.Sprintf("0 duplikat terdeteksi padahal data berasal dari %d database sumber — sangat tidak lazim pada pencarian nyata (biasanya ada tumpang-tindih antar-database). Kemungkinan besar data SUDAH dide-duplikasi SEBELUM diimpor (mis. via Zotero/Mendeley/Rayyan atau ingestion PEDE). Akibatnya angka PRISMA 'records identified' mencerminkan jumlah PASCA-dedup dan 'duplicates removed' tercatat 0 — kurang valid untuk publikasi Q1. Untuk PRISMA akurat: impor hasil pencarian MENTAH (semua database digabung, duplikat MASIH ADA) ke slr_papers lalu jalankan ulang Modul 4; biarkan sistem yang men-dedup.", distinctDBs)
+			logger.Logf(session.ID, "   [⚠ PRISMA] %s\n", dedup.PreDedupWarning)
+		}
+
 		// 3. PICO Consistency Preview
 		var picoVerdict *model.PICOPreviewCheck
 		if audit.MissingAbstract > 0 || audit.MissingDOI > 0 {
