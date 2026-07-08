@@ -494,10 +494,12 @@ func (h *SessionHandler) HandoffGuide(w http.ResponseWriter, req *http.Request) 
 	var b strings.Builder
 	w2 := func(f string, a ...interface{}) { b.WriteString(fmt.Sprintf(f, a...)); b.WriteString("\n") }
 
-	w2("# Panduan Handoff Cowork-LLM — %s", strSafe(s.Topic, "(tanpa topik)"))
+	w2("# AGENTS.md — Instruksi Proyek untuk Cowork-LLM (Handoff SLR: %s)", strSafe(s.Topic, "(tanpa topik)"))
 	w2("")
-	w2("> Dokumen ini menyerahkan hasil SLR agar dapat DILANJUTKAN/DISEMPURNAKAN bersama LLM lain")
-	w2("> (mis. Claude/GPT di sesi terpisah) yang diberi akses **read-only** ke database Anda.")
+	w2("> **Untuk agent/LLM yang membaca file ini:** ini adalah Project Instructions (standar")
+	w2("> `AGENTS.md`). Anda ditugaskan MELANJUTKAN/MENYEMPURNAKAN Systematic Literature Review di")
+	w2("> bawah dengan akses **read-only** ke database peneliti. Ikuti aturan protokol (a-priori,")
+	w2("> anti-HARKing, gaya Q1) di §4 secara ketat; jangan mengarang angka/sitasi.")
 	w2("> Session: `%s` · Status: %s · Bahasa manuskrip: %s", s.ID, s.Status, lang)
 	w2("")
 	w2("## ⚠️ Keamanan (WAJIB dibaca)")
