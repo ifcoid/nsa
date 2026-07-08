@@ -62,8 +62,16 @@ func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) e
 
 	// Server verifikasi (BGE-M3 hybrid) mati saat menulis -> tunggu user menyalakan
 	// Colab lagi, lalu resume ke group tertunda (lihat session_handler approve).
-	case "M9_GROUPA_WAITING_EMBED", "M9_GROUPB_WAITING_EMBED":
+	case "M9_GROUPA_WAITING_EMBED", "M9_GROUPB_WAITING_EMBED", "M9_COMPILE_WAITING_EMBED":
 		logger.Log(session.ID, "   [System] M9 dijeda: server embedding/pencarian BGE-M3 (hybrid) mati. Nyalakan Colab, masukkan endpoint via web, lalu lanjutkan.")
+		return nil
+
+	// Provider penulis manuskrip (Brain/Supervisor) gagal SISTEMIK (rate-limit/overload/
+	// kuota/koneksi) -> gerbang recoverable (mirror M7_STEP3_QA_BLOCKED). Passive: tahan di
+	// sini sampai user perbaiki/ganti provider lalu 'Lanjutkan Manuskrip' (ApproveStep melepas
+	// _BLOCKED -> resume fase). TIDAK me-reset manuskrip yang sudah ditulis.
+	case "M9_GROUPA_BLOCKED", "M9_GROUPB_BLOCKED", "M9_COMPILE_BLOCKED":
+		logger.Log(session.ID, "   [System] ⛔ M9 dijeda: provider penulis manuskrip gagal sistemik. Perbaiki/ganti provider Brain/Supervisor di Pengaturan LLM lalu 'Lanjutkan Manuskrip' (lihat system_error).")
 		return nil
 
 	// ---- GROUP B: Introduction + Conclusions + Abstract + Title ----
@@ -82,7 +90,18 @@ func (m *M9Manuscript) Execute(ctx context.Context, session *model.SLRSession) e
 
 	// ---- COMPILE: references + audit + prisma + final + latex + summary ----
 	case "M9_COMPILE":
-		return m.runCompile(ctx, session)
+		err := m.runCompile(ctx, session)
+		var be *EmbedBackendDownError
+		if errors.As(err, &be) {
+			logger.Logf(session.ID, "   [PAUSE] M9 (compile) dijeda — verifikasi sitasi butuh server hybrid: %s\n", be.Reason)
+			session.Status = "M9_COMPILE_WAITING_EMBED"
+			session.EmbedError = be.Reason
+			return m.deps.MongoRepo.UpdateSession(ctx, session)
+		}
+		if isSystemicLLMError(err) {
+			return m.blockM9Systemic(ctx, session, "M9_COMPILE_BLOCKED", err)
+		}
+		return err
 	case "M9_COMPILE_WAITING_APPROVAL":
 		logger.Log(session.ID, "   [System] Tinjau manuscript_final (+.tex/.bib), coherence_audit, PRISMA checklist. Approve untuk menutup pipeline.")
 		return nil
@@ -235,7 +254,41 @@ func (m *M9Manuscript) runGroup(ctx context.Context, session *model.SLRSession, 
 		session.EmbedError = be.Reason
 		return m.deps.MongoRepo.UpdateSession(ctx, session)
 	}
+	// Kegagalan LLM SISTEMIK (rate-limit/overload/ResourceExhausted/context/koneksi) akan
+	// berulang identik tiap bagian → JANGAN grinding retry berkepanjangan (tampak beku, tiket
+	// Sindy) → buka gerbang recoverable *_BLOCKED. waitStatus "M9_GROUPA_WAITING_EMBED" →
+	// fase "M9_GROUPA" → gerbang "M9_GROUPA_BLOCKED".
+	if isSystemicLLMError(err) {
+		phase := strings.TrimSuffix(waitStatus, "_WAITING_EMBED")
+		return m.blockM9Systemic(ctx, session, phase+"_BLOCKED", err)
+	}
 	return err
+}
+
+// blockM9Systemic membuka GERBANG HITL M9 yang bisa dipulihkan saat provider penulis manuskrip
+// (Brain/Supervisor) gagal SISTEMIK — mirror pola M7_STEP3_QA_BLOCKED. Passive: pipeline
+// berhenti dgn pesan jelas (sebut model + dugaan akar + langkah), user perbaiki/ganti provider
+// lalu 'Lanjutkan Manuskrip' (ApproveStep melepas akhiran _BLOCKED → resume fase tertunda).
+func (m *M9Manuscript) blockM9Systemic(ctx context.Context, session *model.SLRSession, blockStatus string, err error) error {
+	hint := "perbaiki/ganti provider Brain/Supervisor di Pengaturan LLM lalu 'Lanjutkan Manuskrip'"
+	switch {
+	case isServerOverloadError(err):
+		hint = "provider sedang rate-limit/overload/kuota habis (mis. 429/503/ResourceExhausted) — tunggu beberapa menit ATAU ganti provider Brain/Supervisor ke yang lebih lapang di Pengaturan LLM, lalu 'Lanjutkan Manuskrip'"
+	case isContextOverflowError(err):
+		hint = "prompt manuskrip melebihi context window model — pakai model Brain context lebih besar di Pengaturan LLM, lalu 'Lanjutkan Manuskrip'"
+	case isLLMConnectivityError(err):
+		hint = "endpoint provider tak terjangkau — pastikan server/gateway LLM berjalan & base URL benar di Pengaturan LLM, lalu 'Lanjutkan Manuskrip'"
+	}
+	modelAttr := ""
+	if session.Manuscript != nil && session.Manuscript.ModelUsed != "" {
+		modelAttr = " (" + session.Manuscript.ModelUsed + ")"
+	}
+	msg := fmt.Sprintf("Penulisan manuskrip (M9) dijeda: provider penulis%s gagal sistemik — %s. Penyebab ini berulang di tiap bagian, jadi dihentikan agar tak menggiling lama & tampak macet. %s.",
+		modelAttr, clipErr(err.Error()), hint)
+	session.Status = blockStatus
+	session.SystemError = msg
+	logger.Logf(session.ID, "   [HALT] %s\n", msg)
+	return m.deps.MongoRepo.UpdateSession(ctx, session)
 }
 
 func (m *M9Manuscript) generateGroupA(ctx context.Context, session *model.SLRSession) error {

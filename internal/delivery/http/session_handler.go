@@ -295,6 +295,11 @@ func (h *SessionHandler) ApproveStep(w http.ResponseWriter, req *http.Request) {
 			// M9: server embedding/pencarian sudah dinyalakan lagi -> resume ke group tertunda.
 			session.Status = strings.TrimSuffix(session.Status, "_WAITING_EMBED")
 			session.EmbedError = ""
+		} else if strings.HasPrefix(session.Status, "M9_") && strings.HasSuffix(session.Status, "_BLOCKED") {
+			// M9: provider penulis (Brain/Supervisor) sudah diperbaiki/diganti -> resume ke fase
+			// tertunda (GROUPA/GROUPB/COMPILE). Manuskrip yang sudah ditulis DIPERTAHANKAN.
+			session.Status = strings.TrimSuffix(session.Status, "_BLOCKED")
+			session.SystemError = ""
 		}
 
 		// Custom data handling untuk M2_STEP1
