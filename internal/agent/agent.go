@@ -42,7 +42,60 @@ func ClipRaw(s string) string {
 	return s
 }
 
+// CleanJSONResponse mengekstrak blok JSON dari output LLM LALU meng-escape karakter kontrol
+// MENTAH di dalam string literal. Langkah kedua penting: LLM sering menaruh tabel markdown
+// multi-baris LANGSUNG di dalam nilai string → newline mentah → "invalid character '\n' in
+// string literal" saat json.Unmarshal (tokenizer gagal SEBELUM UnmarshalJSON kustom jalan;
+// kasus SLNAIntegration M8B_STEP4). Terpusat di sini → menutup SEMUA parsing JSON LLM.
 func CleanJSONResponse(rawResponse string) string {
+	return escapeRawControlCharsInStrings(cleanJSONResponseExtract(rawResponse))
+}
+
+// escapeRawControlCharsInStrings mengubah karakter kontrol MENTAH (<0x20: newline/tab/CR/dsb)
+// yang muncul DI DALAM string literal JSON menjadi bentuk ter-escape yang valid (\n, \t, \r,
+// \uXXXX). Karakter kontrol di LUAR string (whitespace struktural antar-token) DIBIARKAN.
+// String yang sudah valid (escaped) tak berubah — `\n` (backslash+n) bukan newline mentah.
+func escapeRawControlCharsInStrings(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) + 16)
+	inString, escaped := false, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !inString {
+			b.WriteByte(c)
+			if c == '"' {
+				inString = true
+			}
+			continue
+		}
+		if escaped { // char apa pun setelah backslash ditulis apa adanya
+			b.WriteByte(c)
+			escaped = false
+			continue
+		}
+		switch {
+		case c == '\\':
+			b.WriteByte(c)
+			escaped = true
+		case c == '"':
+			b.WriteByte(c)
+			inString = false
+		case c == '\n':
+			b.WriteString(`\n`)
+		case c == '\r':
+			b.WriteString(`\r`)
+		case c == '\t':
+			b.WriteString(`\t`)
+		case c < 0x20:
+			b.WriteString(fmt.Sprintf(`\u%04x`, c))
+		default:
+			b.WriteByte(c) // termasuk byte UTF-8 multibyte (>=0x80) → utuh
+		}
+	}
+	return b.String()
+}
+
+func cleanJSONResponseExtract(rawResponse string) string {
 	rawResponse = strings.TrimSpace(rawResponse)
 
 	// Hapus tag <think>...</think> secara utuh (mendukung unclosed tag akibat token limit)
