@@ -477,6 +477,101 @@ func (h *SessionHandler) RequestReimport(w http.ResponseWriter, req *http.Reques
 	})
 }
 
+// RecountIdentification MENGKOREKSI angka PRISMA "records identified" + "duplicates removed"
+// dari file export MENTAH yang diunggah ULANG — NON-DESTRUKTIF: slr_papers, screening,
+// ekstraksi, dan MANUSKRIP TIDAK diubah, hanya DataMiningLog counts (+ provenance) yang
+// di-patch. Untuk sesi yang datanya SUDAH ter-dedup SEBELUM masuk pipeline (bug backend lama
+// / dedup di reference manager) sehingga identified=post-dedup & duplicates=0 (kasus balqis).
+// User cukup unggah ulang export mentah tiap database; sistem menghitung identified (total)
+// + duplicates (DOI ∪ title+year, logika sama dgn M4) tanpa mengulang screening.
+func (h *SessionHandler) RecountIdentification(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if id == "" {
+		sendJSONError(w, http.StatusBadRequest, "Session ID is required")
+		return
+	}
+	ctx := context.Background()
+	session, err := h.mongoRepo.GetSession(ctx, id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Session not found")
+		return
+	}
+	if err := req.ParseMultipartForm(50 << 20); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Failed to parse multipart form")
+		return
+	}
+	files := req.MultipartForm.File["files"]
+	if len(files) == 0 {
+		sendJSONError(w, http.StatusBadRequest, "No files uploaded")
+		return
+	}
+
+	var records []modules.IdRecord
+	parsedFiles := 0
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			continue
+		}
+		content, err := io.ReadAll(file)
+		file.Close()
+		if err != nil {
+			continue
+		}
+		content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
+		docs, err := parser.ParseFile(fileHeader.Filename, content)
+		if err != nil {
+			logger.Logf(id, "[Recount] ⚠️ File '%s' GAGAL di-parse: %v — dilewati.", fileHeader.Filename, err)
+			continue
+		}
+		parsedFiles++
+		for _, doc := range docs {
+			records = append(records, modules.IdRecord{
+				Title: doc.Title, DOI: doc.DOI, Year: doc.Year, Database: doc.Database,
+			})
+		}
+	}
+	if len(records) == 0 {
+		sendJSONError(w, http.StatusBadRequest, "Tak ada record yang bisa diparse dari file yang diunggah. Pastikan ini file export database (CSV/RIS/BibTeX) yang MENTAH (belum dide-dup).")
+		return
+	}
+
+	dedup := modules.ComputeIdentification(records)
+	identified := len(records)
+
+	if session.DataMiningLog == nil {
+		session.DataMiningLog = &model.DataMiningLog{}
+	}
+	if session.DataMiningLog.QualityAudit == nil {
+		session.DataMiningLog.QualityAudit = &model.BasicQualityAudit{}
+	}
+	prevIdentified := session.DataMiningLog.QualityAudit.TotalRecords
+	prevDups := 0
+	if session.DataMiningLog.Dedup != nil {
+		prevDups = session.DataMiningLog.Dedup.TotalDuplicates
+	}
+	session.DataMiningLog.QualityAudit.TotalRecords = identified
+	dedup.RecountNote = fmt.Sprintf(
+		"PRISMA identification dihitung ULANG dari %d file export mentah (%d record) pada %s — koreksi dedup pra-pipeline. Sebelumnya identified=%d, duplicates=%d → sekarang identified=%d, duplicates=%d (unik=%d). slr_papers/screening/ekstraksi/manuskrip TIDAK diubah.",
+		parsedFiles, identified, time.Now().Format("2006-01-02 15:04"), prevIdentified, prevDups,
+		identified, dedup.TotalDuplicates, dedup.TotalUnique)
+	session.DataMiningLog.Dedup = &dedup
+	logger.Logf(id, "[Recount] %s", dedup.RecountNote)
+
+	if err := h.mongoRepo.UpdateSession(ctx, session); err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to save recounted identification: "+err.Error())
+		return
+	}
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"identified":         identified,
+		"duplicates_removed": dedup.TotalDuplicates,
+		"unique":             dedup.TotalUnique,
+		"per_database_total": dedup.PerDatabaseTotal,
+		"parsed_files":       parsedFiles,
+		"note":               dedup.RecountNote,
+	})
+}
+
 func (h *SessionHandler) ImportData(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if id == "" {

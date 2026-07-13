@@ -356,6 +356,9 @@ type DedupBreakdown struct {
 	// mentah → angka identified/duplicates kurang valid untuk Q1. Disurfacing ke UI (bukan
 	// ditelan) agar user bisa mengimpor data MENTAH. Kasus balqis (slr_balqis).
 	PreDedupWarning string `bson:"pre_dedup_warning,omitempty" json:"pre_dedup_warning,omitempty"`
+	// RecountNote: jejak provenance bila angka identifikasi/dedup dihitung ULANG dari file
+	// export mentah yang diunggah ulang (koreksi dedup pra-pipeline; sesi balqis). Non-destruktif.
+	RecountNote string `bson:"recount_note,omitempty" json:"recount_note,omitempty"`
 }
 
 type PICOPreviewItem struct {

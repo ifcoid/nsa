@@ -126,6 +126,7 @@ func (r *Router) registerRoutes() {
 	protected.HandleFunc("PUT /api/sessions/{id}/revise", r.sessionHndlr.ReviseStep)
 	protected.HandleFunc("PUT /api/sessions/{id}/reimport", r.sessionHndlr.RequestReimport)
 	protected.HandleFunc("POST /api/sessions/{id}/import-data", r.sessionHndlr.ImportData)
+	protected.HandleFunc("POST /api/sessions/{id}/m4/recount-identification", r.sessionHndlr.RecountIdentification)
 	protected.HandleFunc("GET /api/sessions/{id}/disagreements", r.sessionHndlr.GetDisagreements)
 	protected.HandleFunc("POST /api/sessions/{id}/resolve-conflicts", r.sessionHndlr.ResolveConflicts)
 	protected.HandleFunc("POST /api/sessions/{id}/pico-audit/resolve", r.sessionHndlr.ResolvePICOAudit)

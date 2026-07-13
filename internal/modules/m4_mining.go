@@ -479,3 +479,53 @@ func getStringField(doc map[string]interface{}, keys ...string) string {
 	}
 	return ""
 }
+
+// IdRecord = data minimal untuk menghitung identifikasi/dedup PRISMA.
+type IdRecord struct{ Title, DOI, Year, Database string }
+
+// ComputeIdentification menghitung breakdown dedup PRISMA (records identified → duplicates
+// removed → unique) dari record MENTAH, MENIRU PERSIS logika M4_STEP2_PROCESS di atas
+// (DOI exact ∪ title+year). Dipisah agar bisa dipakai ulang oleh RecountIdentification
+// (koreksi angka PRISMA dari export mentah yang diunggah ulang) TANPA menyentuh slr_papers/
+// screening/manuskrip — untuk sesi yang datanya sudah ter-dedup sebelum masuk pipeline.
+func ComputeIdentification(records []IdRecord) model.DedupBreakdown {
+	dedup := model.DedupBreakdown{
+		PerDatabaseTotal:  map[string]int{},
+		PerDatabaseUnique: map[string]int{},
+		PerDatabaseDups:   map[string]int{},
+	}
+	seenDOIs, seenTitles := map[string]bool{}, map[string]bool{}
+	for _, r := range records {
+		db := strings.TrimSpace(r.Database)
+		if db == "" {
+			db = "Unknown"
+		}
+		dedup.PerDatabaseTotal[db]++
+
+		isDup := false
+		normDOI := NormalizeDOIForRAG(r.DOI)
+		if normDOI != "" && seenDOIs[normDOI] {
+			dedup.PrimaryMatch++
+			isDup = true
+		} else if normDOI != "" {
+			seenDOIs[normDOI] = true
+		}
+		normTitle := strings.ToLower(strings.ReplaceAll(r.Title, " ", ""))
+		titleYearKey := normTitle + "_" + r.Year
+		if !isDup && normTitle != "" && seenTitles[titleYearKey] {
+			dedup.SecondaryMatch++
+			isDup = true
+		} else if !isDup && normTitle != "" {
+			seenTitles[titleYearKey] = true
+		}
+
+		if isDup {
+			dedup.TotalDuplicates++
+			dedup.PerDatabaseDups[db]++
+		} else {
+			dedup.TotalUnique++
+			dedup.PerDatabaseUnique[db]++
+		}
+	}
+	return dedup
+}
