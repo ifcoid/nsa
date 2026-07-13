@@ -244,6 +244,10 @@ func (r *Router) registerRoutes() {
 	r.mux.Handle("/api/github/", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/embed/", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/scopus/", middleware.AuthMiddleware(protected))
+	// BUGFIX: prefix /api/zenodo/ WAJIB di-mount ke protected — tanpa ini GET/PUT
+	// /api/zenodo/config 404 (handler terdaftar tapi tak terjangkau) → user tak bisa simpan
+	// token Zenodo (lapor Sindy). Deposit lolos karena ada di bawah /api/sessions/.
+	r.mux.Handle("/api/zenodo/", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/proposal/sessions", middleware.AuthMiddleware(protected))
 	r.mux.Handle("/api/proposal/", middleware.AuthMiddleware(protected))
 
