@@ -248,10 +248,19 @@ func prismaCorrectionsNote(cor []model.ScreeningCorrection) string {
 	return b.String()
 }
 
-// tikzFigure renders a self-contained PRISMA 2020 flow diagram as a TikZ figure float.
+// Marker komentar LaTeX yang MEMBUNGKUS figur PRISMA di manuskrip .tex. Dipakai agar figur
+// bisa DI-INJEKSI-ULANG dari angka LIVE saat unduh (mis. setelah recount identifikasi) TANPA
+// regen manuskrip — lihat InjectPrismaFigure. Aman: komentar LaTeX, tak muncul di PDF.
+const (
+	prismaFigureBeginMarker = "% <<<PRISMA_FLOW_FIGURE_BEGIN — auto-injected, jangan hapus marker>>>"
+	prismaFigureEndMarker   = "% <<<PRISMA_FLOW_FIGURE_END>>>"
+)
+
+// TikzFigure renders a self-contained PRISMA 2020 flow diagram as a TikZ figure float,
+// dibungkus marker agar bisa di-injeksi-ulang dari angka live saat unduh.
 // Requires \usepackage{tikz} and the positioning + arrows.meta libraries, which
 // BuildAcademicLatex adds when a figure is present.
-func (pf *PrismaFlow) tikzFigure() string {
+func (pf *PrismaFlow) TikzFigure() string {
 	exFT := fmt.Sprintf("Reports excluded (n=%d)", pf.ExcludedFT)
 	if reasons := pf.sortedReasonsFT(); len(reasons) > 0 {
 		exFT += `\\ ` + latexEscapeShort(strings.Join(reasons, "; "))
@@ -266,6 +275,7 @@ func (pf *PrismaFlow) tikzFigure() string {
 	}
 
 	var b strings.Builder
+	b.WriteString(prismaFigureBeginMarker + "\n")
 	b.WriteString("\\begin{figure}[htbp]\n\\centering\n")
 	b.WriteString("\\begin{tikzpicture}[\n")
 	b.WriteString("  box/.style={rectangle, draw, text width=6.2cm, minimum height=0.9cm, align=left, font=\\small, inner sep=4pt},\n")
@@ -294,7 +304,54 @@ func (pf *PrismaFlow) tikzFigure() string {
 	b.WriteString("\\caption{PRISMA 2020 flow diagram of study identification, screening, eligibility, and inclusion.}\n")
 	b.WriteString("\\label{fig:prisma}\n")
 	b.WriteString("\\end{figure}\n")
+	b.WriteString(prismaFigureEndMarker + "\n")
 	return b.String()
+}
+
+// BuildLivePrismaFlow menghitung PRISMA flow TERKINI dari koleksi screening + angka
+// identifikasi/dedup di DataMiningLog (yang bisa berubah via recount) — dipakai saat unduh
+// manuskrip untuk menyegarkan Figure 1 tanpa regen.
+func BuildLivePrismaFlow(papers []map[string]interface{}, session *model.SLRSession) *PrismaFlow {
+	identified, duplicates := 0, 0
+	if session.DataMiningLog != nil {
+		if qa := session.DataMiningLog.QualityAudit; qa != nil {
+			identified = qa.TotalRecords
+		}
+		if d := session.DataMiningLog.Dedup; d != nil {
+			duplicates = d.TotalDuplicates
+		}
+	}
+	return countPrismaFromPapers(papers, identified, duplicates)
+}
+
+// InjectPrismaFigure mengganti figur PRISMA di dalam .tex manuskrip dengan versi BARU
+// (freshFigure, sudah termasuk marker). Prioritas: (1) ganti blok antar-marker bila ada;
+// (2) fallback manuskrip LAMA tanpa marker: ganti float `\begin{figure}…\label{fig:prisma}…
+// \end{figure}`. Bila tak ketemu keduanya, kembalikan latex apa adanya (tak merusak).
+func InjectPrismaFigure(latexDoc, freshFigure string) string {
+	freshFigure = strings.TrimRight(freshFigure, "\n")
+	// (1) blok antar-marker
+	bi := strings.Index(latexDoc, prismaFigureBeginMarker)
+	ei := strings.Index(latexDoc, prismaFigureEndMarker)
+	if bi >= 0 && ei > bi {
+		end := ei + len(prismaFigureEndMarker)
+		return latexDoc[:bi] + freshFigure + latexDoc[end:]
+	}
+	// (2) fallback legacy: float figure yang memuat \label{fig:prisma}
+	lab := strings.Index(latexDoc, "\\label{fig:prisma}")
+	if lab < 0 {
+		return latexDoc
+	}
+	begin := strings.LastIndex(latexDoc[:lab], "\\begin{figure}")
+	if begin < 0 {
+		return latexDoc
+	}
+	endTag := strings.Index(latexDoc[lab:], "\\end{figure}")
+	if endTag < 0 {
+		return latexDoc
+	}
+	end := lab + endTag + len("\\end{figure}")
+	return latexDoc[:begin] + freshFigure + latexDoc[end:]
 }
 
 // latexEscapeShort escapes the handful of characters that would break a TikZ node body.

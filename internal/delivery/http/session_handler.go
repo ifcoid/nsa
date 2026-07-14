@@ -4142,10 +4142,20 @@ func (h *SessionHandler) DownloadTex(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Opsi 3: SEGARKAN Figure 1 (PRISMA flow) dari angka LIVE saat unduh — jadi koreksi
+	// identifikasi (recount) langsung tercermin di diagram TANPA regen manuskrip. Bila gagal
+	// baca screening, sajikan .tex apa adanya (jangan blokir unduhan). Deterministik & non-
+	// destruktif (tidak mengubah manuskrip tersimpan; hanya output unduhan).
+	out := session.Manuscript.Latex
+	if papers, perr := h.mongoRepo.GetAllScreeningPapers(context.Background(), id); perr == nil && len(papers) > 0 {
+		pf := modules.BuildLivePrismaFlow(papers, session)
+		out = modules.InjectPrismaFigure(out, pf.TikzFigure())
+	}
+
 	w.Header().Set("Content-Type", "text/x-tex")
 	w.Header().Set("Content-Disposition", `attachment; filename="manuscript.tex"`)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(session.Manuscript.Latex))
+	_, _ = w.Write([]byte(out))
 }
 
 // DownloadBib returns the manuscript .bib file as a download.

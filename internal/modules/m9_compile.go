@@ -83,7 +83,7 @@ func (m *M9Manuscript) runCompile(ctx context.Context, session *model.SLRSession
 		// Sisipkan jejak koreksi include/exclude HITL (deviasi protokol terdokumentasi) ke
 		// konteks manuskrip — angka PRISMA sudah benar dari DB; ini melaporkan APA & MENGAPA.
 		ms.PrismaFlow = pf.artifactText() + prismaCorrectionsNote(session.ScreeningCorrections)
-		prismaTikz = pf.tikzFigure()
+		prismaTikz = pf.TikzFigure()
 		if len(pf.Warnings) > 0 {
 			logger.Logf(session.ID, "      [PRISMA][WARN] flow tidak menutup: %s", strings.Join(pf.Warnings, " | "))
 		} else {

@@ -97,7 +97,7 @@ func TestPrismaFlow_CleanWhenResolved(t *testing.T) {
 
 func TestPrismaFlow_TikzAndArtifactRender(t *testing.T) {
 	pf := countPrismaFromPapers(makePapers(161, 8, 5, 82, 30, 3), 433, 144)
-	tikz := pf.tikzFigure()
+	tikz := pf.TikzFigure()
 	for _, want := range []string{
 		`\begin{figure}`, `\begin{tikzpicture}`, `\label{fig:prisma}`,
 		"Records identified (n=433)", "Studies included in review (n=82)",
