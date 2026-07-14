@@ -16,6 +16,7 @@ ATURAN WAJIB (FORMAT & REFERENCING):
 - TRANSPARANSI AI (WAJIB, sesuai COPE/Elsevier): Methods HARUS menyatakan JUJUR bahwa penyaringan, ekstraksi, dan penilaian kualitas dilakukan oleh dua penilai berbasis large language model (LLM/AI) sebagai alat bantu keputusan (decision-support), dengan verifikasi dan keputusan akhir oleh reviewer manusia melalui gerbang human-in-the-loop, dan kesepakatan antar-penilai diukur dengan Cohen's kappa. JANGAN menyamarkan AI sebagai manusia. Sebut "two LLM-based reviewers/extractors/raters" + kendali manusia apa adanya.
 - Yang TETAP DILARANG (kebocoran IMPLEMENTASI INTERNAL, bukan peran AI): nama produk/model dagang di prosa ("Claude/GPT/Gemini" — taruh nama+versi model di AI Declaration/supplementary), "Pass 1-2", nama file/path (outputs/, .xlsx), "Modul X", ID sesi, "qdrant/neo4j/mongo", "draft v1".
 - Angka (N studi, kappa, %, GRADE) HARUS dari ARTEFAK yang diberikan; JANGAN mengarang/estimasi. Bila tak tersedia, tulis netral tanpa angka palsu.
+- ANGKA IDENTIFIKASI PRISMA — "records identified" (total hasil pencarian) dan "duplicate records removed" — HANYA boleh muncul di Figure 1 (diagram alur PRISMA yang di-generate deterministik & disegarkan otomatis saat unduh). JANGAN menuliskan kedua angka itu sebagai literal di prosa/abstract; untuk merujuknya gunakan "Figure~\ref{fig:prisma}". Angka lain (records screened, reports assessed, studies included, kappa) BOLEH disebut di teks. Alasan: kedua angka identifikasi bisa dikoreksi kemudian (recount), dan menaruhnya HANYA di Figure 1 membuat naskah tetap sinkron tanpa menulis ulang manuskrip.
 - Hedging sesuai GRADE: HIGH = tegas; MODERATE = "likely/probably"; LOW = "may/suggests"; VERY LOW = "tentative/uncertain".
 - Geographic honesty: jangan klaim "global" bila data dominan regional; sebut region + persentase aktual dari descriptive.
 - Jika synthesis_path JALUR A: hindari "pooled effect/d=X across studies/overall effect size". Jika JALUR B: boleh bahasa meta-analitik (I-squared, pooled estimate).
@@ -55,7 +56,7 @@ const promptResults = `Tulis \section{Results} systematic review dalam format La
 Setiap temuan HARUS dikaitkan ke paper spesifik: "Study by \cite{authorYear} found that..." atau "This finding was corroborated by \cite{key1, key2}."
 
 Cakup subseksi:
-\subsection{Study Selection and Characteristics} -- narasi angka PRISMA flow per tahap + cross-ref Figure 1, tren tahun, total studi, distribusi geografis JUJUR dari descriptive
+\subsection{Study Selection and Characteristics} -- deskripsikan PROSES seleksi dua-tahap + rujuk "Figure~\ref{fig:prisma}" untuk angka alur PRISMA. JANGAN menuliskan angka "records identified" maupun "duplicate records removed" sebagai literal (kedua angka HANYA di Figure 1 — lihat ATURAN WAJIB); boleh sebut jumlah studi FINAL yang di-include, records screened, tren tahun, total studi, distribusi geografis JUJUR dari descriptive
 \subsection{Dominant Theories} -- (jika TCCM) kutip paper yang menggunakan tiap teori
 \subsection{Contexts} -- konteks penelitian, kutip paper per konteks
 \subsection{Characteristics and Constructs} -- variabel utama, kutip paper yang mengukurnya
